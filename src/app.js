@@ -29,7 +29,7 @@
   const st = {
     prog: null, fi: 0, sel: null, clip: null, undo: [], redo: [], dirty: false,
     zoom: store.get('zoom', 1), speed: store.get('speed', 2), lang: store.get('lang', 'python'), tab: store.get('tab', 'console'),
-    fileName: null, ins: [], vfs: new Map(Object.entries(store.get('vfs', {}))),
+    fileName: null, ins: [], expanded: new Set(), vfs: new Map(Object.entries(store.get('vfs', {}))),
   };
   const SPEEDS = [{ ms: 0, label: 'Istantanea' }, { ms: 40, label: 'Veloce' }, { ms: 280, label: 'Media' }, { ms: 750, label: 'Lenta' }];
   const renderer = new RenderLib.Renderer();
@@ -75,7 +75,7 @@
   let codeTimer = null;
   function render() {
     const f = func();
-    const out = renderer.func(f);
+    const out = renderer.func(f, st.expanded);
     st.ins = out.ins;
     const holder = $('#chart');
     holder.innerHTML = out.svg;
@@ -523,6 +523,8 @@
     const chart = $('#chart');
     chart.addEventListener('click', (e) => {
       if (suppressClick) { suppressClick = false; return; }
+      const tog = e.target.closest('.ctoggle');
+      if (tog) { const id = tog.dataset.toggle; st.expanded.has(id) ? st.expanded.delete(id) : st.expanded.add(id); render(); return; }
       const ins = e.target.closest('.ins');
       if (ins) { if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; } insertMenu(+ins.dataset.ins, e.clientX + 6, e.clientY + 6); return; }
       const g = e.target.closest('.shape');
@@ -530,6 +532,7 @@
       decorate();
     });
     chart.addEventListener('dblclick', (e) => {
+      if (e.target.closest('.ctoggle')) return;
       const g = e.target.closest('.shape'); if (!g) return;
       const id = g.dataset.id;
       if (id.startsWith('start:') || id.startsWith('end:')) { if (isRunning()) return; st.fi === 0 ? editProgram() : editFunction(st.fi); return; }
@@ -542,7 +545,7 @@
       shapeMenu(g.dataset.id, e.clientX, e.clientY);
     });
     chart.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || isRunning()) return;
+      if (e.button !== 0 || isRunning() || e.target.closest('.ctoggle')) return;
       const g = e.target.closest('.shape'); if (!g || g.dataset.id.includes(':')) return;
       drag = { id: g.dataset.id, x: e.clientX, y: e.clientY, on: false, ghost: null };
     });
@@ -1003,13 +1006,13 @@
     const svg = $('#chart svg').cloneNode(true);
     svg.setAttribute('width', svg.dataset.w); svg.setAttribute('height', svg.dataset.h);
     svg.insertBefore(h('style', null, exportCss()), svg.firstChild);
-    $$('.hits', svg).forEach((x) => x.remove());
+    $$('.hits, .ctoggle', svg).forEach((x) => x.remove());
     return new XMLSerializer().serializeToString(svg);
   }
   function exportCss() {
     const cs = getComputedStyle(document.documentElement);
     const v = (n) => cs.getPropertyValue(n).trim();
-    let css = `text{font:${RenderLib.R_.font};fill:${v('--sh-text')};text-anchor:middle}.badge{font-size:10px}.c-in .badge{fill:${v('--s-in')}}.c-out .badge{fill:${v('--s-out')}}.blabel{font-size:11px;font-weight:600;fill:${v('--muted')}}.flow{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ahead{fill:${v('--flow')}}.joint{fill:${v('--flow')}}.shape>path,.shape>rect{stroke-width:1.6}.inner{fill:none!important}.note{stroke-dasharray:4 3}svg{background:${v('--paper')}}`;
+    let css = `text{font:${RenderLib.R_.font};fill:${v('--sh-text')};text-anchor:middle}.cline-t{text-anchor:start}.comment text{font-weight:400;font-style:italic}.badge{font-size:10px}.c-in .badge{fill:${v('--s-in')}}.c-out .badge{fill:${v('--s-out')}}.blabel{font-size:11px;font-weight:600;fill:${v('--muted')}}.flow{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ahead{fill:${v('--flow')}}.joint{fill:${v('--flow')}}.shape>path,.shape>rect{stroke-width:1.6}.inner{fill:none!important}.note{stroke-dasharray:4 3}svg{background:${v('--paper')}}`;
     for (const c of ['term', 'decl', 'assign', 'in', 'out', 'cond', 'loop', 'call', 'comment', 'brk', 'file', 'inc']) css += `.c-${c}>path,.c-${c}>rect{fill:${v('--f-' + c)};stroke:${v('--s-' + c)}}`;
     return css;
   }

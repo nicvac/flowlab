@@ -150,6 +150,12 @@ main.work { display: grid; grid-template-columns: minmax(0, 1fr) 6px var(--side-
 .chart .shape .inner { fill: none !important; stroke-width: 1.2; }
 .chart .shape .note { stroke-dasharray: 4 3; }
 .chart .shape.comment text { font-weight: 400; font-style: italic; fill: var(--muted); }
+.chart .shape.comment.open text.cline-t { text-anchor: start; }
+.chart .ctoggle { cursor: pointer; pointer-events: all; }
+.chart .ctoggle circle { fill: var(--paper); stroke: var(--s-comment); stroke-width: 1.3; }
+.chart .ctoggle path { stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; fill: none; }
+.chart .ctoggle:hover circle { fill: var(--accent); stroke: var(--accent); }
+.chart .ctoggle:hover path { stroke: var(--accent-ink); }
 .chart .shape.c-inc text { font-weight: 400; fill: var(--muted); font-style: italic; }
 .chart .shape.c-inc > path, .chart .shape.c-inc > rect { stroke-dasharray: 5 3; }
 .c-term > path, .c-term > rect { fill: var(--f-term); stroke: var(--s-term); }
@@ -2196,18 +2202,41 @@ const R_ = {
 };
 
 const _measureCtx = (() => { try { return document.createElement('canvas').getContext('2d'); } catch (e) { return null; } })();
-function textW(t) {
+const CFONT = 'italic 400 12.5px "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif';
+function textW(t, font) {
   if (!_measureCtx) return t.length * 7.4;
-  _measureCtx.font = R_.font;
+  _measureCtx.font = font || R_.font;
   return _measureCtx.measureText(t).width;
 }
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-function fit(t, max) {
-  if (textW(t) <= max) return t;
+function fit(t, max, font) {
+  if (textW(t, font) <= max) return t;
   let lo = 0, hi = t.length;
-  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (textW(t.slice(0, m) + '…') <= max) lo = m; else hi = m - 1; }
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (textW(t.slice(0, m) + '…', font) <= max) lo = m; else hi = m - 1; }
   return t.slice(0, lo) + '…';
+}
+
+/* Spezza il testo in righe che stanno in maxW pixel (rispetta gli a capo) */
+function wrapLines(text, maxW) {
+  const out = [];
+  for (const para of String(text).split('\n')) {
+    const words = para.split(/(\s+)/);
+    let cur = '';
+    for (const w of words) {
+      if (textW(cur + w, CFONT) <= maxW) { cur += w; continue; }
+      if (cur.trim()) out.push(cur.trimEnd());
+      cur = w.trimStart();
+      while (textW(cur, CFONT) > maxW) { // parola più lunga della riga
+        let n = cur.length;
+        while (n > 1 && textW(cur.slice(0, n), CFONT) > maxW) n--;
+        out.push(cur.slice(0, n)); cur = cur.slice(n);
+      }
+    }
+    out.push(cur.trimEnd());
+  }
+  while (out.length > 1 && out[out.length - 1] === '') out.pop();
+  return out;
 }
 
 const KIND_IT = {
@@ -2395,8 +2424,9 @@ class Renderer {
         },
       };
     }
+    if (s.kind === 'comment' && !cap.incomplete) return this.comment(s, title);
     const w = this.boxW(cap.text, shp) + (cap.badge ? 18 : 0);
-    const h = s.kind === 'comment' ? H - 4 : H;
+    const h = H;
     return {
       L: w / 2 + 6, R: w / 2 + 6, h,
       draw: (cx, y) => {
@@ -2405,8 +2435,38 @@ class Renderer {
     };
   }
 
-  func(f) {
+  /* Commento: una riga; se il testo è lungo compare «+» per espanderlo nel riquadro */
+  comment(s, title) {
+    const TOG = 24, PAD = 14, LH = 17, MAXT = R_.MAXW;
+    const lines = wrapLines(s.text, MAXT);
+    const expandable = lines.length > 1;
+    const open = expandable && this.expanded && this.expanded.has(s.id);
+    const shown = open ? lines : [lines[0] + (expandable ? ' …' : '')];
+    const tw = Math.max(...shown.map((l) => textW(l, CFONT)));
+    const w = Math.round(Math.max(R_.MINW, Math.min(MAXT + 12, tw) + PAD * 2 + (expandable ? TOG : 0)));
+    const h = open ? Math.max(R_.H - 4, shown.length * LH + 14) : R_.H - 4;
+    return {
+      L: w / 2 + 6, R: w / 2 + 6, h,
+      draw: (cx, y) => {
+        const l = cx - w / 2, r = cx + w / 2;
+        let g = `<g class="shape c-comment comment${open ? ' open' : ''}" data-id="${s.id}" data-kind="comment"><title>${esc(title)}</title>${shapePath('note', cx, y, w, h)}`;
+        if (open) {
+          shown.forEach((t, i) => { g += `<text class="cline-t" x="${l + PAD}" y="${y + 7 + LH / 2 + i * LH}" dy="0.35em">${esc(t)}</text>`; });
+        } else {
+          g += `<text x="${expandable ? cx - TOG / 2 : cx}" y="${y + h / 2}" dy="0.35em">${esc(fit(shown[0], w - PAD * 2 - (expandable ? TOG : 0), CFONT))}</text>`;
+        }
+        if (expandable) {
+          const tx = r - 19, ty = y + (R_.H - 4) / 2 + 1;
+          g += `<g class="ctoggle" data-toggle="${s.id}" role="button" aria-label="${open ? 'Riduci commento' : 'Espandi commento'}"><title>${open ? 'Riduci il commento' : 'Mostra tutto il commento'}</title><circle cx="${tx}" cy="${ty}" r="8"/><path d="M${tx - 3.5} ${ty}H${tx + 3.5}${open ? '' : `M${tx} ${ty - 3.5}V${ty + 3.5}`}"/></g>`;
+        }
+        this.sh.push(g + '</g>');
+      },
+    };
+  }
+
+  func(f, expanded) {
     this.reset();
+    this.expanded = expanded;
     const isMain = f.name.toLowerCase() === 'main';
     const sig = isMain ? 'Inizio' : `${f.name}(${f.params.map((p) => `${p.name}${p.array ? '[]' : ''}: ${ExprLib.TYPE_IT[p.type]}`).join(', ')})`;
     const endText = f.type === 'None' ? 'Fine' : `Restituisci ${f.variable || '?'}`;
@@ -2495,6 +2555,7 @@ const Examples = (() => {
       id: 'mcd', title: 'MCD di Euclide', tags: 'Mentre',
       make: () => prog('MCD di Euclide', 'Massimo comun divisore con l\'algoritmo delle divisioni successive.', [
         X.decl('a, b, r', 'Integer'),
+        X.com('Algoritmo di Euclide: finché b non è zero, la coppia (a, b) diventa (b, a mod b).\nQuando b vale zero, a contiene il massimo comun divisore.'),
         X.out('"Primo numero"'), X.inp('a'), X.out('"Secondo numero"'), X.inp('b'),
         X.while('b != 0', [X.set('r', 'a mod b'), X.set('a', 'b'), X.set('b', 'r')]),
         X.out('"MCD = " & a'),
@@ -2600,7 +2661,7 @@ const Examples = (() => {
   const st = {
     prog: null, fi: 0, sel: null, clip: null, undo: [], redo: [], dirty: false,
     zoom: store.get('zoom', 1), speed: store.get('speed', 2), lang: store.get('lang', 'python'), tab: store.get('tab', 'console'),
-    fileName: null, ins: [], vfs: new Map(Object.entries(store.get('vfs', {}))),
+    fileName: null, ins: [], expanded: new Set(), vfs: new Map(Object.entries(store.get('vfs', {}))),
   };
   const SPEEDS = [{ ms: 0, label: 'Istantanea' }, { ms: 40, label: 'Veloce' }, { ms: 280, label: 'Media' }, { ms: 750, label: 'Lenta' }];
   const renderer = new RenderLib.Renderer();
@@ -2646,7 +2707,7 @@ const Examples = (() => {
   let codeTimer = null;
   function render() {
     const f = func();
-    const out = renderer.func(f);
+    const out = renderer.func(f, st.expanded);
     st.ins = out.ins;
     const holder = $('#chart');
     holder.innerHTML = out.svg;
@@ -3094,6 +3155,8 @@ const Examples = (() => {
     const chart = $('#chart');
     chart.addEventListener('click', (e) => {
       if (suppressClick) { suppressClick = false; return; }
+      const tog = e.target.closest('.ctoggle');
+      if (tog) { const id = tog.dataset.toggle; st.expanded.has(id) ? st.expanded.delete(id) : st.expanded.add(id); render(); return; }
       const ins = e.target.closest('.ins');
       if (ins) { if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; } insertMenu(+ins.dataset.ins, e.clientX + 6, e.clientY + 6); return; }
       const g = e.target.closest('.shape');
@@ -3101,6 +3164,7 @@ const Examples = (() => {
       decorate();
     });
     chart.addEventListener('dblclick', (e) => {
+      if (e.target.closest('.ctoggle')) return;
       const g = e.target.closest('.shape'); if (!g) return;
       const id = g.dataset.id;
       if (id.startsWith('start:') || id.startsWith('end:')) { if (isRunning()) return; st.fi === 0 ? editProgram() : editFunction(st.fi); return; }
@@ -3113,7 +3177,7 @@ const Examples = (() => {
       shapeMenu(g.dataset.id, e.clientX, e.clientY);
     });
     chart.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || isRunning()) return;
+      if (e.button !== 0 || isRunning() || e.target.closest('.ctoggle')) return;
       const g = e.target.closest('.shape'); if (!g || g.dataset.id.includes(':')) return;
       drag = { id: g.dataset.id, x: e.clientX, y: e.clientY, on: false, ghost: null };
     });
@@ -3574,13 +3638,13 @@ const Examples = (() => {
     const svg = $('#chart svg').cloneNode(true);
     svg.setAttribute('width', svg.dataset.w); svg.setAttribute('height', svg.dataset.h);
     svg.insertBefore(h('style', null, exportCss()), svg.firstChild);
-    $$('.hits', svg).forEach((x) => x.remove());
+    $$('.hits, .ctoggle', svg).forEach((x) => x.remove());
     return new XMLSerializer().serializeToString(svg);
   }
   function exportCss() {
     const cs = getComputedStyle(document.documentElement);
     const v = (n) => cs.getPropertyValue(n).trim();
-    let css = `text{font:${RenderLib.R_.font};fill:${v('--sh-text')};text-anchor:middle}.badge{font-size:10px}.c-in .badge{fill:${v('--s-in')}}.c-out .badge{fill:${v('--s-out')}}.blabel{font-size:11px;font-weight:600;fill:${v('--muted')}}.flow{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ahead{fill:${v('--flow')}}.joint{fill:${v('--flow')}}.shape>path,.shape>rect{stroke-width:1.6}.inner{fill:none!important}.note{stroke-dasharray:4 3}svg{background:${v('--paper')}}`;
+    let css = `text{font:${RenderLib.R_.font};fill:${v('--sh-text')};text-anchor:middle}.cline-t{text-anchor:start}.comment text{font-weight:400;font-style:italic}.badge{font-size:10px}.c-in .badge{fill:${v('--s-in')}}.c-out .badge{fill:${v('--s-out')}}.blabel{font-size:11px;font-weight:600;fill:${v('--muted')}}.flow{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ahead{fill:${v('--flow')}}.joint{fill:${v('--flow')}}.shape>path,.shape>rect{stroke-width:1.6}.inner{fill:none!important}.note{stroke-dasharray:4 3}svg{background:${v('--paper')}}`;
     for (const c of ['term', 'decl', 'assign', 'in', 'out', 'cond', 'loop', 'call', 'comment', 'brk', 'file', 'inc']) css += `.c-${c}>path,.c-${c}>rect{fill:${v('--f-' + c)};stroke:${v('--s-' + c)}}`;
     return css;
   }

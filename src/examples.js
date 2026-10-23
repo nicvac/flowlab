@@ -65,6 +65,7 @@ const Examples = (() => {
       id: 'mcd', title: 'MCD di Euclide', tags: 'Mentre',
       make: () => prog('MCD di Euclide', 'Massimo comun divisore con l\'algoritmo delle divisioni successive.', [
         X.decl('a, b, r', 'Integer'),
+        X.com('Algoritmo di Euclide: finché b non è zero, la coppia (a, b) diventa (b, a mod b).\nQuando b vale zero, a contiene il massimo comun divisore.'),
         X.out('"Primo numero"'), X.inp('a'), X.out('"Secondo numero"'), X.inp('b'),
         X.while('b != 0', [X.set('r', 'a mod b'), X.set('a', 'b'), X.set('b', 'r')]),
         X.out('"MCD = " & a'),

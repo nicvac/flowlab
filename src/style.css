@@ -141,6 +141,12 @@ main.work { display: grid; grid-template-columns: minmax(0, 1fr) 6px var(--side-
 .chart .shape .inner { fill: none !important; stroke-width: 1.2; }
 .chart .shape .note { stroke-dasharray: 4 3; }
 .chart .shape.comment text { font-weight: 400; font-style: italic; fill: var(--muted); }
+.chart .shape.comment.open text.cline-t { text-anchor: start; }
+.chart .ctoggle { cursor: pointer; pointer-events: all; }
+.chart .ctoggle circle { fill: var(--paper); stroke: var(--s-comment); stroke-width: 1.3; }
+.chart .ctoggle path { stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; fill: none; }
+.chart .ctoggle:hover circle { fill: var(--accent); stroke: var(--accent); }
+.chart .ctoggle:hover path { stroke: var(--accent-ink); }
 .chart .shape.c-inc text { font-weight: 400; fill: var(--muted); font-style: italic; }
 .chart .shape.c-inc > path, .chart .shape.c-inc > rect { stroke-dasharray: 5 3; }
 .c-term > path, .c-term > rect { fill: var(--f-term); stroke: var(--s-term); }

@@ -11,18 +11,41 @@ const R_ = {
 };
 
 const _measureCtx = (() => { try { return document.createElement('canvas').getContext('2d'); } catch (e) { return null; } })();
-function textW(t) {
+const CFONT = 'italic 400 12.5px "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif';
+function textW(t, font) {
   if (!_measureCtx) return t.length * 7.4;
-  _measureCtx.font = R_.font;
+  _measureCtx.font = font || R_.font;
   return _measureCtx.measureText(t).width;
 }
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-function fit(t, max) {
-  if (textW(t) <= max) return t;
+function fit(t, max, font) {
+  if (textW(t, font) <= max) return t;
   let lo = 0, hi = t.length;
-  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (textW(t.slice(0, m) + '…') <= max) lo = m; else hi = m - 1; }
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (textW(t.slice(0, m) + '…', font) <= max) lo = m; else hi = m - 1; }
   return t.slice(0, lo) + '…';
+}
+
+/* Spezza il testo in righe che stanno in maxW pixel (rispetta gli a capo) */
+function wrapLines(text, maxW) {
+  const out = [];
+  for (const para of String(text).split('\n')) {
+    const words = para.split(/(\s+)/);
+    let cur = '';
+    for (const w of words) {
+      if (textW(cur + w, CFONT) <= maxW) { cur += w; continue; }
+      if (cur.trim()) out.push(cur.trimEnd());
+      cur = w.trimStart();
+      while (textW(cur, CFONT) > maxW) { // parola più lunga della riga
+        let n = cur.length;
+        while (n > 1 && textW(cur.slice(0, n), CFONT) > maxW) n--;
+        out.push(cur.slice(0, n)); cur = cur.slice(n);
+      }
+    }
+    out.push(cur.trimEnd());
+  }
+  while (out.length > 1 && out[out.length - 1] === '') out.pop();
+  return out;
 }
 
 const KIND_IT = {
@@ -210,8 +233,9 @@ class Renderer {
         },
       };
     }
+    if (s.kind === 'comment' && !cap.incomplete) return this.comment(s, title);
     const w = this.boxW(cap.text, shp) + (cap.badge ? 18 : 0);
-    const h = s.kind === 'comment' ? H - 4 : H;
+    const h = H;
     return {
       L: w / 2 + 6, R: w / 2 + 6, h,
       draw: (cx, y) => {
@@ -220,8 +244,38 @@ class Renderer {
     };
   }
 
-  func(f) {
+  /* Commento: una riga; se il testo è lungo compare «+» per espanderlo nel riquadro */
+  comment(s, title) {
+    const TOG = 24, PAD = 14, LH = 17, MAXT = R_.MAXW;
+    const lines = wrapLines(s.text, MAXT);
+    const expandable = lines.length > 1;
+    const open = expandable && this.expanded && this.expanded.has(s.id);
+    const shown = open ? lines : [lines[0] + (expandable ? ' …' : '')];
+    const tw = Math.max(...shown.map((l) => textW(l, CFONT)));
+    const w = Math.round(Math.max(R_.MINW, Math.min(MAXT + 12, tw) + PAD * 2 + (expandable ? TOG : 0)));
+    const h = open ? Math.max(R_.H - 4, shown.length * LH + 14) : R_.H - 4;
+    return {
+      L: w / 2 + 6, R: w / 2 + 6, h,
+      draw: (cx, y) => {
+        const l = cx - w / 2, r = cx + w / 2;
+        let g = `<g class="shape c-comment comment${open ? ' open' : ''}" data-id="${s.id}" data-kind="comment"><title>${esc(title)}</title>${shapePath('note', cx, y, w, h)}`;
+        if (open) {
+          shown.forEach((t, i) => { g += `<text class="cline-t" x="${l + PAD}" y="${y + 7 + LH / 2 + i * LH}" dy="0.35em">${esc(t)}</text>`; });
+        } else {
+          g += `<text x="${expandable ? cx - TOG / 2 : cx}" y="${y + h / 2}" dy="0.35em">${esc(fit(shown[0], w - PAD * 2 - (expandable ? TOG : 0), CFONT))}</text>`;
+        }
+        if (expandable) {
+          const tx = r - 19, ty = y + (R_.H - 4) / 2 + 1;
+          g += `<g class="ctoggle" data-toggle="${s.id}" role="button" aria-label="${open ? 'Riduci commento' : 'Espandi commento'}"><title>${open ? 'Riduci il commento' : 'Mostra tutto il commento'}</title><circle cx="${tx}" cy="${ty}" r="8"/><path d="M${tx - 3.5} ${ty}H${tx + 3.5}${open ? '' : `M${tx} ${ty - 3.5}V${ty + 3.5}`}"/></g>`;
+        }
+        this.sh.push(g + '</g>');
+      },
+    };
+  }
+
+  func(f, expanded) {
     this.reset();
+    this.expanded = expanded;
     const isMain = f.name.toLowerCase() === 'main';
     const sig = isMain ? 'Inizio' : `${f.name}(${f.params.map((p) => `${p.name}${p.array ? '[]' : ''}: ${ExprLib.TYPE_IT[p.type]}`).join(', ')})`;
     const endText = f.type === 'None' ? 'Fine' : `Restituisci ${f.variable || '?'}`;
