@@ -1,0 +1,82 @@
+<div id="app">
+  <header class="bar" role="toolbar" aria-label="Strumenti">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="9" y="1.5" width="14" height="6" rx="3" fill="var(--f-term)" stroke="var(--s-term)" stroke-width="1.5"/><path d="M16 7.5V11" stroke="var(--flow)" stroke-width="1.5"/><path d="M16 11L24 17L16 23L8 17Z" fill="var(--f-cond)" stroke="var(--s-cond)" stroke-width="1.5"/><path d="M24 17H28V27H16M8 17H4V27H16V30.5" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <div class="bt"><b>FlowLab</b><button type="button" id="progName" title="Proprietà del programma">Programma</button></div>
+    </div>
+    <button class="tb" id="fileBtn" type="button" aria-haspopup="menu"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span class="lbl">File</span></button>
+    <button class="tb icon" id="openBtn" type="button" title="Apri file .fprg (Ctrl+O)" aria-label="Apri"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+    <button class="tb icon" id="saveBtn" type="button" title="Salva come .fprg (Ctrl+S)" aria-label="Salva"><svg viewBox="0 0 24 24"><path d="M5 3h11l4 4v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a1 1 0 0 1 1-2zM8 3v5h7V3M8 21v-7h8v7"/></svg></button>
+    <button class="tb icon" id="undoBtn" type="button" title="Annulla (Ctrl+Z)" aria-label="Annulla"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+    <button class="tb icon" id="redoBtn" type="button" title="Ripeti (Ctrl+Y)" aria-label="Ripeti"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
+    <span class="sep" aria-hidden="true"></span>
+    <div class="funcbox">
+      <label for="funcSel">Funzione</label>
+      <select id="funcSel" class="fsel"></select>
+      <button class="iconbtn" id="funcAdd" type="button" title="Nuova funzione" aria-label="Nuova funzione"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button class="iconbtn" id="funcEdit" type="button" title="Modifica funzione o proprietà del programma" aria-label="Modifica funzione"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button>
+      <button class="iconbtn" id="funcDel" type="button" title="Elimina funzione" aria-label="Elimina funzione"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg></button>
+    </div>
+    <span class="sep" aria-hidden="true"></span>
+    <button class="tb run" id="runBtn" type="button" title="Esegui (F5)"><svg viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></svg><span class="lbl">Esegui</span></button>
+    <button class="tb" id="stepBtn" type="button" title="Esegui un passo (F10)"><svg viewBox="0 0 24 24"><path d="M5 5v14M10 6l9 6-9 6z"/></svg><span class="lbl">Passo</span></button>
+    <button class="tb icon" id="pauseBtn" type="button" title="Pausa" aria-label="Pausa" disabled><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
+    <button class="tb icon" id="stopBtn" type="button" title="Ferma" aria-label="Ferma" disabled><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button>
+    <label class="speed" for="speed"><span class="lbl">Velocità</span> <input id="speed" type="range" min="0" max="3" step="1" value="2"><output id="speedVal">Media</output></label>
+    <span class="grow"></span>
+    <button class="tb" id="exBtn" type="button" aria-haspopup="menu"><svg viewBox="0 0 24 24"><path d="M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z"/></svg><span class="lbl">Esempi</span></button>
+    <button class="tb icon" id="helpBtn" type="button" title="Guida rapida" aria-label="Guida rapida"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.6V14M12 17.5v.01"/></svg></button>
+    <button class="tb icon" id="themeBtn" type="button" title="Tema chiaro/scuro" aria-label="Cambia tema"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor"/></svg></button>
+  </header>
+
+  <main class="work">
+    <section class="canvas-col" aria-label="Diagramma di flusso">
+      <div id="canvasWrap"><div id="chart"></div></div>
+      <div class="zoombar" role="group" aria-label="Zoom">
+        <button type="button" id="zoomOut" aria-label="Riduci">−</button>
+        <button type="button" id="zoomVal" title="Torna al 100%">100%</button>
+        <button type="button" id="zoomIn" aria-label="Ingrandisci">+</button>
+        <button type="button" id="zoomFit" title="Adatta alla finestra" aria-label="Adatta alla finestra">⤢</button>
+      </div>
+      <footer class="statusbar">
+        <span id="status" class="status" role="status"><span id="statusText">Pronto</span></span>
+        <span id="stepCount"></span>
+        <span class="hint-add">Clic su una freccia per aggiungere un blocco · doppio clic per modificarlo · trascina per spostarlo</span>
+      </footer>
+    </section>
+    <div id="grip" role="separator" aria-orientation="vertical" aria-label="Ridimensiona pannello" tabindex="0"></div>
+    <aside id="side" aria-label="Pannelli">
+      <div id="tabs" role="tablist">
+        <button role="tab" data-tab="console" type="button">Console</button>
+        <button role="tab" data-tab="vars" type="button">Variabili</button>
+        <button role="tab" data-tab="code" type="button">Codice</button>
+        <button role="tab" data-tab="files" type="button">File</button>
+      </div>
+      <section class="pane" id="pane-console" role="tabpanel" aria-label="Console">
+        <div class="panehead"><span>Output del programma e input da tastiera</span><span class="grow"></span><button class="btn small" id="conClear" type="button">Pulisci</button></div>
+        <div id="conOut" aria-live="polite"></div>
+        <form id="conForm" autocomplete="off" onsubmit="return false">
+          <span id="conPrompt">›</span>
+          <input id="conInput" type="text" disabled placeholder="L'input si attiva quando il programma chiede un valore" aria-label="Valore di input">
+          <button id="conSend" type="button" disabled>Invia</button>
+        </form>
+      </section>
+      <section class="pane" id="pane-vars" role="tabpanel" aria-label="Variabili" hidden>
+        <div class="panehead"><span>Valori durante l'esecuzione · in giallo quelli appena cambiati</span></div>
+        <div id="varsBody"></div>
+      </section>
+      <section class="pane" id="pane-code" role="tabpanel" aria-label="Codice sorgente" hidden>
+        <div class="panehead"><label for="langSel">Linguaggio</label><select id="langSel" class="fsel"></select><span class="grow"></span><button class="btn small" id="codeCopy" type="button">Copia</button></div>
+        <pre id="codeOut"></pre>
+      </section>
+      <section class="pane" id="pane-files" role="tabpanel" aria-label="File di testo" hidden>
+        <div class="panehead"><span>File di testo per i blocchi Apri, Leggi, Scrivi</span><span class="grow"></span><button class="btn small" id="fileNew" type="button">Nuovo</button><button class="btn small" id="fileUpload" type="button">Carica…</button></div>
+        <div id="filesBody"></div>
+      </section>
+    </aside>
+  </main>
+  <input type="file" id="fileInput" accept=".fprg,.xml,.txt" hidden>
+  <input type="file" id="txtInput" accept=".txt,.csv,text/plain" multiple hidden>
+  <div id="pop" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</div>
