@@ -6,7 +6,9 @@ Legge e salva i programmi nel formato **`.fprg`** (XML) usato dagli editor di di
 
 Il software è stato creato con **Claude Opus 5.5** di Anthropic.
 
-👉 **Per usarlo:** scarica [`dist/FlowLab.html`](dist/FlowLab.html) e aprilo con Chrome.
+👉 **Per usarlo:**
+- **online**, senza installare nulla: apri <https://nicvac.github.io/flowlab/dist/FlowLab.html>;
+- **offline**: scarica [`dist/FlowLab.html`](dist/FlowLab.html) e aprilo con Chrome.
 
 ## Funzionalità
 
