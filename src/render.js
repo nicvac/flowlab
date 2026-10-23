@@ -37,11 +37,11 @@ function caption(s) {
   switch (s.kind) {
     case 'declare': {
       const names = s.name.split(',').map((x) => x.trim()).filter(Boolean);
-      return { text: `${T[s.type]} ${s.array ? names.map((n) => `${n}[${s.size}]`).join(', ') : names.join(', ')}` };
+      return { text: `${s.array ? names.map((n) => `${n}[${s.size}]`).join(', ') : names.join(', ')}: ${T[s.type]}` };
     }
     case 'assign': return { text: `${s.variable} ← ${s.expression}` };
-    case 'input': return { text: `Leggi ${s.variable}` };
-    case 'output': return { text: `Scrivi ${s.expression}${s.newline ? '' : '  ⋯'}` };
+    case 'input': return { text: s.variable, badge: 'I' };
+    case 'output': return { text: `${s.expression}${s.newline ? '' : '  ⋯'}`, badge: 'O' };
     case 'if': case 'while': case 'do': return { text: s.expression };
     case 'for': {
       const st = String(s.step).trim();
@@ -104,11 +104,13 @@ class Renderer {
   }
   label(x, y, t, anchor) { this.lbl.push(`<text class="blabel" x="${x}" y="${y}" text-anchor="${anchor || 'middle'}">${t}</text>`); }
 
-  shape(id, kind, cat, shp, cx, y, w, h, text, title, extra) {
-    const tw = w - (shp === 'diamond' ? 36 : shp === 'hex' ? 30 : shp === 'para' ? 24 : 18);
+  shape(id, kind, cat, shp, cx, y, w, h, text, title, extra, badge) {
+    const tw = w - (shp === 'diamond' ? 36 : shp === 'hex' ? 30 : shp === 'para' ? 24 : 18) - (badge ? 18 : 0);
     const t = fit(text, tw);
     let s = `<g class="shape c-${cat}${extra || ''}" data-id="${id}"${kind ? ` data-kind="${kind}"` : ''}><title>${esc(title || text)}</title>${shapePath(shp, cx, y, w, h)}`;
-    s += `<text x="${cx}" y="${y + h / 2}" dy="0.35em">${esc(t)}</text></g>`;
+    s += `<text x="${cx}" y="${y + h / 2}" dy="0.35em">${esc(t)}</text>`;
+    if (badge) s += `<text class="badge" x="${cx + w / 2 - 13}" y="${y + 11}" dy="0.35em">${badge}</text>`;
+    s += '</g>';
     this.sh.push(s);
   }
 
@@ -180,7 +182,10 @@ class Renderer {
           this.shape(s.id, s.kind, cat, s.kind === 'for' ? 'hex' : 'diamond', cx, y, dw, dh, cap.text, title);
           B.draw(cx, y + dh);
           this.label(cx + 6, y + dh + 13, s.kind === 'for' ? 'Ripeti' : 'Vero', 'start');
-          this.line([[cx, by], [cx, by + 10], [cx - lo, by + 10], [cx - lo, m], [cx - dw / 2, m]], true, 'back');
+          // il ritorno si innesta a metà della freccia che entra nella condizione
+          const jy = y - R_.GAP / 2;
+          this.line([[cx, by], [cx, by + 10], [cx - lo, by + 10], [cx - lo, jy], [cx - 4, jy]], true, 'back');
+          this.ln.push(`<circle class="joint" cx="${cx}" cy="${jy}" r="3.5"/>`);
           this.line([[cx + dw / 2, m], [cx + ro, m], [cx + ro, by + 22], [cx, by + 22], [cx, y + h]]);
           this.label(cx + dw / 2 + 6, m - 6, s.kind === 'for' ? 'Fine' : 'Falso', 'start');
         },
@@ -205,19 +210,20 @@ class Renderer {
         },
       };
     }
-    const w = this.boxW(cap.text, shp);
+    const w = this.boxW(cap.text, shp) + (cap.badge ? 18 : 0);
     const h = s.kind === 'comment' ? H - 4 : H;
     return {
       L: w / 2 + 6, R: w / 2 + 6, h,
       draw: (cx, y) => {
-        this.shape(s.id, s.kind, cat, shp, cx, y, w, h, cap.text, title, s.kind === 'comment' ? ' comment' : '');
+        this.shape(s.id, s.kind, cat, shp, cx, y, w, h, cap.text, title, s.kind === 'comment' ? ' comment' : '', cap.incomplete ? null : cap.badge);
       },
     };
   }
 
   func(f) {
     this.reset();
-    const sig = f.name === 'Main' || f === undefined ? 'Main' : `${f.name}(${f.params.map((p) => `${ExprLib.TYPE_IT[p.type]}${p.array ? '[]' : ''} ${p.name}`).join(', ')})`;
+    const isMain = f.name.toLowerCase() === 'main';
+    const sig = isMain ? 'Inizio' : `${f.name}(${f.params.map((p) => `${p.name}${p.array ? '[]' : ''}: ${ExprLib.TYPE_IT[p.type]}`).join(', ')})`;
     const endText = f.type === 'None' ? 'Fine' : `Restituisci ${f.variable || '?'}`;
     const sw = this.boxW(sig, 'rect') + 10, ew = this.boxW(endText, 'rect') + 10;
     const B = this.seq(f.body, true);
@@ -225,7 +231,7 @@ class Renderer {
     const M = 40;
     const W = Math.ceil(L + R + M * 2), Hh = Math.ceil(R_.H * 2 + B.h + M * 2);
     const cx = Math.round(M + L), y0 = M;
-    this.shape('start:' + f.id, '', 'term', 'term', cx, y0, sw, R_.H, sig, `Inizio di ${f.name}: doppio clic per modificare la funzione`);
+    this.shape('start:' + f.id, '', 'term', 'term', cx, y0, sw, R_.H, sig, isMain ? 'Inizio del programma: doppio clic per le proprietà' : `Inizio di ${f.name}: doppio clic per modificare la funzione`);
     B.draw(cx, y0 + R_.H);
     this.shape('end:' + f.id, '', 'term', 'term', cx, y0 + R_.H + B.h, ew, R_.H, endText, f.type === 'None' ? 'Fine della funzione' : `La funzione restituisce il valore di ${f.variable}`);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" class="chart" viewBox="0 0 ${W} ${Hh}" width="${W}" height="${Hh}" data-w="${W}" data-h="${Hh}">`

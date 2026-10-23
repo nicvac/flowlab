@@ -139,6 +139,9 @@ main.work { display: grid; grid-template-columns: minmax(0, 1fr) 6px var(--side-
 /* Forme SVG */
 .chart text { font: 700 12.5px var(--font-ui); fill: var(--sh-text); pointer-events: none; }
 .chart .shape text { text-anchor: middle; }
+.chart .badge { font: 700 11px var(--font-ui); letter-spacing: 0.02em; }
+.chart .c-in .badge { fill: var(--s-in); }
+.chart .c-out .badge { fill: var(--s-out); }
 .chart .blabel { font-size: 11px; font-weight: 700; fill: var(--muted); letter-spacing: 0.02em; }
 .chart .flow { fill: none; stroke: var(--flow); stroke-width: 1.6; }
 .chart .ahead, .chart .joint { fill: var(--flow); }
@@ -2219,11 +2222,11 @@ function caption(s) {
   switch (s.kind) {
     case 'declare': {
       const names = s.name.split(',').map((x) => x.trim()).filter(Boolean);
-      return { text: `${T[s.type]} ${s.array ? names.map((n) => `${n}[${s.size}]`).join(', ') : names.join(', ')}` };
+      return { text: `${s.array ? names.map((n) => `${n}[${s.size}]`).join(', ') : names.join(', ')}: ${T[s.type]}` };
     }
     case 'assign': return { text: `${s.variable} ← ${s.expression}` };
-    case 'input': return { text: `Leggi ${s.variable}` };
-    case 'output': return { text: `Scrivi ${s.expression}${s.newline ? '' : '  ⋯'}` };
+    case 'input': return { text: s.variable, badge: 'I' };
+    case 'output': return { text: `${s.expression}${s.newline ? '' : '  ⋯'}`, badge: 'O' };
     case 'if': case 'while': case 'do': return { text: s.expression };
     case 'for': {
       const st = String(s.step).trim();
@@ -2286,11 +2289,13 @@ class Renderer {
   }
   label(x, y, t, anchor) { this.lbl.push(`<text class="blabel" x="${x}" y="${y}" text-anchor="${anchor || 'middle'}">${t}</text>`); }
 
-  shape(id, kind, cat, shp, cx, y, w, h, text, title, extra) {
-    const tw = w - (shp === 'diamond' ? 36 : shp === 'hex' ? 30 : shp === 'para' ? 24 : 18);
+  shape(id, kind, cat, shp, cx, y, w, h, text, title, extra, badge) {
+    const tw = w - (shp === 'diamond' ? 36 : shp === 'hex' ? 30 : shp === 'para' ? 24 : 18) - (badge ? 18 : 0);
     const t = fit(text, tw);
     let s = `<g class="shape c-${cat}${extra || ''}" data-id="${id}"${kind ? ` data-kind="${kind}"` : ''}><title>${esc(title || text)}</title>${shapePath(shp, cx, y, w, h)}`;
-    s += `<text x="${cx}" y="${y + h / 2}" dy="0.35em">${esc(t)}</text></g>`;
+    s += `<text x="${cx}" y="${y + h / 2}" dy="0.35em">${esc(t)}</text>`;
+    if (badge) s += `<text class="badge" x="${cx + w / 2 - 13}" y="${y + 11}" dy="0.35em">${badge}</text>`;
+    s += '</g>';
     this.sh.push(s);
   }
 
@@ -2362,7 +2367,10 @@ class Renderer {
           this.shape(s.id, s.kind, cat, s.kind === 'for' ? 'hex' : 'diamond', cx, y, dw, dh, cap.text, title);
           B.draw(cx, y + dh);
           this.label(cx + 6, y + dh + 13, s.kind === 'for' ? 'Ripeti' : 'Vero', 'start');
-          this.line([[cx, by], [cx, by + 10], [cx - lo, by + 10], [cx - lo, m], [cx - dw / 2, m]], true, 'back');
+          // il ritorno si innesta a metà della freccia che entra nella condizione
+          const jy = y - R_.GAP / 2;
+          this.line([[cx, by], [cx, by + 10], [cx - lo, by + 10], [cx - lo, jy], [cx - 4, jy]], true, 'back');
+          this.ln.push(`<circle class="joint" cx="${cx}" cy="${jy}" r="3.5"/>`);
           this.line([[cx + dw / 2, m], [cx + ro, m], [cx + ro, by + 22], [cx, by + 22], [cx, y + h]]);
           this.label(cx + dw / 2 + 6, m - 6, s.kind === 'for' ? 'Fine' : 'Falso', 'start');
         },
@@ -2387,19 +2395,20 @@ class Renderer {
         },
       };
     }
-    const w = this.boxW(cap.text, shp);
+    const w = this.boxW(cap.text, shp) + (cap.badge ? 18 : 0);
     const h = s.kind === 'comment' ? H - 4 : H;
     return {
       L: w / 2 + 6, R: w / 2 + 6, h,
       draw: (cx, y) => {
-        this.shape(s.id, s.kind, cat, shp, cx, y, w, h, cap.text, title, s.kind === 'comment' ? ' comment' : '');
+        this.shape(s.id, s.kind, cat, shp, cx, y, w, h, cap.text, title, s.kind === 'comment' ? ' comment' : '', cap.incomplete ? null : cap.badge);
       },
     };
   }
 
   func(f) {
     this.reset();
-    const sig = f.name === 'Main' || f === undefined ? 'Main' : `${f.name}(${f.params.map((p) => `${ExprLib.TYPE_IT[p.type]}${p.array ? '[]' : ''} ${p.name}`).join(', ')})`;
+    const isMain = f.name.toLowerCase() === 'main';
+    const sig = isMain ? 'Inizio' : `${f.name}(${f.params.map((p) => `${p.name}${p.array ? '[]' : ''}: ${ExprLib.TYPE_IT[p.type]}`).join(', ')})`;
     const endText = f.type === 'None' ? 'Fine' : `Restituisci ${f.variable || '?'}`;
     const sw = this.boxW(sig, 'rect') + 10, ew = this.boxW(endText, 'rect') + 10;
     const B = this.seq(f.body, true);
@@ -2407,7 +2416,7 @@ class Renderer {
     const M = 40;
     const W = Math.ceil(L + R + M * 2), Hh = Math.ceil(R_.H * 2 + B.h + M * 2);
     const cx = Math.round(M + L), y0 = M;
-    this.shape('start:' + f.id, '', 'term', 'term', cx, y0, sw, R_.H, sig, `Inizio di ${f.name}: doppio clic per modificare la funzione`);
+    this.shape('start:' + f.id, '', 'term', 'term', cx, y0, sw, R_.H, sig, isMain ? 'Inizio del programma: doppio clic per le proprietà' : `Inizio di ${f.name}: doppio clic per modificare la funzione`);
     B.draw(cx, y0 + R_.H);
     this.shape('end:' + f.id, '', 'term', 'term', cx, y0 + R_.H + B.h, ew, R_.H, endText, f.type === 'None' ? 'Fine della funzione' : `La funzione restituisce il valore di ${f.variable}`);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" class="chart" viewBox="0 0 ${W} ${Hh}" width="${W}" height="${Hh}" data-w="${W}" data-h="${Hh}">`
@@ -2604,6 +2613,7 @@ const Examples = (() => {
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = 'toast'; }, 3200);
   }
   const func = () => st.prog.functions[st.fi];
+  const fname = (f) => (f && f.name.toLowerCase() === 'main' ? 'Inizio' : f ? f.name : '');
   const isRunning = () => ['running', 'paused', 'input'].includes(run.state);
 
   function snapshot() { return JSON.stringify({ prog: st.prog, fi: st.fi }); }
@@ -2672,7 +2682,7 @@ const Examples = (() => {
   function renderFuncSelect() {
     const sel = $('#funcSel');
     sel.innerHTML = '';
-    st.prog.functions.forEach((f, i) => sel.append(h('option', { value: i, selected: i === st.fi }, i === 0 ? 'Main' : `${f.name}(${f.params.map((p) => p.name).join(', ')})`)));
+    st.prog.functions.forEach((f, i) => sel.append(h('option', { value: i, selected: i === st.fi }, i === 0 ? 'Inizio (principale)' : `${f.name}(${f.params.map((p) => p.name).join(', ')})`)));
     $('#funcDel').disabled = st.fi === 0;
   }
   function showFunc(i) { if (i === st.fi) return; st.fi = i; st.sel = null; render(); $('#canvasWrap').scrollTo(0, 0); }
@@ -3038,7 +3048,7 @@ const Examples = (() => {
       onOk: () => {
         const e1 = nameW._check(); if (e1) return e1;
         const name = nameW._get().trim();
-        if (name.toLowerCase() === 'main') return 'Il nome Main è riservato al programma principale';
+        if (name.toLowerCase() === 'main') return 'Il nome Main è riservato al programma principale (Inizio)';
         if (E.BUILTINS[name.toLowerCase()]) return `${name} è già una funzione integrata`;
         if (st.prog.functions.some((g, i) => i !== index && g.name.toLowerCase() === name.toLowerCase())) return `Esiste già una funzione chiamata ${name}`;
         const type = typeW._get();
@@ -3341,8 +3351,8 @@ const Examples = (() => {
     if (e.stmtId) {
       const fs = M.findStmt(st.prog, e.stmtId);
       const fn = e.funcId && st.prog.functions.find((f) => f.id === e.funcId);
-      if (fs) where = ` (in ${fs.func.name}, blocco «${RenderLib.caption(fs.stmt).text}»)`;
-      else if (fn) where = ` (in ${fn.name})`;
+      if (fs) where = ` (in ${fname(fs.func)}, blocco «${RenderLib.caption(fs.stmt).text}»)`;
+      else if (fn) where = ` (in ${fname(fn)})`;
     }
     conWrite('✖ Errore: ' + (e.message || String(e)) + where, true, 'error');
     decorate(); renderVars();
@@ -3393,11 +3403,11 @@ const Examples = (() => {
     const crumbs = h('nav', { class: 'crumbs', 'aria-label': 'Chiamate in corso' });
     stack.forEach((fr, i) => {
       if (i) crumbs.append(h('span', { class: 'sep' }, '›'));
-      crumbs.append(h('button', { type: 'button', class: fr === frame ? 'on' : '', onclick: () => { run.viewFrame = fr; renderVars(); } }, fr.func.name));
+      crumbs.append(h('button', { type: 'button', class: fr === frame ? 'on' : '', onclick: () => { run.viewFrame = fr; renderVars(); } }, fname(fr.func)));
     });
     if (stack.length > 6) crumbs.classList.add('long');
     box.append(crumbs);
-    if (!frame.vars.size) { box.append(h('p', { class: 'empty' }, 'Nessuna variabile dichiarata finora in ' + frame.func.name + '.')); return; }
+    if (!frame.vars.size) { box.append(h('p', { class: 'empty' }, 'Nessuna variabile dichiarata finora in ' + fname(frame.func) + '.')); return; }
     const tbl = h('table', { class: 'vars' }, h('thead', null, h('tr', null, h('th', null, 'Nome'), h('th', null, 'Tipo'), h('th', null, 'Valore'))));
     const tb = h('tbody');
     const fmt = (v) => (v === undefined ? h('span', { class: 'undef' }, 'nessun valore') : h('span', { class: 'v-' + v.t }, E.literalOf(v)));
@@ -3570,7 +3580,7 @@ const Examples = (() => {
   function exportCss() {
     const cs = getComputedStyle(document.documentElement);
     const v = (n) => cs.getPropertyValue(n).trim();
-    let css = `text{font:${RenderLib.R_.font};fill:${v('--sh-text')};text-anchor:middle}.blabel{font-size:11px;font-weight:600;fill:${v('--muted')}}.flow{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ahead{fill:${v('--flow')}}.joint{fill:${v('--flow')}}.shape>path,.shape>rect{stroke-width:1.6}.inner{fill:none!important}.note{stroke-dasharray:4 3}svg{background:${v('--paper')}}`;
+    let css = `text{font:${RenderLib.R_.font};fill:${v('--sh-text')};text-anchor:middle}.badge{font-size:10px}.c-in .badge{fill:${v('--s-in')}}.c-out .badge{fill:${v('--s-out')}}.blabel{font-size:11px;font-weight:600;fill:${v('--muted')}}.flow{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ahead{fill:${v('--flow')}}.joint{fill:${v('--flow')}}.shape>path,.shape>rect{stroke-width:1.6}.inner{fill:none!important}.note{stroke-dasharray:4 3}svg{background:${v('--paper')}}`;
     for (const c of ['term', 'decl', 'assign', 'in', 'out', 'cond', 'loop', 'call', 'comment', 'brk', 'file', 'inc']) css += `.c-${c}>path,.c-${c}>rect{fill:${v('--f-' + c)};stroke:${v('--s-' + c)}}`;
     return css;
   }
@@ -3582,7 +3592,7 @@ const Examples = (() => {
     img.onload = () => {
       const c = h('canvas', { width: w * k, height: hh * k });
       const x = c.getContext('2d'); x.scale(k, k); x.drawImage(img, 0, 0);
-      c.toBlob((b) => download(safeName(st.prog.attrs.name) + '_' + func().name + '.png', b, 'image/png'));
+      c.toBlob((b) => download(safeName(st.prog.attrs.name) + '_' + fname(func()) + '.png', b, 'image/png'));
     };
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
   }
@@ -3604,7 +3614,7 @@ const Examples = (() => {
       { label: 'Salva come .fprg', key: 'Ctrl+S', do: saveFile },
       { label: 'Copia XML negli appunti', do: copyXml },
       '-',
-      { label: 'Esporta diagramma SVG', do: () => download(safeName(st.prog.attrs.name) + '_' + func().name + '.svg', exportSvg(), 'image/svg+xml') },
+      { label: 'Esporta diagramma SVG', do: () => download(safeName(st.prog.attrs.name) + '_' + fname(func()) + '.svg', exportSvg(), 'image/svg+xml') },
       { label: 'Esporta diagramma PNG', do: exportPng },
       { label: 'Scarica codice sorgente', do: () => download(safeName(st.prog.attrs.name) + '.' + CodeGen.LANGS[st.lang].ext, CodeGen.generate(st.prog, st.lang), 'text/plain') },
       '-',

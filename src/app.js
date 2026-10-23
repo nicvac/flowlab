@@ -42,6 +42,7 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = 'toast'; }, 3200);
   }
   const func = () => st.prog.functions[st.fi];
+  const fname = (f) => (f && f.name.toLowerCase() === 'main' ? 'Inizio' : f ? f.name : '');
   const isRunning = () => ['running', 'paused', 'input'].includes(run.state);
 
   function snapshot() { return JSON.stringify({ prog: st.prog, fi: st.fi }); }
@@ -110,7 +111,7 @@
   function renderFuncSelect() {
     const sel = $('#funcSel');
     sel.innerHTML = '';
-    st.prog.functions.forEach((f, i) => sel.append(h('option', { value: i, selected: i === st.fi }, i === 0 ? 'Main' : `${f.name}(${f.params.map((p) => p.name).join(', ')})`)));
+    st.prog.functions.forEach((f, i) => sel.append(h('option', { value: i, selected: i === st.fi }, i === 0 ? 'Inizio (principale)' : `${f.name}(${f.params.map((p) => p.name).join(', ')})`)));
     $('#funcDel').disabled = st.fi === 0;
   }
   function showFunc(i) { if (i === st.fi) return; st.fi = i; st.sel = null; render(); $('#canvasWrap').scrollTo(0, 0); }
@@ -476,7 +477,7 @@
       onOk: () => {
         const e1 = nameW._check(); if (e1) return e1;
         const name = nameW._get().trim();
-        if (name.toLowerCase() === 'main') return 'Il nome Main è riservato al programma principale';
+        if (name.toLowerCase() === 'main') return 'Il nome Main è riservato al programma principale (Inizio)';
         if (E.BUILTINS[name.toLowerCase()]) return `${name} è già una funzione integrata`;
         if (st.prog.functions.some((g, i) => i !== index && g.name.toLowerCase() === name.toLowerCase())) return `Esiste già una funzione chiamata ${name}`;
         const type = typeW._get();
@@ -779,8 +780,8 @@
     if (e.stmtId) {
       const fs = M.findStmt(st.prog, e.stmtId);
       const fn = e.funcId && st.prog.functions.find((f) => f.id === e.funcId);
-      if (fs) where = ` (in ${fs.func.name}, blocco «${RenderLib.caption(fs.stmt).text}»)`;
-      else if (fn) where = ` (in ${fn.name})`;
+      if (fs) where = ` (in ${fname(fs.func)}, blocco «${RenderLib.caption(fs.stmt).text}»)`;
+      else if (fn) where = ` (in ${fname(fn)})`;
     }
     conWrite('✖ Errore: ' + (e.message || String(e)) + where, true, 'error');
     decorate(); renderVars();
@@ -831,11 +832,11 @@
     const crumbs = h('nav', { class: 'crumbs', 'aria-label': 'Chiamate in corso' });
     stack.forEach((fr, i) => {
       if (i) crumbs.append(h('span', { class: 'sep' }, '›'));
-      crumbs.append(h('button', { type: 'button', class: fr === frame ? 'on' : '', onclick: () => { run.viewFrame = fr; renderVars(); } }, fr.func.name));
+      crumbs.append(h('button', { type: 'button', class: fr === frame ? 'on' : '', onclick: () => { run.viewFrame = fr; renderVars(); } }, fname(fr.func)));
     });
     if (stack.length > 6) crumbs.classList.add('long');
     box.append(crumbs);
-    if (!frame.vars.size) { box.append(h('p', { class: 'empty' }, 'Nessuna variabile dichiarata finora in ' + frame.func.name + '.')); return; }
+    if (!frame.vars.size) { box.append(h('p', { class: 'empty' }, 'Nessuna variabile dichiarata finora in ' + fname(frame.func) + '.')); return; }
     const tbl = h('table', { class: 'vars' }, h('thead', null, h('tr', null, h('th', null, 'Nome'), h('th', null, 'Tipo'), h('th', null, 'Valore'))));
     const tb = h('tbody');
     const fmt = (v) => (v === undefined ? h('span', { class: 'undef' }, 'nessun valore') : h('span', { class: 'v-' + v.t }, E.literalOf(v)));
@@ -1008,7 +1009,7 @@
   function exportCss() {
     const cs = getComputedStyle(document.documentElement);
     const v = (n) => cs.getPropertyValue(n).trim();
-    let css = `text{font:${RenderLib.R_.font};fill:${v('--sh-text')};text-anchor:middle}.blabel{font-size:11px;font-weight:600;fill:${v('--muted')}}.flow{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ahead{fill:${v('--flow')}}.joint{fill:${v('--flow')}}.shape>path,.shape>rect{stroke-width:1.6}.inner{fill:none!important}.note{stroke-dasharray:4 3}svg{background:${v('--paper')}}`;
+    let css = `text{font:${RenderLib.R_.font};fill:${v('--sh-text')};text-anchor:middle}.badge{font-size:10px}.c-in .badge{fill:${v('--s-in')}}.c-out .badge{fill:${v('--s-out')}}.blabel{font-size:11px;font-weight:600;fill:${v('--muted')}}.flow{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ahead{fill:${v('--flow')}}.joint{fill:${v('--flow')}}.shape>path,.shape>rect{stroke-width:1.6}.inner{fill:none!important}.note{stroke-dasharray:4 3}svg{background:${v('--paper')}}`;
     for (const c of ['term', 'decl', 'assign', 'in', 'out', 'cond', 'loop', 'call', 'comment', 'brk', 'file', 'inc']) css += `.c-${c}>path,.c-${c}>rect{fill:${v('--f-' + c)};stroke:${v('--s-' + c)}}`;
     return css;
   }
@@ -1020,7 +1021,7 @@
     img.onload = () => {
       const c = h('canvas', { width: w * k, height: hh * k });
       const x = c.getContext('2d'); x.scale(k, k); x.drawImage(img, 0, 0);
-      c.toBlob((b) => download(safeName(st.prog.attrs.name) + '_' + func().name + '.png', b, 'image/png'));
+      c.toBlob((b) => download(safeName(st.prog.attrs.name) + '_' + fname(func()) + '.png', b, 'image/png'));
     };
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
   }
@@ -1042,7 +1043,7 @@
       { label: 'Salva come .fprg', key: 'Ctrl+S', do: saveFile },
       { label: 'Copia XML negli appunti', do: copyXml },
       '-',
-      { label: 'Esporta diagramma SVG', do: () => download(safeName(st.prog.attrs.name) + '_' + func().name + '.svg', exportSvg(), 'image/svg+xml') },
+      { label: 'Esporta diagramma SVG', do: () => download(safeName(st.prog.attrs.name) + '_' + fname(func()) + '.svg', exportSvg(), 'image/svg+xml') },
       { label: 'Esporta diagramma PNG', do: exportPng },
       { label: 'Scarica codice sorgente', do: () => download(safeName(st.prog.attrs.name) + '.' + CodeGen.LANGS[st.lang].ext, CodeGen.generate(st.prog, st.lang), 'text/plain') },
       '-',
