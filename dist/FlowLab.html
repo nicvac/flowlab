@@ -2439,11 +2439,21 @@ class Renderer {
   comment(s, title) {
     const TOG = 24, PAD = 14, LH = 17, MAXT = R_.MAXW;
     const lines = wrapLines(s.text, MAXT);
-    const expandable = lines.length > 1;
-    const open = expandable && this.expanded && this.expanded.has(s.id);
-    const shown = open ? lines : [lines[0] + (expandable ? ' …' : '')];
-    const tw = Math.max(...shown.map((l) => textW(l, CFONT)));
-    const w = Math.round(Math.max(R_.MINW, Math.min(MAXT + 12, tw) + PAD * 2 + (expandable ? TOG : 0)));
+    // margine di sicurezza: misura e disegno possono differire di qualche decimo di pixel
+    const SAFE = 6;
+    const multi = lines.length > 1;
+    const firstW = textW(lines[0], CFONT);
+    const truncated = multi || firstW > MAXT;
+    let expandable = truncated;
+    let open = expandable && this.expanded && this.expanded.has(s.id);
+    let shown = open ? lines : [lines[0] + (multi ? ' …' : '')];
+    const widthFor = (exp, sh) => Math.ceil(Math.max(R_.MINW, Math.min(MAXT + 12, Math.max(...sh.map((l) => textW(l, CFONT)))) + PAD * 2 + SAFE + (exp ? TOG : 0)));
+    let w = widthFor(expandable, shown);
+    // se il testo chiuso verrebbe comunque tagliato, il pulsante + deve esserci sempre
+    if (!expandable && fit(shown[0], w - PAD * 2 + SAFE, CFONT) !== shown[0]) {
+      expandable = true; open = this.expanded && this.expanded.has(s.id);
+      w = widthFor(true, shown);
+    }
     const h = open ? Math.max(R_.H - 4, shown.length * LH + 14) : R_.H - 4;
     return {
       L: w / 2 + 6, R: w / 2 + 6, h,
@@ -2453,7 +2463,7 @@ class Renderer {
         if (open) {
           shown.forEach((t, i) => { g += `<text class="cline-t" x="${l + PAD}" y="${y + 7 + LH / 2 + i * LH}" dy="0.35em">${esc(t)}</text>`; });
         } else {
-          g += `<text x="${expandable ? cx - TOG / 2 : cx}" y="${y + h / 2}" dy="0.35em">${esc(fit(shown[0], w - PAD * 2 - (expandable ? TOG : 0), CFONT))}</text>`;
+          g += `<text x="${expandable ? cx - TOG / 2 : cx}" y="${y + h / 2}" dy="0.35em">${esc(fit(shown[0], w - PAD * 2 - (expandable ? TOG : 0) + SAFE, CFONT))}</text>`;
         }
         if (expandable) {
           const tx = r - 19, ty = y + (R_.H - 4) / 2 + 1;
