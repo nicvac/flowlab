@@ -174,6 +174,9 @@ body.side-hidden #sideToggle { left: auto; right: 3px; transform: translateY(-50
 .chart .shape.sel > path:not(.inner), .chart .shape.sel > rect { stroke: var(--sel); stroke-width: 3; }
 .chart .shape.exec > path:not(.inner), .chart .shape.exec > rect { fill: var(--exec-soft); stroke: var(--exec); stroke-width: 3.2; filter: drop-shadow(0 0 6px var(--exec)); }
 .chart .shape.err > path:not(.inner), .chart .shape.err > rect { fill: var(--err-soft); stroke: var(--err); stroke-width: 3.2; }
+.chart .trail { pointer-events: none; }
+.chart .trail-path { fill: none; stroke: var(--exec); stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round; opacity: 0.75; }
+.chart .trail-cursor { fill: var(--exec); stroke: var(--paper); stroke-width: 2.5; filter: drop-shadow(0 0 5px var(--exec)); }
 .chart .ins { cursor: copy; }
 .chart .ins rect { fill: transparent; }
 .chart .ins circle { fill: var(--accent); opacity: 0; transition: opacity .12s, transform .12s; }

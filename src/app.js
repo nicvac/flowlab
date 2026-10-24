@@ -77,6 +77,7 @@
     const f = func();
     const out = renderer.func(f, st.expanded);
     st.ins = out.ins;
+    st.edges = out.edges;
     const holder = $('#chart');
     holder.innerHTML = out.svg;
     applyZoom();
@@ -662,6 +663,7 @@
     stopTimer();
     run.mode = mode;
     run.steps = 0; run.curId = null; run.errId = null; run.pending = undefined; run.mainFrame = null; run.viewFrame = null; run.prevVals = new Map();
+    run.trail = null; clearTrail();
     conClear(); flushStreams();
     conWrite(`▶ ${st.prog.attrs.name || 'Programma'}`, true, 'sys');
     // esegue una copia, così le modifiche al diagramma non toccano l'esecuzione
@@ -676,12 +678,20 @@
   function stopTimer() { if (run.timer) { clearTimeout(run.timer); run.timer = null; } }
 
   function advance() {
-    let r;
-    try { r = run.gen.next(run.pending); run.pending = undefined; } catch (e) { onError(e); return null; }
-    if (r.done) { onFinish(); return null; }
-    const ev = r.value;
+    let r, ev;
+    for (;;) {
+      try { r = run.gen.next(run.pending); run.pending = undefined; } catch (e) { onError(e); return null; }
+      if (r.done) { onFinish(); return null; }
+      ev = r.value;
+      // il ramo scelto da un Se serve solo al cursore: non è un passo
+      if (ev.type === 'branch') { ev.frame._branch = { id: ev.stmt.id, taken: ev.taken }; continue; }
+      break;
+    }
     if (ev.type === 'stmt') {
       run.steps++; run.curId = ev.stmt.id; run.curFrame = ev.frame;
+      // percorso per il cursore: dall'ultimo blocco eseguito in questa stessa chiamata
+      run.trail = { from: ev.frame._last || null, to: ev.stmt.id, frame: ev.frame, branch: ev.frame._branch || null, step: run.steps };
+      ev.frame._last = ev.stmt.id;
       if (!run.mainFrame) run.mainFrame = ev.frame;
       return ev;
     }
@@ -731,6 +741,78 @@
     if (el) scrollIntoViewIfNeeded(el);
     run.viewFrame = null;
     renderVars();
+    drawTrail();
+  }
+
+  /* ---- Cursore lungo le frecce ---- */
+  let trailRaf = 0;
+  function clearTrail() {
+    cancelAnimationFrame(trailRaf);
+    const g = $('#chart svg .trail'); if (g) g.innerHTML = '';
+    run.trailShown = null;
+  }
+  function findPath(from, to, branch) {
+    const out = new Map();
+    for (const e of st.edges || []) { if (!out.has(e.from)) out.set(e.from, []); out.get(e.from).push(e); }
+    // ricerca in ampiezza: il primo passo da un Se segue il ramo davvero preso
+    let first = out.get(from) || [];
+    if (branch && branch.id === from) first = first.filter((e) => e.tag === (branch.taken ? 'T' : 'F'));
+    const queue = first.map((e) => ({ node: e.to, path: [e] }));
+    const seen = new Set();
+    while (queue.length) {
+      const { node, path } = queue.shift();
+      if (node === to) return path;
+      if (seen.has(node)) continue;
+      seen.add(node);
+      for (const e of out.get(node) || []) queue.push({ node: e.to, path: path.concat(e) });
+    }
+    return null;
+  }
+  function drawTrail() {
+    const t = run.trail;
+    const animate = run.mode === 'step' || SPEEDS[st.speed].ms > 0;
+    if (!t || !animate || run.trailShown === t.step) return;
+    run.trailShown = t.step;
+    cancelAnimationFrame(trailRaf);
+    const g = $('#chart svg .trail'); if (!g) return;
+    g.innerHTML = '';
+    if (!t.from || func().id !== t.frame.func.id) return;
+    const path = findPath(t.from, t.to, t.branch);
+    if (!path) return;
+    const pts = [];
+    for (const e of path) for (const p of e.pts) { const q = pts[pts.length - 1]; if (!q || q[0] !== p[0] || q[1] !== p[1]) pts.push(p); }
+    if (pts.length < 2) return;
+    const seg = []; let total = 0;
+    for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); seg.push(l); total += l; }
+    const NS = 'http://www.w3.org/2000/svg';
+    const line = document.createElementNS(NS, 'path');
+    line.setAttribute('class', 'trail-path');
+    line.setAttribute('d', pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(''));
+    const dot = document.createElementNS(NS, 'circle');
+    dot.setAttribute('class', 'trail-cursor'); dot.setAttribute('r', '6');
+    g.append(line, dot);
+    const at = (d) => {
+      let i = 0;
+      while (i < seg.length - 1 && d > seg[i]) { d -= seg[i]; i++; }
+      const k = seg[i] ? Math.min(1, d / seg[i]) : 1;
+      return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * k, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * k];
+    };
+    const place = (f) => {
+      line.style.strokeDasharray = `${total} ${total}`;
+      line.style.strokeDashoffset = String(total * (1 - f));
+      const [x, y] = at(total * f); dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+    };
+    const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const ms = run.mode === 'step' ? 520 : Math.min(SPEEDS[st.speed].ms * 0.8, 650);
+    if (reduce || ms < 60) { place(1); return; }
+    const t0 = performance.now();
+    const tick = (now) => {
+      const f = Math.min(1, (now - t0) / ms);
+      place(f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2);
+      if (f < 1) trailRaf = requestAnimationFrame(tick);
+    };
+    place(0);
+    trailRaf = requestAnimationFrame(tick);
   }
   function scrollIntoViewIfNeeded(el) {
     const wrap = $('#canvasWrap');
@@ -749,6 +831,8 @@
     inp.placeholder = `${ev.varName} (${TYPE_IT[ev.varType]}) — scrivi e premi Invio`;
     $('#conPrompt').textContent = ev.varName;
     $('#conForm').classList.add('waiting');
+    // l'input deve essere visibile: se la console è nel pannello nascosto, il pannello si riapre
+    if (!isFloat('console') && document.body.classList.contains('side-hidden')) setSideHidden(false);
     showPane('console');
     setTimeout(() => inp.focus(), 0);
   }
@@ -768,7 +852,7 @@
     flushStreams();
     run.state = 'done';
     conWrite(`■ Fine del programma · ${run.steps.toLocaleString('it-IT')} passi`, true, 'sys');
-    run.curId = null; run.curFrame = null;
+    run.curId = null; run.curFrame = null; clearTrail();
     decorate(); renderVars();
     setStatus('done', 'Programma terminato');
   }
@@ -802,7 +886,7 @@
     run.state = 'done';
     const inp = $('#conInput'); inp.disabled = true; $('#conSend').disabled = true; $('#conForm').classList.remove('waiting'); $('#conPrompt').textContent = '›';
     conWrite('■ Esecuzione interrotta', true, 'sys');
-    run.curId = null; decorate();
+    run.curId = null; decorate(); clearTrail();
     setStatus('done', 'Interrotto');
   }
   function onRunBtn() {

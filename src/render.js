@@ -48,6 +48,13 @@ function wrapLines(text, maxW) {
   return out;
 }
 
+function dedupe(pts) {
+  const out = [];
+  for (const p of pts) { const q = out[out.length - 1]; if (!q || q[0] !== p[0] || q[1] !== p[1]) out.push([p[0], p[1]]); }
+  return out;
+}
+const cat2 = (a, b) => a.concat(b);
+
 const KIND_IT = {
   declare: 'Dichiara', assign: 'Assegna', input: 'Input', output: 'Output', if: 'Se', while: 'Mentre', for: 'Per', do: 'Fai-mentre',
   call: 'Chiama', comment: 'Commento', breakpoint: 'Interruzione',
@@ -111,7 +118,12 @@ const CAT_OF = {
 
 class Renderer {
   constructor() { this.reset(); }
-  reset() { this.ins = []; this.sh = []; this.ln = []; this.hit = []; this.lbl = []; }
+  reset() { this.ins = []; this.sh = []; this.ln = []; this.hit = []; this.lbl = []; this.edges = []; }
+
+  /* ---- grafo dei percorsi (per il cursore che segue le frecce) ----
+     Ogni disegno riceve "head" = {node, pts, tag}: il percorso pendente che arriva
+     al suo ingresso, e restituisce "tail": il percorso che parte dalla sua uscita. */
+  edge(from, to, pts, tag) { this.edges.push({ from, to, pts: dedupe(pts), tag: tag || null }); }
 
   /* ---- primitive ---- */
   line(pts, head, cls) {
@@ -149,15 +161,18 @@ class Renderer {
     for (const p of parts) { L = Math.max(L, p.L); R = Math.max(R, p.R); h += p.h; }
     return {
       L, R, h,
-      draw: (cx, y) => {
+      draw: (cx, y, head) => {
         let cur = y;
+        let pend = head;
         parts.forEach((p, i) => {
           this.insPoint(arr, i, cx, cur, cur + R_.GAP, true);
+          const arrow = [[cx, cur], [cx, cur + R_.GAP]];
           cur += R_.GAP;
-          p.draw(cx, cur);
+          pend = p.draw(cx, cur, { node: pend.node, pts: cat2(pend.pts, arrow), tag: pend.tag });
           cur += p.h;
         });
         this.insPoint(arr, arr.length, cx, cur, cur + R_.GAP, tailHead);
+        return { node: pend.node, pts: cat2(pend.pts, [[cx, cur], [cx, cur + R_.GAP]]), tag: pend.tag };
       },
     };
   }
@@ -177,18 +192,22 @@ class Renderer {
       const h = DH / 2 + bh + 8;
       return {
         L: Math.max(dw / 2, offL + E.L), R: Math.max(dw / 2, offR + T.R), h,
-        draw: (cx, y) => {
-          const m = y + DH / 2, j = y + h;
+        draw: (cx, y, head) => {
+          const m = y + DH / 2, j = y + h, J = s.id + ':join';
+          this.edge(head.node, s.id, head.pts, head.tag);
           this.shape(s.id, s.kind, cat, 'diamond', cx, y, dw, DH, cap.text, title);
           this.line([[cx + dw / 2, m], [cx + offR, m]]);
           this.line([[cx - dw / 2, m], [cx - offL, m]]);
           this.label(cx + dw / 2 + 6, m - 6, 'Vero', 'start');
           this.label(cx - dw / 2 - 6, m - 6, 'Falso', 'end');
-          T.draw(cx + offR, m);
-          E.draw(cx - offL, m);
+          const tT = T.draw(cx + offR, m, { node: s.id, pts: [[cx + dw / 2, m], [cx + offR, m]], tag: 'T' });
+          const tE = E.draw(cx - offL, m, { node: s.id, pts: [[cx - dw / 2, m], [cx - offL, m]], tag: 'F' });
           this.line([[cx + offR, m + T.h], [cx + offR, j], [cx, j]]);
           this.line([[cx - offL, m + E.h], [cx - offL, j], [cx, j]]);
           this.ln.push(`<circle class="joint" cx="${cx}" cy="${j}" r="3.5"/>`);
+          this.edge(tT.node, J, cat2(tT.pts, [[cx + offR, j], [cx, j]]), tT.tag);
+          this.edge(tE.node, J, cat2(tE.pts, [[cx - offL, j], [cx, j]]), tE.tag);
+          return { node: J, pts: [[cx, j]] };
         },
       };
     }
@@ -200,10 +219,11 @@ class Renderer {
       const h = dh + B.h + 28;
       return {
         L: lo + 4, R: ro + 4, h,
-        draw: (cx, y) => {
+        draw: (cx, y, head) => {
           const m = y + dh / 2, by = y + dh + B.h;
+          this.edge(head.node, s.id, head.pts, head.tag);
           this.shape(s.id, s.kind, cat, s.kind === 'for' ? 'hex' : 'diamond', cx, y, dw, dh, cap.text, title);
-          B.draw(cx, y + dh);
+          const tB = B.draw(cx, y + dh, { node: s.id, pts: [[cx, y + dh]], tag: 'T' });
           this.label(cx + 6, y + dh + 13, s.kind === 'for' ? 'Ripeti' : 'Vero', 'start');
           // il ritorno si innesta a metà della freccia che entra nella condizione
           const jy = y - R_.GAP / 2;
@@ -211,6 +231,8 @@ class Renderer {
           this.ln.push(`<circle class="joint" cx="${cx}" cy="${jy}" r="3.5"/>`);
           this.line([[cx + dw / 2, m], [cx + ro, m], [cx + ro, by + 22], [cx, by + 22], [cx, y + h]]);
           this.label(cx + dw / 2 + 6, m - 6, s.kind === 'for' ? 'Fine' : 'Falso', 'start');
+          this.edge(tB.node, s.id, cat2(tB.pts, [[cx, by + 10], [cx - lo, by + 10], [cx - lo, jy], [cx, jy], [cx, y]]), tB.tag);
+          return { node: s.id, pts: [[cx + dw / 2, m], [cx + ro, m], [cx + ro, by + 22], [cx, by + 22]], tag: 'F' };
         },
       };
     }
@@ -221,15 +243,19 @@ class Renderer {
       const h = 6 + B.h + DH;
       return {
         L: lo + 4, R: Math.max(dw / 2, B.R) + 4, h,
-        draw: (cx, y) => {
-          const top = y + 6, dy = top + B.h, m = dy + DH / 2;
+        draw: (cx, y, head) => {
+          const top = y + 6, dy = top + B.h, m = dy + DH / 2, J = s.id + ':top';
           this.line([[cx, y], [cx, top]]);
           this.ln.push(`<circle class="joint" cx="${cx}" cy="${top}" r="3.5"/>`);
-          B.draw(cx, top);
+          this.edge(head.node, J, cat2(head.pts, [[cx, top]]), head.tag);
+          const tB = B.draw(cx, top, { node: J, pts: [[cx, top]] });
+          this.edge(tB.node, s.id, tB.pts, tB.tag);
           this.shape(s.id, s.kind, cat, 'diamond', cx, dy, dw, DH, cap.text, title);
           this.line([[cx - dw / 2, m], [cx - lo, m], [cx - lo, top], [cx - 4, top]], true, 'back');
           this.label(cx - dw / 2 - 6, m - 6, 'Vero', 'end');
           this.label(cx + 6, dy + DH + 13, 'Falso', 'start');
+          this.edge(s.id, J, [[cx - dw / 2, m], [cx - lo, m], [cx - lo, top], [cx, top]], 'T');
+          return { node: s.id, pts: [[cx, dy + DH]], tag: 'F' };
         },
       };
     }
@@ -238,8 +264,10 @@ class Renderer {
     const h = H;
     return {
       L: w / 2 + 6, R: w / 2 + 6, h,
-      draw: (cx, y) => {
+      draw: (cx, y, head) => {
+        this.edge(head.node, s.id, head.pts, head.tag);
         this.shape(s.id, s.kind, cat, shp, cx, y, w, h, cap.text, title, s.kind === 'comment' ? ' comment' : '', cap.incomplete ? null : cap.badge);
+        return { node: s.id, pts: [[cx, y + h]] };
       },
     };
   }
@@ -266,7 +294,8 @@ class Renderer {
     const h = open ? Math.max(R_.H - 4, shown.length * LH + 14) : R_.H - 4;
     return {
       L: w / 2 + 6, R: w / 2 + 6, h,
-      draw: (cx, y) => {
+      draw: (cx, y, head) => {
+        this.edge(head.node, s.id, head.pts, head.tag);
         const l = cx - w / 2, r = cx + w / 2;
         let g = `<g class="shape c-comment comment${open ? ' open' : ''}" data-id="${s.id}" data-kind="comment"><title>${esc(title)}</title>${shapePath('note', cx, y, w, h)}`;
         if (open) {
@@ -279,6 +308,7 @@ class Renderer {
           g += `<g class="ctoggle" data-toggle="${s.id}" role="button" aria-label="${open ? 'Riduci commento' : 'Espandi commento'}"><title>${open ? 'Riduci il commento' : 'Mostra tutto il commento'}</title><circle cx="${tx}" cy="${ty}" r="8"/><path d="M${tx - 3.5} ${ty}H${tx + 3.5}${open ? '' : `M${tx} ${ty - 3.5}V${ty + 3.5}`}"/></g>`;
         }
         this.sh.push(g + '</g>');
+        return { node: s.id, pts: [[cx, y + h]] };
       },
     };
   }
@@ -296,12 +326,13 @@ class Renderer {
     const W = Math.ceil(L + R + M * 2), Hh = Math.ceil(R_.H * 2 + B.h + M * 2);
     const cx = Math.round(M + L), y0 = M;
     this.shape('start:' + f.id, '', 'term', 'term', cx, y0, sw, R_.H, sig, isMain ? 'Inizio del programma: doppio clic per le proprietà' : `Inizio di ${f.name}: doppio clic per modificare la funzione`);
-    B.draw(cx, y0 + R_.H);
+    const tail = B.draw(cx, y0 + R_.H, { node: 'start:' + f.id, pts: [[cx, y0 + R_.H]] });
+    this.edge(tail.node, 'end:' + f.id, tail.pts, tail.tag);
     this.shape('end:' + f.id, '', 'term', 'term', cx, y0 + R_.H + B.h, ew, R_.H, endText, f.type === 'None' ? 'Fine della funzione' : `La funzione restituisce il valore di ${f.variable}`);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" class="chart" viewBox="0 0 ${W} ${Hh}" width="${W}" height="${Hh}" data-w="${W}" data-h="${Hh}">`
       + '<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" class="ahead"/></marker></defs>'
-      + `<g class="lines">${this.ln.join('')}</g><g class="hits">${this.hit.join('')}</g><g class="shapes">${this.sh.join('')}</g><g class="labels">${this.lbl.join('')}</g></svg>`;
-    return { svg, W, H: Hh, ins: this.ins };
+      + `<g class="lines">${this.ln.join('')}</g><g class="hits">${this.hit.join('')}</g><g class="trail"></g><g class="shapes">${this.sh.join('')}</g><g class="labels">${this.lbl.join('')}</g></svg>`;
+    return { svg, W, H: Hh, ins: this.ins, edges: this.edges };
   }
 }
 

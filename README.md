@@ -14,7 +14,7 @@ Il software è stato creato con **Claude Opus 5.5** di Anthropic.
 
 - **Editor:** clic su una freccia per aggiungere un blocco, doppio clic per modificarlo, trascinamento per spostarlo; copia/incolla, annulla/ripeti, più funzioni con parametri e array.
 - **Blocchi:** Dichiara, Assegna, Input, Output, Chiama, Se, Mentre, Per, Fai-mentre, Commento, Punto di interruzione, File (Apri, Leggi, Scrivi, Chiudi).
-- **Esecuzione:** quattro velocità, esecuzione passo-passo con evidenziazione del blocco corrente, punti di interruzione, messaggi di errore in italiano con il blocco in errore segnato in rosso.
+- **Esecuzione:** quattro velocità, esecuzione passo-passo con evidenziazione del blocco corrente e un cursore che percorre le frecce seguite (rami dei Se e ritorni dei cicli compresi), punti di interruzione, messaggi di errore in italiano con il blocco in errore segnato in rosso.
 - **Pannelli:** console di input/output, variabili (in giallo quelle appena cambiate, con lo stack delle chiamate), file di testo virtuali. Le schede si riordinano trascinandole e si possono sganciare in finestre mobili da posizionare ovunque, riducibili alla sola barra del titolo; il pannello laterale si nasconde e si riapre con il pulsantino sul divisore. La disposizione viene ricordata.
 - **Codice generato:** pseudocodice italiano, Python, C++, Java, C#, JavaScript.
 - **Esportazione:** `.fprg`, SVG, PNG, codice sorgente.

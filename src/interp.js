@@ -204,6 +204,7 @@ class Interpreter {
         yield { type: 'stmt', stmt: s, frame };
         const c = yield* ev(s.expression);
         if (c.t !== 'Boolean') throw new _E.FlowError(`La condizione deve essere vera o falsa, invece è ${_E.TYPE_IT[c.t]}`);
+        yield { type: 'branch', stmt: s, frame, taken: c.v };
         yield* this.block(c.v ? s.then : s.else);
         return;
       }
