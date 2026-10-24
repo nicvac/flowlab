@@ -89,10 +89,13 @@
     clearTimeout(codeTimer); codeTimer = setTimeout(() => { renderCode(); autosave(); }, 120);
   }
   function decorate() {
+    // durante il tragitto del cursore resta acceso il blocco di partenza
+    const litId = run.hold ? run.holdFrom : run.curId;
     $$('#chart .shape').forEach((g) => {
       const id = g.dataset.id;
       g.classList.toggle('sel', id === st.sel);
-      g.classList.toggle('exec', id === run.curId && run.state !== 'idle' && run.state !== 'done');
+      // il blocco si illumina solo quando il cursore lo ha raggiunto
+      g.classList.toggle('exec', id === litId && run.state !== 'idle' && run.state !== 'done');
       g.classList.toggle('err', id === run.errId);
     });
   }
@@ -748,6 +751,7 @@
   let trailRaf = 0;
   function clearTrail() {
     cancelAnimationFrame(trailRaf);
+    run.hold = null;
     const g = $('#chart svg .trail'); if (g) g.innerHTML = '';
     run.trailShown = null;
   }
@@ -774,6 +778,7 @@
     if (!t || !animate || run.trailShown === t.step) return;
     run.trailShown = t.step;
     cancelAnimationFrame(trailRaf);
+    if (run.hold) { run.hold = null; decorate(); }
     const g = $('#chart svg .trail'); if (!g) return;
     g.innerHTML = '';
     if (!t.from || func().id !== t.frame.func.id) return;
@@ -805,11 +810,14 @@
     const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
     const ms = run.mode === 'step' ? 520 : Math.min(SPEEDS[st.speed].ms * 0.8, 650);
     if (reduce || ms < 60) { place(1); return; }
+    // durante il tragitto il blocco di arrivo resta spento; si illumina all'arrivo del cursore
+    run.hold = t.to; run.holdFrom = t.from; decorate();
     const t0 = performance.now();
     const tick = (now) => {
       const f = Math.min(1, (now - t0) / ms);
       place(f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2);
       if (f < 1) trailRaf = requestAnimationFrame(tick);
+      else { run.hold = null; decorate(); }
     };
     place(0);
     trailRaf = requestAnimationFrame(tick);
