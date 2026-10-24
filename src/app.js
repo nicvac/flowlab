@@ -749,7 +749,7 @@
     inp.placeholder = `${ev.varName} (${TYPE_IT[ev.varType]}) — scrivi e premi Invio`;
     $('#conPrompt').textContent = ev.varName;
     $('#conForm').classList.add('waiting');
-    if (!paneVisible('console')) showPane('console'); else if (isFloat('console')) raiseWin('console');
+    showPane('console');
     setTimeout(() => inp.focus(), 0);
   }
   function submitInput(text) {
@@ -790,7 +790,7 @@
     decorate(); renderVars();
     const el = run.errId && $(`#chart .shape[data-id="${CSS.escape(run.errId)}"]`);
     if (el) scrollIntoViewIfNeeded(el);
-    if (!paneVisible('console')) showPane('console'); else if (isFloat('console')) raiseWin('console');
+    showPane('console');
     setStatus('error', 'Errore durante l\'esecuzione');
     if (!(e instanceof E.FlowError)) console.error(e);
   }
@@ -923,6 +923,8 @@
   const PANES = [['console', 'Console'], ['vars', 'Variabili'], ['code', 'Codice'], ['files', 'File']];
   const PANE_TITLE = Object.fromEntries(PANES);
   const ICON_POP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>';
+  const ICON_MIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>';
+  const ICON_RESTORE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
   const ICON_DOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M11 9l-3 3 3 3M8 12h0"/></svg>';
   const layout = (() => {
     const l = store.get('layout', null) || {};
@@ -950,7 +952,7 @@
     if (t === 'vars') renderVars();
     if (t === 'files') renderFiles();
   }
-  const showPane = (t) => setTab(t);
+  const showPane = (t) => { if (isFloat(t)) minimizeWin(t, false); setTab(t); };
 
   function buildTabs() {
     const bar = $('#tabs');
@@ -991,14 +993,14 @@
     saveLayout(); buildTabs(); setTab(src);
   }
 
-  function winHost() { return $('.canvas-col'); }
+  function winHost() { return $('#floatLayer'); }
   function detachPane(id, at) {
-    const host = winHost().getBoundingClientRect();
+    const col = $('.canvas-col').getBoundingClientRect();
     const n = Object.keys(layout.float).length;
-    const w = Math.min(420, host.width - 24), hh = Math.min(id === 'console' ? 360 : 400, host.height - 60);
-    let x = host.width - w - 24 - n * 26, y = 16 + n * 26;
-    if (at) { x = at.x - host.left - 60; y = at.y - host.top - 14; }
-    layout.float[id] = { x, y, w, h: hh };
+    const w = Math.min(420, window.innerWidth - 24), hh = Math.min(id === 'console' ? 360 : 400, window.innerHeight - 80);
+    let x = col.right - w - 24 - n * 26, y = col.top + 16 + n * 26;
+    if (at) { x = at.x - 60; y = at.y - 14; }
+    layout.float[id] = { x, y, w, h: hh, min: false };
     saveLayout();
     mountWin(id);
     buildTabs();
@@ -1013,12 +1015,14 @@
       h('div', { class: 'fwin-head' },
         h('span', { class: 'fwin-title' }, PANE_TITLE[id]),
         h('span', { class: 'grow' }),
+        h('button', { class: 'iconbtn minbtn', type: 'button', title: 'Riduci alla barra del titolo', 'aria-label': 'Riduci ' + PANE_TITLE[id], 'aria-expanded': 'true', html: ICON_MIN, onclick: () => minimizeWin(id) }),
         h('button', { class: 'iconbtn dock', type: 'button', title: 'Riporta nel pannello', 'aria-label': 'Riporta ' + PANE_TITLE[id] + ' nel pannello', html: ICON_DOCK, onclick: () => dockPane(id) })),
       body);
     pane.hidden = false;
     body.append(pane);
     winHost().append(win);
     Object.assign(win.style, { left: g.x + 'px', top: g.y + 'px', width: g.w + 'px', height: g.h + 'px' });
+    if (g.min) setMinUi(win, true);
     clampWin(win);
     win.addEventListener('pointerdown', () => raiseWin(id), true);
     const head = win.querySelector('.fwin-head');
@@ -1048,19 +1052,49 @@
     win.style.left = x + 'px'; win.style.top = y + 'px';
   }
   function saveWin(id, win) {
-    if (!layout.float[id]) return;
-    layout.float[id] = { x: win.offsetLeft, y: win.offsetTop, w: win.offsetWidth, h: win.offsetHeight };
+    const prev = layout.float[id]; if (!prev) return;
+    const min = win.classList.contains('min');
+    layout.float[id] = { x: win.offsetLeft, y: win.offsetTop, w: win.offsetWidth, h: min ? prev.h : win.offsetHeight, min };
     saveLayout();
+  }
+  function setMinUi(win, min) {
+    win.classList.toggle('min', min);
+    const b = win.querySelector('.minbtn');
+    b.innerHTML = min ? ICON_RESTORE : ICON_MIN;
+    b.title = min ? 'Ripristina la finestra' : 'Riduci alla barra del titolo';
+    b.setAttribute('aria-expanded', String(!min));
+  }
+  /* riduce la finestra alla sola barra del titolo, o la ripristina (force = true/false per imporre lo stato) */
+  function minimizeWin(id, force) {
+    const win = $(`.fwin[data-win="${id}"]`); const g = layout.float[id];
+    if (!win || !g) return;
+    const min = force === undefined ? !win.classList.contains('min') : force;
+    if (min === win.classList.contains('min')) return;
+    if (min) g.h = win.offsetHeight;
+    setMinUi(win, min);
+    if (!min) win.style.height = g.h + 'px';
+    g.min = min;
+    clampWin(win); saveLayout();
+    if (!min) refreshPane(id);
   }
   function raiseWin(id) {
     const win = $(`.fwin[data-win="${id}"]`); if (!win) return;
     win.style.zIndex = ++zTop;
     $$('.fwin').forEach((x) => x.classList.toggle('active', x === win));
   }
+  function setSideHidden(hidden) {
+    document.body.classList.toggle('side-hidden', hidden);
+    const b = $('#sideToggle');
+    b.title = hidden ? 'Mostra il pannello' : 'Nascondi il pannello';
+    b.setAttribute('aria-label', b.title);
+    b.setAttribute('aria-expanded', String(!hidden));
+    store.set('sideHidden', hidden);
+  }
   function dockPane(id, keepOrder) {
     const win = $(`.fwin[data-win="${id}"]`);
     const pane = $('#pane-' + id);
     $('#side').append(pane);
+    setSideHidden(false);
     if (win) win.remove();
     delete layout.float[id];
     saveLayout();
@@ -1320,7 +1354,11 @@
     // divisore pannelli
     const grip = $('#grip');
     const sideW = store.get('sideW', null); if (sideW) document.documentElement.style.setProperty('--side-w', sideW + 'px');
+    $('#sideToggle').addEventListener('pointerdown', (e) => e.stopPropagation());
+    $('#sideToggle').addEventListener('click', (e) => { e.stopPropagation(); setSideHidden(!document.body.classList.contains('side-hidden')); });
+    setSideHidden(!!store.get('sideHidden', false));
     grip.addEventListener('pointerdown', (e) => {
+      if (document.body.classList.contains('side-hidden')) return;
       grip.setPointerCapture(e.pointerId);
       const mv = (ev) => { const w = Math.max(280, Math.min(window.innerWidth - 320, window.innerWidth - ev.clientX)); document.documentElement.style.setProperty('--side-w', w + 'px'); store.set('sideW', w); };
       const up = () => { grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); };

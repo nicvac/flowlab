@@ -44,7 +44,7 @@
         <span class="hint-add">Clic su una freccia per aggiungere un blocco · doppio clic per modificarlo · trascina per spostarlo</span>
       </footer>
     </section>
-    <div id="grip" role="separator" aria-orientation="vertical" aria-label="Ridimensiona pannello" tabindex="0"></div>
+    <div id="grip" role="separator" aria-orientation="vertical" aria-label="Ridimensiona pannello" tabindex="0"><button id="sideToggle" type="button" title="Nascondi il pannello" aria-label="Nascondi il pannello" aria-expanded="true"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5L8 6L4.5 9.5"/></svg></button></div>
     <aside id="side" aria-label="Pannelli">
       <div id="tabs" role="tablist" aria-label="Pannelli"></div>
       <section class="pane" id="pane-console" role="tabpanel" aria-label="Console">
@@ -72,6 +72,7 @@
   </main>
   <input type="file" id="fileInput" accept=".fprg,.xml,.txt" hidden>
   <input type="file" id="txtInput" accept=".txt,.csv,text/plain" multiple hidden>
+  <div id="floatLayer"></div>
   <div id="pop" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </div>
