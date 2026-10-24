@@ -46,12 +46,7 @@
     </section>
     <div id="grip" role="separator" aria-orientation="vertical" aria-label="Ridimensiona pannello" tabindex="0"></div>
     <aside id="side" aria-label="Pannelli">
-      <div id="tabs" role="tablist">
-        <button role="tab" data-tab="console" type="button">Console</button>
-        <button role="tab" data-tab="vars" type="button">Variabili</button>
-        <button role="tab" data-tab="code" type="button">Codice</button>
-        <button role="tab" data-tab="files" type="button">File</button>
-      </div>
+      <div id="tabs" role="tablist" aria-label="Pannelli"></div>
       <section class="pane" id="pane-console" role="tabpanel" aria-label="Console">
         <div class="panehead"><span>Output del programma e input da tastiera</span><span class="grow"></span><button class="btn small" id="conClear" type="button">Pulisci</button></div>
         <div id="conOut" aria-live="polite"></div>

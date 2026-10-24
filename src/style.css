@@ -181,9 +181,31 @@ body[data-run="running"] .chart .ins, body[data-run="paused"] .chart .ins, body[
 /* ---------- Pannello laterale ---------- */
 #side { display: grid; grid-template-rows: auto 1fr; min-width: 0; min-height: 0; background: var(--panel); }
 #tabs { display: flex; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
-#tabs [role=tab] { border: 0; background: transparent; padding: 8px 11px 9px; border-radius: 7px 7px 0 0; cursor: pointer; color: var(--muted); white-space: nowrap; border-bottom: 2px solid transparent; font-weight: 700; font-size: 13px; }
-#tabs [role=tab][aria-selected=true] { color: var(--ink); border-bottom-color: var(--accent); }
+#tabs { align-items: stretch; }
+.tabw { display: flex; align-items: center; border-bottom: 2px solid transparent; border-radius: 7px 7px 0 0; }
+.tabw:has([aria-selected=true]) { border-bottom-color: var(--accent); }
+.tabw.dragging { opacity: 0.4; }
+.tabw.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
+.tabw.drop-after { box-shadow: inset -3px 0 0 var(--accent); }
+#tabs [role=tab] { border: 0; background: transparent; padding: 8px 4px 9px 11px; cursor: grab; color: var(--muted); white-space: nowrap; font-weight: 700; font-size: 13px; }
+#tabs [role=tab][aria-selected=true] { color: var(--ink); }
 #tabs [role=tab]:hover { color: var(--ink); }
+.tabw .detach { border: 0; background: transparent; width: 24px; height: 24px; margin-right: 4px; border-radius: 5px; color: var(--faint); cursor: pointer; display: grid; place-items: center; padding: 0; }
+.tabw .detach svg, .fwin .dock svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tabw .detach:hover, .tabw .detach:focus-visible { background: var(--line-soft); color: var(--accent); }
+body.side-empty main.work { grid-template-columns: minmax(0, 1fr); }
+body.side-empty #side, body.side-empty #grip { display: none; }
+body.panedrag #canvasWrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
+
+/* Finestre mobili sopra l'area del diagramma */
+.fwin { position: absolute; z-index: 30; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; resize: both; min-width: 260px; min-height: 160px; }
+.fwin.active { border-color: var(--accent); }
+.fwin-head { display: flex; align-items: center; gap: 6px; padding: 3px 4px 3px 12px; cursor: move; user-select: none; touch-action: none; background: var(--bg); border-bottom: 1px solid var(--line); font-weight: 700; font-size: 13px; }
+.fwin.active .fwin-head { background: var(--accent-soft); }
+.fwin.moving { opacity: 0.92; }
+.fwin-body { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
+.fwin-body > .pane { min-height: 0; }
+.fwin .dock { width: 28px; height: 28px; }
 .pane { min-height: 0; display: grid; grid-template-rows: auto 1fr auto; }
 .pane[hidden] { display: none !important; }
 .panehead { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line-soft); font-size: 12.5px; color: var(--muted); min-height: 44px; flex-wrap: wrap; }
@@ -328,7 +350,7 @@ table.ref td:first-child { white-space: nowrap; width: 1%; padding-right: 18px; 
 body.filedrag #canvasWrap { outline: 3px dashed var(--accent); outline-offset: -10px; }
 
 /* ---------- Schermi stretti ---------- */
-@media (max-width: 1360px) {
+@media (max-width: 1480px) {
   .funcbox label, .speed .lbl { display: none; }
   .bar { gap: 4px; }
 }
@@ -359,7 +381,7 @@ body.filedrag #canvasWrap { outline: 3px dashed var(--accent); outline-offset: -
 
 @media print {
   body { overflow: visible; background: #fff; }
-  .bar, #side, #grip, .statusbar, .zoombar, #pop, .toast { display: none !important; }
+  .bar, #side, #grip, .statusbar, .zoombar, #pop, .toast, .fwin { display: none !important; }
   main.work { display: block; }
   #canvasWrap { overflow: visible; background: #fff; }
   #chart { padding: 0; }

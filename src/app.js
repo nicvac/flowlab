@@ -668,7 +668,7 @@
     const prog = JSON.parse(JSON.stringify(st.prog));
     run.interp = new Interpreter(prog, env);
     run.gen = run.interp.run();
-    if (st.tab !== 'console' && st.tab !== 'vars') setTab('console');
+    if (!paneVisible('console') && !paneVisible('vars')) showPane('console');
     if (mode === 'run') { run.state = 'running'; setStatus('running', 'In esecuzione…'); pump(); }
     else { run.state = 'paused'; stepOnce(); }
   }
@@ -749,7 +749,7 @@
     inp.placeholder = `${ev.varName} (${TYPE_IT[ev.varType]}) — scrivi e premi Invio`;
     $('#conPrompt').textContent = ev.varName;
     $('#conForm').classList.add('waiting');
-    if (st.tab !== 'console') setTab('console');
+    if (!paneVisible('console')) showPane('console'); else if (isFloat('console')) raiseWin('console');
     setTimeout(() => inp.focus(), 0);
   }
   function submitInput(text) {
@@ -790,7 +790,7 @@
     decorate(); renderVars();
     const el = run.errId && $(`#chart .shape[data-id="${CSS.escape(run.errId)}"]`);
     if (el) scrollIntoViewIfNeeded(el);
-    if (st.tab !== 'console') setTab('console');
+    if (!paneVisible('console')) showPane('console'); else if (isFloat('console')) raiseWin('console');
     setStatus('error', 'Errore durante l\'esecuzione');
     if (!(e instanceof E.FlowError)) console.error(e);
   }
@@ -895,7 +895,7 @@
 
   /* ---- Codice ---- */
   function renderCode() {
-    if (st.tab !== 'code') return;
+    if (!paneVisible('code')) return;
     const code = CodeGen.generate(st.prog, st.lang);
     $('#codeOut').innerHTML = highlight(code, st.lang);
     $('#codeOut').dataset.raw = code;
@@ -919,14 +919,167 @@
     return out.replace(/\n<span class="ln"><\/span>$/, '\n');
   }
 
-  /* ------------------------------ Schede --------------------------------- */
+  /* ------------------------- Schede e finestre mobili --------------------- */
+  const PANES = [['console', 'Console'], ['vars', 'Variabili'], ['code', 'Codice'], ['files', 'File']];
+  const PANE_TITLE = Object.fromEntries(PANES);
+  const ICON_POP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>';
+  const ICON_DOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M11 9l-3 3 3 3M8 12h0"/></svg>';
+  const layout = (() => {
+    const l = store.get('layout', null) || {};
+    const ids = PANES.map((p) => p[0]);
+    l.order = (Array.isArray(l.order) ? l.order.filter((x) => ids.includes(x)) : []);
+    for (const id of ids) if (!l.order.includes(id)) l.order.push(id);
+    l.float = l.float && typeof l.float === 'object' ? l.float : {};
+    for (const k of Object.keys(l.float)) if (!ids.includes(k)) delete l.float[k];
+    return l;
+  })();
+  const saveLayout = () => store.set('layout', layout);
+  let zTop = 30;
+  const isFloat = (t) => !!layout.float[t];
+  const paneVisible = (t) => isFloat(t) || st.tab === t;
+
   function setTab(t) {
+    if (isFloat(t)) { raiseWin(t); refreshPane(t); return; }
     st.tab = t; store.set('tab', t);
     $$('#tabs [role=tab]').forEach((b) => { const on = b.dataset.tab === t; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; });
-    $$('.pane').forEach((p) => { p.hidden = p.id !== 'pane-' + t; });
+    $$('#side > .pane').forEach((p) => { p.hidden = p.id !== 'pane-' + t; });
+    refreshPane(t);
+  }
+  function refreshPane(t) {
     if (t === 'code') renderCode();
     if (t === 'vars') renderVars();
     if (t === 'files') renderFiles();
+  }
+  const showPane = (t) => setTab(t);
+
+  function buildTabs() {
+    const bar = $('#tabs');
+    bar.innerHTML = '';
+    const docked = layout.order.filter((id) => !isFloat(id));
+    for (const id of docked) {
+      const w = h('div', { class: 'tabw', 'data-tab': id, draggable: 'true', role: 'presentation' },
+        h('button', { role: 'tab', type: 'button', 'data-tab': id, title: 'Trascina per riordinare, oppure sul diagramma per sganciare', onclick: () => setTab(id) }, PANE_TITLE[id]),
+        h('button', { class: 'detach', type: 'button', title: 'Sgancia in una finestra mobile', 'aria-label': 'Sgancia ' + PANE_TITLE[id], html: ICON_POP, onclick: (e) => { e.stopPropagation(); detachPane(id); } }));
+      w.addEventListener('dragstart', (e) => { e.dataTransfer.setData('application/x-flowlab-pane', id); e.dataTransfer.setData('text/plain', PANE_TITLE[id]); e.dataTransfer.effectAllowed = 'move'; w.classList.add('dragging'); document.body.classList.add('panedrag'); });
+      w.addEventListener('dragend', () => { w.classList.remove('dragging'); document.body.classList.remove('panedrag'); $$('.tabw').forEach((x) => x.classList.remove('drop-before', 'drop-after')); });
+      w.addEventListener('dragover', (e) => {
+        if (![...e.dataTransfer.types].includes('application/x-flowlab-pane')) return;
+        e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+        const r = w.getBoundingClientRect(); const after = e.clientX > r.left + r.width / 2;
+        $$('.tabw').forEach((x) => x.classList.remove('drop-before', 'drop-after'));
+        w.classList.add(after ? 'drop-after' : 'drop-before');
+      });
+      w.addEventListener('drop', (e) => {
+        const src = e.dataTransfer.getData('application/x-flowlab-pane'); if (!src) return;
+        e.preventDefault(); e.stopPropagation();
+        const after = w.classList.contains('drop-after');
+        movePaneTo(src, id, after);
+      });
+      bar.append(w);
+    }
+    document.body.classList.toggle('side-empty', docked.length === 0);
+    if (docked.length && !docked.includes(st.tab)) st.tab = docked[0];
+    if (docked.length) setTab(st.tab);
+  }
+  function movePaneTo(src, target, after) {
+    if (src === target) return;
+    const o = layout.order.filter((x) => x !== src);
+    let i = o.indexOf(target); if (after) i++;
+    o.splice(i, 0, src);
+    layout.order = o;
+    if (isFloat(src)) { dockPane(src, true); return; }
+    saveLayout(); buildTabs(); setTab(src);
+  }
+
+  function winHost() { return $('.canvas-col'); }
+  function detachPane(id, at) {
+    const host = winHost().getBoundingClientRect();
+    const n = Object.keys(layout.float).length;
+    const w = Math.min(420, host.width - 24), hh = Math.min(id === 'console' ? 360 : 400, host.height - 60);
+    let x = host.width - w - 24 - n * 26, y = 16 + n * 26;
+    if (at) { x = at.x - host.left - 60; y = at.y - host.top - 14; }
+    layout.float[id] = { x, y, w, h: hh };
+    saveLayout();
+    mountWin(id);
+    buildTabs();
+    raiseWin(id);
+    refreshPane(id);
+  }
+  function mountWin(id) {
+    const pane = $('#pane-' + id);
+    const g = layout.float[id];
+    const body = h('div', { class: 'fwin-body' });
+    const win = h('div', { class: 'fwin', 'data-win': id, role: 'dialog', 'aria-label': PANE_TITLE[id] },
+      h('div', { class: 'fwin-head' },
+        h('span', { class: 'fwin-title' }, PANE_TITLE[id]),
+        h('span', { class: 'grow' }),
+        h('button', { class: 'iconbtn dock', type: 'button', title: 'Riporta nel pannello', 'aria-label': 'Riporta ' + PANE_TITLE[id] + ' nel pannello', html: ICON_DOCK, onclick: () => dockPane(id) })),
+      body);
+    pane.hidden = false;
+    body.append(pane);
+    winHost().append(win);
+    Object.assign(win.style, { left: g.x + 'px', top: g.y + 'px', width: g.w + 'px', height: g.h + 'px' });
+    clampWin(win);
+    win.addEventListener('pointerdown', () => raiseWin(id), true);
+    const head = win.querySelector('.fwin-head');
+    head.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target.closest('button')) return;
+      e.preventDefault();
+      head.setPointerCapture(e.pointerId);
+      const sx = e.clientX, sy = e.clientY, ox = win.offsetLeft, oy = win.offsetTop;
+      win.classList.add('moving');
+      const mv = (ev) => { win.style.left = ox + ev.clientX - sx + 'px'; win.style.top = oy + ev.clientY - sy + 'px'; clampWin(win); };
+      const up = () => { head.removeEventListener('pointermove', mv); head.removeEventListener('pointerup', up); head.removeEventListener('pointercancel', up); win.classList.remove('moving'); saveWin(id, win); };
+      head.addEventListener('pointermove', mv); head.addEventListener('pointerup', up); head.addEventListener('pointercancel', up);
+    });
+    head.addEventListener('dblclick', (e) => { if (!e.target.closest('button')) dockPane(id); });
+    if (window.ResizeObserver) {
+      let t = null;
+      new ResizeObserver(() => { clearTimeout(t); t = setTimeout(() => { if (win.isConnected) { clampWin(win); saveWin(id, win); } }, 200); }).observe(win);
+    }
+  }
+  function clampWin(win) {
+    const host = winHost();
+    const W = host.clientWidth, H = host.clientHeight;
+    if (win.offsetWidth > W) win.style.width = W + 'px';
+    if (win.offsetHeight > H) win.style.height = H + 'px';
+    const x = Math.max(0, Math.min(win.offsetLeft, W - win.offsetWidth));
+    const y = Math.max(0, Math.min(win.offsetTop, H - win.offsetHeight));
+    win.style.left = x + 'px'; win.style.top = y + 'px';
+  }
+  function saveWin(id, win) {
+    if (!layout.float[id]) return;
+    layout.float[id] = { x: win.offsetLeft, y: win.offsetTop, w: win.offsetWidth, h: win.offsetHeight };
+    saveLayout();
+  }
+  function raiseWin(id) {
+    const win = $(`.fwin[data-win="${id}"]`); if (!win) return;
+    win.style.zIndex = ++zTop;
+    $$('.fwin').forEach((x) => x.classList.toggle('active', x === win));
+  }
+  function dockPane(id, keepOrder) {
+    const win = $(`.fwin[data-win="${id}"]`);
+    const pane = $('#pane-' + id);
+    $('#side').append(pane);
+    if (win) win.remove();
+    delete layout.float[id];
+    saveLayout();
+    st.tab = id;
+    buildTabs();
+    setTab(id);
+  }
+  function initLayout() {
+    for (const id of layout.order) if (isFloat(id)) mountWin(id);
+    buildTabs();
+    window.addEventListener('resize', () => $$('.fwin').forEach(clampWin));
+    // trascinare una scheda sul diagramma la sgancia in quel punto
+    const col = winHost();
+    col.addEventListener('dragover', (e) => { if ([...e.dataTransfer.types].includes('application/x-flowlab-pane')) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } });
+    col.addEventListener('drop', (e) => {
+      const id = e.dataTransfer.getData('application/x-flowlab-pane'); if (!id) return;
+      e.preventDefault(); e.stopPropagation();
+      if (!isFloat(id)) detachPane(id, { x: e.clientX, y: e.clientY });
+    });
   }
 
   /* ----------------------------- Salvataggio ----------------------------- */
@@ -1137,7 +1290,6 @@
     $('#zoomOut').addEventListener('click', () => setZoom(st.zoom / 1.15));
     $('#zoomFit').addEventListener('click', fitZoom);
     $('#zoomVal').addEventListener('click', () => setZoom(1));
-    $$('#tabs [role=tab]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
     $('#tabs').addEventListener('keydown', (e) => {
       if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
       const tabs = $$('#tabs [role=tab]'); const i = tabs.findIndex((t) => t.dataset.tab === st.tab);
@@ -1198,7 +1350,7 @@
       try { st.prog = M.parseFprg(saved.xml); st.fi = Math.min(saved.fi || 0, st.prog.functions.length - 1); st.fileName = saved.fileName || null; ok = true; } catch (e) { ok = false; }
     }
     if (!ok) st.prog = Examples.get('media').make();
-    render(); setTab(st.tab); renderVars(); renderFiles(); setStatus('idle', 'Pronto');
+    render(); initLayout(); renderVars(); renderFiles(); setStatus('idle', 'Pronto');
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { render(); fitIfLarge(); });
     setTimeout(fitIfLarge, 0);
     // API minima per i test automatici
