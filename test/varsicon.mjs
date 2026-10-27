@@ -7,7 +7,7 @@ await page.click('.tabw[data-tab=vars] [role=tab]'); await page.click('#runBtn')
 const icons = await page.$$('#varsBody .avopen'); const links = await page.$$('#varsBody .avlink');
 console.log('icone:', icons.length, 'link:', links.length);
 await icons[0].click(); await page.waitForTimeout(200);
-await links[1].click(); await page.waitForTimeout(200);
+await (await page.$$('#varsBody .caret'))[1].click(); await page.waitForTimeout(350); await (await page.$$('#varsBody .avlink'))[1].click(); await page.waitForTimeout(200);
 await icons[0].click(); await page.waitForTimeout(200);   // stessa finestra: non ne apre una seconda
 console.log('finestre:', await page.$$eval('.avwin .fwin-title', t => t.map(x => x.textContent)));
 await page.screenshot({ path: 'test/vi.png', clip: { x: 1020, y: 90, width: 346, height: 250 } });

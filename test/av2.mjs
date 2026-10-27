@@ -11,7 +11,7 @@ await page.evaluate(() => { const S = ModelLib.makeStmt; const p = ModelLib.newP
 await page.click('.tabw[data-tab=vars] [role=tab]');
 for (let i = 0; i < 4; i++) { await page.click('#stepBtn'); await page.waitForTimeout(30); }
 await page.waitForTimeout(600);
-await (await page.$$('#varsBody .avlink'))[0].click();
+await (await page.$$('#varsBody .avopen'))[0].click();
 await page.evaluate(() => { const w = document.querySelector('.avwin'); Object.assign(w.style, { left: '40px', top: '120px', width: '640px', height: '200px' }); });
 await page.click('#runBtn'); await page.waitForTimeout(6000); await page.click('#pauseBtn').catch(() => {}); await page.waitForTimeout(500);
 const s = await page.evaluate(() => { const w = document.querySelector('.avwin'); const b = w.querySelector('.av-body'); const cs = getComputedStyle(b);
@@ -25,7 +25,7 @@ console.log('celle visibili dopo allargamento:', await page.$$eval('.avwin .av-c
 await page.click('#stopBtn').catch(() => {});
 await page.evaluate(() => { document.querySelectorAll('.avwin').forEach((w) => w.remove()); FlowLab.loadExample('matrici'); const s=document.querySelector('#speed'); s.value=0; s.dispatchEvent(new Event('input')); });
 await page.click('#runBtn'); await page.waitForTimeout(800);
-const btns = await page.$$('#varsBody .avlink'); for (const b of btns) await b.click();
+const btns = await page.$$('#varsBody .avopen'); for (const b of btns) await b.click();
 await page.evaluate(() => { const ws = [...document.querySelectorAll('.avwin')]; const pos = [[20, 60, 520, 380], [560, 60, 560, 400], [560, 480, 620, 390]]; ws.forEach((w, i) => { const p = pos[i]; Object.assign(w.style, { left: p[0] + 'px', top: p[1] + 'px', width: p[2] + 'px', height: p[3] + 'px' }); }); });
 await page.waitForTimeout(600);
 console.log('finestre:', JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('.avwin')].map(w => ({ t: w.querySelector('.fwin-title').textContent, pagina: w.querySelector('.av-pagestep .av-idx')?.textContent, lead: [...w.querySelectorAll('.av-lead .av-idx')].map(x => x.textContent).join(','), celle: w.querySelectorAll('.av-c').length })))));
