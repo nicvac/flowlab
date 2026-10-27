@@ -1,0 +1,12 @@
+import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
+const browser = await chromium.launch(); const page = await browser.newPage({ viewport: { width: 1366, height: 820 } });
+const errs=[]; page.on('pageerror', e => errs.push(e.message));
+await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
+await page.evaluate(() => { localStorage.clear(); FlowLab.loadExample('bolle'); const s=document.querySelector('#speed'); s.value=0; s.dispatchEvent(new Event('input')); });
+await page.click('.tabw[data-tab=vars] [role=tab]');
+await page.click('#runBtn'); await page.waitForTimeout(600);
+console.log('scheda Variabili:', (await page.innerText('#varsBody')).replace(/\t/g, ' ').split('\n').filter(Boolean).join(' | '));
+await page.click('#varsBody .avlink'); await page.waitForTimeout(300);
+console.log('finestra aperta:', await page.$eval('.avwin .fwin-title', t => t.textContent), '| celle:', await page.$$eval('.avwin .av-c', c => c.length));
+await page.screenshot({ path: 'test/vl.png', clip: { x: 700, y: 40, width: 666, height: 360 } });
+console.log('ERR', errs); await browser.close();

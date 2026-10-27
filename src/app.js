@@ -978,16 +978,12 @@
       if (c.array) {
         const n = c.items.length;
         const dims = c.dims || [n];
-        const openBtn = h('button', { class: 'iconbtn avopen', type: 'button', title: 'Apri in una finestra per il debug', 'aria-label': `Apri ${c.name} in una finestra`, html: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg>', onclick: () => ArrayView.open(frame.func.name, c) });
-        const summary = h('tr', { class: 'arr' }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null, openBtn), h('td', null, `${TYPE_IT[c.type]}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`));
-        tb.append(summary);
-        const label = (i) => { if (dims.length === 1) return `[${i}]`; const ix = []; for (let k = dims.length - 1; k >= 0; k--) { ix.unshift(i % dims[k]); i = Math.floor(i / dims[k]); } return `[${ix.join(', ')}]`; };
-        c.items.slice(0, 300).forEach((it, i) => {
-          const k = key + '[' + i + ']'; const sv = it === undefined ? '∅' : E.literalOf(it); next.set(k, sv);
-          const changed = prev.has(k) && prev.get(k) !== sv;
-          tb.append(h('tr', { class: 'item' + (changed ? ' changed' : '') }, h('td', null, label(i)), h('td', null, ''), h('td', null, fmt(it))));
-        });
-        if (n > 300) tb.append(h('tr', { class: 'item' }, h('td', { colspan: 3, class: 'muted' }, `… altri ${n - 300} elementi`)));
+        // il contenuto degli array si guarda nella finestra dedicata
+        const sv = String(c.writes || 0); next.set(key, sv);
+        const changed = prev.has(key) && prev.get(key) !== sv;
+        tb.append(h('tr', { class: 'arr' + (changed ? ' changed' : '') }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null), h('td', null, `${TYPE_IT[c.type]}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`)));
+        tb.append(h('tr', { class: 'item' + (changed ? ' changed' : '') }, h('td', { colspan: 3 },
+          h('button', { class: 'avlink', type: 'button', title: 'Apri una finestra con i valori dell\'array', onclick: () => ArrayView.open(frame.func.name, c) }, 'visualizza valori'))));
       } else {
         const sv = c.value === undefined ? '∅' : E.literalOf(c.value); next.set(key, sv);
         const changed = prev.has(key) && prev.get(key) !== sv;

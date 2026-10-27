@@ -353,8 +353,8 @@ ul.files li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; 
 .av-c.chg { background: var(--exec-soft) !important; box-shadow: inset 0 0 0 2px var(--exec); font-weight: 700; animation: av-chg 0.9s ease-out; }
 @keyframes av-chg { 0% { box-shadow: inset 0 0 0 2px var(--exec), 0 0 14px 2px var(--exec); } 100% { box-shadow: inset 0 0 0 2px var(--exec); } }
 .av-foot { padding: 4px 12px 6px; font: 12px var(--font-mono); color: var(--muted); border-top: 1px solid var(--line-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-table.vars td .avopen { width: 24px; height: 24px; margin-left: 4px; vertical-align: middle; }
-table.vars td .avopen svg { width: 15px; height: 15px; }
+table.vars .avlink { border: 0; background: none; padding: 0; color: var(--accent); font: 600 12.5px var(--font-ui); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+table.vars .avlink:hover, table.vars .avlink:focus-visible { color: var(--ink); }
 
 /* ---------- Popover e menu ---------- */
 #pop { position: fixed; z-index: 50; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 6px; max-height: calc(100vh - 16px); overflow: auto; }

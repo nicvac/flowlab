@@ -11,7 +11,7 @@ for (let i = 0; i < 9; i++) { await page.click('#stepBtn'); await page.waitForTi
 await page.waitForTimeout(700);
 const rows = await page.$$eval('#varsBody tr.arr', r => r.map(x => x.innerText.replace(/\s+/g, ' ')));
 console.log('array nella scheda:', rows);
-await (await page.$$('#varsBody tr.arr .avopen'))[0].click();
+await (await page.$$('#varsBody .avlink'))[0].click();
 await page.waitForTimeout(200);
 // avanza: la tavola si riempie, la vista segue
 for (let i = 0; i < 70; i++) { await page.click('#stepBtn'); await page.waitForTimeout(15); }
@@ -21,7 +21,7 @@ console.log('scacchiera:', JSON.stringify(v1));
 await page.screenshot({ path: 'test/av1.png' });
 // passa al cubo: esecuzione continua fino a metà
 await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=3; s.dispatchEvent(new Event('input')); });
-const cuboBtn = await page.$$('#varsBody tr.arr .avopen'); await cuboBtn[1].click(); await cuboBtn[2].click();
+const cuboBtn = await page.$$('#varsBody .avlink'); await cuboBtn[1].click(); await cuboBtn[2].click();
 await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=0; s.dispatchEvent(new Event('input')); });
 await page.click('#runBtn'); await page.waitForTimeout(150); await page.click('#pauseBtn').catch(()=>{});
 await page.waitForTimeout(500);

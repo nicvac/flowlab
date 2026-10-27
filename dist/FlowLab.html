@@ -362,8 +362,8 @@ ul.files li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; 
 .av-c.chg { background: var(--exec-soft) !important; box-shadow: inset 0 0 0 2px var(--exec); font-weight: 700; animation: av-chg 0.9s ease-out; }
 @keyframes av-chg { 0% { box-shadow: inset 0 0 0 2px var(--exec), 0 0 14px 2px var(--exec); } 100% { box-shadow: inset 0 0 0 2px var(--exec); } }
 .av-foot { padding: 4px 12px 6px; font: 12px var(--font-mono); color: var(--muted); border-top: 1px solid var(--line-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-table.vars td .avopen { width: 24px; height: 24px; margin-left: 4px; vertical-align: middle; }
-table.vars td .avopen svg { width: 15px; height: 15px; }
+table.vars .avlink { border: 0; background: none; padding: 0; color: var(--accent); font: 600 12.5px var(--font-ui); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+table.vars .avlink:hover, table.vars .avlink:focus-visible { color: var(--ink); }
 
 /* ---------- Popover e menu ---------- */
 #pop { position: fixed; z-index: 50; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 6px; max-height: calc(100vh - 16px); overflow: auto; }
@@ -1806,6 +1806,7 @@ class Interpreter {
       const off = _E.arrOffset(ivs, cell, lv);
       cell.items[off] = _E.coerce(val, cell.type, `il valore assegnato a ${lv.name}[${ivs.map((x) => x.v).join(', ')}]`);
       cell.lastWrite = off;
+      cell.writes = (cell.writes || 0) + 1;
     } else {
       if (lv.index) throw new _E.FlowError(`"${lv.name}" non è un array`);
       cell.value = _E.coerce(val, cell.type, `il valore assegnato a "${lv.name}"`);
@@ -3151,7 +3152,10 @@ const ArrayView = (() => {
       host.append(this.win);
       const W = Math.min(520, window.innerWidth - 40), H = Math.min(380, window.innerHeight - 120);
       const n = viewers.size;
-      Object.assign(this.win.style, { width: W + 'px', height: H + 'px', left: Math.max(10, window.innerWidth - W - 60 - n * 28) + 'px', top: (90 + n * 28) + 'px' });
+      // si apre sull'area del diagramma, accanto al pannello, senza coprire la scheda Variabili
+      const col = document.querySelector('.canvas-col');
+      const right = col ? col.getBoundingClientRect().right : window.innerWidth;
+      Object.assign(this.win.style, { width: W + 'px', height: H + 'px', left: Math.max(10, right - W - 24 - n * 28) + 'px', top: (90 + n * 28) + 'px' });
       this.raise();
       this.win.addEventListener('pointerdown', () => this.raise(), true);
       this.head.addEventListener('pointerdown', (e) => {
@@ -4395,16 +4399,12 @@ const ArrayView = (() => {
       if (c.array) {
         const n = c.items.length;
         const dims = c.dims || [n];
-        const openBtn = h('button', { class: 'iconbtn avopen', type: 'button', title: 'Apri in una finestra per il debug', 'aria-label': `Apri ${c.name} in una finestra`, html: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg>', onclick: () => ArrayView.open(frame.func.name, c) });
-        const summary = h('tr', { class: 'arr' }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null, openBtn), h('td', null, `${TYPE_IT[c.type]}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`));
-        tb.append(summary);
-        const label = (i) => { if (dims.length === 1) return `[${i}]`; const ix = []; for (let k = dims.length - 1; k >= 0; k--) { ix.unshift(i % dims[k]); i = Math.floor(i / dims[k]); } return `[${ix.join(', ')}]`; };
-        c.items.slice(0, 300).forEach((it, i) => {
-          const k = key + '[' + i + ']'; const sv = it === undefined ? '∅' : E.literalOf(it); next.set(k, sv);
-          const changed = prev.has(k) && prev.get(k) !== sv;
-          tb.append(h('tr', { class: 'item' + (changed ? ' changed' : '') }, h('td', null, label(i)), h('td', null, ''), h('td', null, fmt(it))));
-        });
-        if (n > 300) tb.append(h('tr', { class: 'item' }, h('td', { colspan: 3, class: 'muted' }, `… altri ${n - 300} elementi`)));
+        // il contenuto degli array si guarda nella finestra dedicata
+        const sv = String(c.writes || 0); next.set(key, sv);
+        const changed = prev.has(key) && prev.get(key) !== sv;
+        tb.append(h('tr', { class: 'arr' + (changed ? ' changed' : '') }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null), h('td', null, `${TYPE_IT[c.type]}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`)));
+        tb.append(h('tr', { class: 'item' + (changed ? ' changed' : '') }, h('td', { colspan: 3 },
+          h('button', { class: 'avlink', type: 'button', title: 'Apri una finestra con i valori dell\'array', onclick: () => ArrayView.open(frame.func.name, c) }, 'visualizza valori'))));
       } else {
         const sv = c.value === undefined ? '∅' : E.literalOf(c.value); next.set(key, sv);
         const changed = prev.has(key) && prev.get(key) !== sv;

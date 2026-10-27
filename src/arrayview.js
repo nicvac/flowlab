@@ -68,7 +68,10 @@ const ArrayView = (() => {
       host.append(this.win);
       const W = Math.min(520, window.innerWidth - 40), H = Math.min(380, window.innerHeight - 120);
       const n = viewers.size;
-      Object.assign(this.win.style, { width: W + 'px', height: H + 'px', left: Math.max(10, window.innerWidth - W - 60 - n * 28) + 'px', top: (90 + n * 28) + 'px' });
+      // si apre sull'area del diagramma, accanto al pannello, senza coprire la scheda Variabili
+      const col = document.querySelector('.canvas-col');
+      const right = col ? col.getBoundingClientRect().right : window.innerWidth;
+      Object.assign(this.win.style, { width: W + 'px', height: H + 'px', left: Math.max(10, right - W - 24 - n * 28) + 'px', top: (90 + n * 28) + 'px' });
       this.raise();
       this.win.addEventListener('pointerdown', () => this.raise(), true);
       this.head.addEventListener('pointerdown', (e) => {

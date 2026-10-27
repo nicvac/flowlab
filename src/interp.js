@@ -356,6 +356,7 @@ class Interpreter {
       const off = _E.arrOffset(ivs, cell, lv);
       cell.items[off] = _E.coerce(val, cell.type, `il valore assegnato a ${lv.name}[${ivs.map((x) => x.v).join(', ')}]`);
       cell.lastWrite = off;
+      cell.writes = (cell.writes || 0) + 1;
     } else {
       if (lv.index) throw new _E.FlowError(`"${lv.name}" non è un array`);
       cell.value = _E.coerce(val, cell.type, `il valore assegnato a "${lv.name}"`);
