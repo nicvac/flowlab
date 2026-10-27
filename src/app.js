@@ -29,7 +29,7 @@
   const st = {
     prog: null, fi: 0, sel: null, clip: null, undo: [], redo: [], dirty: false,
     zoom: store.get('zoom', 1), speed: store.get('speed', 2), lang: store.get('lang', 'python'), tab: store.get('tab', 'console'),
-    fileName: null, ins: [], expanded: new Set(), vfs: new Map(Object.entries(store.get('vfs', {}))),
+    fileName: null, ins: [], expanded: new Set(), varsOpen: new Set(), vfs: new Map(Object.entries(store.get('vfs', {}))),
   };
   const SPEEDS = [{ ms: 0, label: 'Istantanea' }, { ms: 40, label: 'Veloce' }, { ms: 280, label: 'Media' }, { ms: 750, label: 'Lenta' }];
   const renderer = new RenderLib.Renderer();
@@ -983,9 +983,20 @@
         const changed = prev.has(key) && prev.get(key) !== sv;
         const openArr = () => ArrayView.open(frame.func.name, c);
         const icon = h('button', { class: 'iconbtn avopen', type: 'button', title: 'Visualizza i valori', 'aria-label': `Visualizza i valori di ${c.name}`, html: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg>', onclick: openArr });
-        tb.append(h('tr', { class: 'arr' + (changed ? ' changed' : '') }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null, icon), h('td', null, `${TYPE_IT[c.type]}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`)));
-        tb.append(h('tr', { class: 'item' + (changed ? ' changed' : '') }, h('td', { colspan: 3 },
-          h('button', { class: 'avlink', type: 'button', title: 'Apri una finestra con i valori dell\'array', onclick: openArr }, 'visualizza valori'))));
+        // freccina che apre/chiude la riga con «visualizza i valori» (lo stato resta tra un passo e l'altro)
+        const okey = fname(frame.func) + '::' + c.name.toLowerCase();
+        const isOpen = st.varsOpen.has(okey);
+        const detail = h('tr', { class: 'detail' + (isOpen ? ' open' : '') + (changed ? ' changed' : '') }, h('td', { colspan: 3 },
+          h('div', { class: 'det-wrap' }, h('div', { class: 'det-inner' },
+            h('button', { class: 'avlink', type: 'button', tabindex: isOpen ? '0' : '-1', title: 'Apri una finestra con i valori dell\'array', onclick: openArr }, 'visualizza i valori')))));
+        const caret = h('button', { class: 'caret' + (isOpen ? ' open' : ''), type: 'button', 'aria-expanded': String(isOpen), 'aria-label': `Mostra o nascondi i dettagli di ${c.name}`, html: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5L8 6L4.5 9.5"/></svg>', onclick: () => {
+          const open = !st.varsOpen.has(okey);
+          if (open) st.varsOpen.add(okey); else st.varsOpen.delete(okey);
+          caret.classList.toggle('open', open); caret.setAttribute('aria-expanded', String(open));
+          detail.classList.toggle('open', open); detail.querySelector('.avlink').tabIndex = open ? 0 : -1;
+        } });
+        tb.append(h('tr', { class: 'arr' + (changed ? ' changed' : '') }, h('td', null, caret, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null, icon), h('td', null, `${TYPE_IT[c.type]}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`)));
+        tb.append(detail);
       } else {
         const sv = c.value === undefined ? '∅' : E.literalOf(c.value); next.set(key, sv);
         const changed = prev.has(key) && prev.get(key) !== sv;
