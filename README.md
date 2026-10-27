@@ -36,13 +36,9 @@ FlowLab è compatibile con il **formato `.fprg` standard**.
 
 Se il programma usa una delle funzionalità estese di FlowLab, il file viene salvato in un **formato `.fprg` esteso, non standard**. Le funzionalità estese sono:
 
-| Funzionalità | Come viene salvata | Negli altri editor |
-|---|---|---|
-| **Costanti** | dichiarazione con l'attributo `flowlab-const="True"`, seguita dall'assegnamento del valore | il file si apre e il programma gira: la costante è vista come una variabile normale |
-| **Array a più dimensioni** | dimensioni separate da virgola nel campo della dichiarazione (`3, 4`), accessi `m[i, j]`, attributo `flowlab-dims` sui parametri | il programma non si può eseguire |
-| **Funzioni con più valori restituiti** | attributo `flowlab-returns` sulla funzione e assegnamento con più variabili (`a, b ← f(...)`) | il programma non si può eseguire |
-
-FlowLab apre e salva i file in formato esteso senza perdere nulla. Al salvataggio di un programma con più valori restituiti compare un avviso.
+- costanti
+- array a più dimensioni
+- funzioni con più valori restituiti
 
 ### Verifica
 
