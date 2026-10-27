@@ -362,6 +362,8 @@ ul.files li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; 
 .av-c.chg { background: var(--exec-soft) !important; box-shadow: inset 0 0 0 2px var(--exec); font-weight: 700; animation: av-chg 0.9s ease-out; }
 @keyframes av-chg { 0% { box-shadow: inset 0 0 0 2px var(--exec), 0 0 14px 2px var(--exec); } 100% { box-shadow: inset 0 0 0 2px var(--exec); } }
 .av-foot { padding: 4px 12px 6px; font: 12px var(--font-mono); color: var(--muted); border-top: 1px solid var(--line-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+table.vars td .avopen { width: 24px; height: 24px; margin-left: 4px; vertical-align: middle; color: var(--accent); }
+table.vars td .avopen svg { width: 15px; height: 15px; }
 table.vars .avlink { border: 0; background: none; padding: 0; color: var(--accent); font: 600 12.5px var(--font-ui); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 table.vars .avlink:hover, table.vars .avlink:focus-visible { color: var(--ink); }
 
@@ -4402,9 +4404,11 @@ const ArrayView = (() => {
         // il contenuto degli array si guarda nella finestra dedicata
         const sv = String(c.writes || 0); next.set(key, sv);
         const changed = prev.has(key) && prev.get(key) !== sv;
-        tb.append(h('tr', { class: 'arr' + (changed ? ' changed' : '') }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null), h('td', null, `${TYPE_IT[c.type]}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`)));
+        const openArr = () => ArrayView.open(frame.func.name, c);
+        const icon = h('button', { class: 'iconbtn avopen', type: 'button', title: 'Visualizza i valori', 'aria-label': `Visualizza i valori di ${c.name}`, html: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg>', onclick: openArr });
+        tb.append(h('tr', { class: 'arr' + (changed ? ' changed' : '') }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null, icon), h('td', null, `${TYPE_IT[c.type]}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`)));
         tb.append(h('tr', { class: 'item' + (changed ? ' changed' : '') }, h('td', { colspan: 3 },
-          h('button', { class: 'avlink', type: 'button', title: 'Apri una finestra con i valori dell\'array', onclick: () => ArrayView.open(frame.func.name, c) }, 'visualizza valori'))));
+          h('button', { class: 'avlink', type: 'button', title: 'Apri una finestra con i valori dell\'array', onclick: openArr }, 'visualizza valori'))));
       } else {
         const sv = c.value === undefined ? '∅' : E.literalOf(c.value); next.set(key, sv);
         const changed = prev.has(key) && prev.get(key) !== sv;

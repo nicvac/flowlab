@@ -981,9 +981,11 @@
         // il contenuto degli array si guarda nella finestra dedicata
         const sv = String(c.writes || 0); next.set(key, sv);
         const changed = prev.has(key) && prev.get(key) !== sv;
-        tb.append(h('tr', { class: 'arr' + (changed ? ' changed' : '') }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null), h('td', null, `${TYPE_IT[c.type]}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`)));
+        const openArr = () => ArrayView.open(frame.func.name, c);
+        const icon = h('button', { class: 'iconbtn avopen', type: 'button', title: 'Visualizza i valori', 'aria-label': `Visualizza i valori di ${c.name}`, html: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg>', onclick: openArr });
+        tb.append(h('tr', { class: 'arr' + (changed ? ' changed' : '') }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null, icon), h('td', null, `${TYPE_IT[c.type]}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`)));
         tb.append(h('tr', { class: 'item' + (changed ? ' changed' : '') }, h('td', { colspan: 3 },
-          h('button', { class: 'avlink', type: 'button', title: 'Apri una finestra con i valori dell\'array', onclick: () => ArrayView.open(frame.func.name, c) }, 'visualizza valori'))));
+          h('button', { class: 'avlink', type: 'button', title: 'Apri una finestra con i valori dell\'array', onclick: openArr }, 'visualizza valori'))));
       } else {
         const sv = c.value === undefined ? '∅' : E.literalOf(c.value); next.set(key, sv);
         const changed = prev.has(key) && prev.get(key) !== sv;
