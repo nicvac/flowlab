@@ -24,12 +24,26 @@ Il software è stato creato con **Claude Opus 5.5** di Anthropic.
 
 ## Compatibilità con il formato .fprg
 
-- I file `.fprg` creati con altri editor di diagrammi di flusso si aprono in FlowLab. I blocchi della grafica tartaruga non sono supportati e vengono scartati con un avviso.
-- I file salvati da FlowLab usano solo il formato `.fprg` standard e si aprono negli altri editor, salvo le estensioni di FlowLab, segnate da attributi aggiuntivi:
-  - le **costanti** si salvano come dichiarazione (`flowlab-const="True"`) seguita dall'assegnamento del valore, quindi negli altri editor il programma resta eseguibile;
-  - le **funzioni con più valori restituiti** usano l'attributo `flowlab-returns` e funzionano solo in FlowLab.
-- Come previsto dal formato `.fprg`, i nomi di variabili e funzioni non distinguono maiuscole e minuscole. Le stringhe scritte tra apici singoli vengono salvate tra virgolette doppie.
-- Verifica: `node test/compat.mjs <cartella con file .fprg>` apre ogni file, controlla blocchi, espressioni e nomi, salva e riapre, verifica che il file salvato usi solo il formato originale ed esegue il programma.
+FlowLab è compatibile con il **formato `.fprg` standard**.
+
+- **Apertura:** i file `.fprg` standard si aprono in FlowLab. I blocchi della grafica tartaruga non sono supportati e vengono scartati con un avviso.
+- **Salvataggio:** se il programma non usa le funzionalità estese, FlowLab salva in formato `.fprg` standard e il file si apre negli altri editor che usano questo formato.
+- Come previsto dal formato, i nomi di variabili e funzioni non distinguono maiuscole e minuscole. Le stringhe scritte tra apici singoli vengono salvate tra virgolette doppie.
+
+### Formato .fprg esteso
+
+Se il programma usa una delle funzionalità estese di FlowLab, il file viene salvato in un **formato `.fprg` esteso, non standard**. Le funzionalità estese sono:
+
+| Funzionalità | Come viene salvata | Negli altri editor |
+|---|---|---|
+| **Costanti** | dichiarazione con l'attributo `flowlab-const="True"`, seguita dall'assegnamento del valore | il file si apre e il programma gira: la costante è vista come una variabile normale |
+| **Funzioni con più valori restituiti** | attributo `flowlab-returns` sulla funzione e assegnamento con più variabili (`a, b ← f(...)`) | il programma non si può eseguire |
+
+FlowLab apre e salva i file in formato esteso senza perdere nulla. Al salvataggio di un programma con più valori restituiti compare un avviso.
+
+### Verifica
+
+`node test/compat.mjs <cartella con file .fprg>` apre ogni file, controlla blocchi, espressioni e nomi, salva e riapre, verifica che il file salvato usi solo il formato standard ed esegue il programma.
 
 ## Linguaggio delle espressioni
 
