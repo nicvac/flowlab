@@ -69,7 +69,7 @@ class Interpreter {
     if (this.stack.length >= this.maxDepth) throw new _E.FlowError(`Stack overflow: più di ${this.maxDepth} chiamate annidate (ricorsione infinita?)`, { node });
     const frame = { func, vars: new Map(), depth: this.stack.length };
     func.params.forEach((p, i) => {
-      if (p.array) frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: true, items: args[i].items, param: true });
+      if (p.array) frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: true, dims: args[i].dims || [args[i].items.length], items: args[i].items, param: true });
       else frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: false, value: args[i], param: true });
     });
     this.stack.push(frame);
@@ -117,6 +117,8 @@ class Interpreter {
         const cell = this.getVar(inner.name, inner);
         if (!cell.array) throw new _E.FlowError(`"${inner.name}" non è un array, ma ${func.name} si aspetta un array`, { node });
         if (cell.type !== p.type) throw new _E.FlowError(`L'array "${inner.name}" è di tipo ${_E.TYPE_IT[cell.type]}, ma il parametro "${p.name}" è ${_E.TYPE_IT[p.type]}`, { node });
+        const nd = (cell.dims || [0]).length, pd = p.dims || 1;
+        if (nd !== pd) throw new _E.FlowError(`L'array "${inner.name}" ha ${nd} ${nd === 1 ? 'dimensione' : 'dimensioni'}, ma il parametro "${p.name}" ne vuole ${pd}`, { node });
         args.push(cell);
       } else {
         const v = yield* _E.evalE(a, this.ctx);
@@ -160,13 +162,18 @@ class Interpreter {
       case 'declare': {
         yield { type: 'stmt', stmt: s, frame };
         const names = s.name.split(',').map((x) => x.trim()).filter(Boolean);
-        let size = 0;
+        let size = 0, dims = null;
         if (s.array) {
-          const sv = yield* ev(s.size);
-          if (sv.t !== 'Integer') throw new _E.FlowError(`La dimensione dell'array deve essere un intero, non ${_E.TYPE_IT[sv.t]}`);
-          if (sv.v < 0) throw new _E.FlowError('La dimensione dell\'array non può essere negativa');
-          if (sv.v > 1e7) throw new _E.FlowError('Array troppo grande (massimo 10 milioni di elementi)');
-          size = sv.v;
+          // una o più dimensioni: "10" oppure "3, 4"
+          dims = [];
+          for (const part of _E.splitTop(s.size)) {
+            const sv = yield* ev(part);
+            if (sv.t !== 'Integer') throw new _E.FlowError(`La dimensione dell'array deve essere un intero, non ${_E.TYPE_IT[sv.t]}`);
+            if (sv.v < 0) throw new _E.FlowError('La dimensione dell\'array non può essere negativa');
+            dims.push(sv.v);
+          }
+          size = dims.reduce((a, b) => a * b, 1);
+          if (size > 1e7) throw new _E.FlowError('Array troppo grande (massimo 10 milioni di elementi)');
         }
         for (const n of names) {
           if (!_E.validIdent(n)) throw new _E.FlowError(`"${n}" non è un nome di variabile valido`);
@@ -174,7 +181,7 @@ class Interpreter {
           const key = n.toLowerCase();
           if (frame.vars.has(key) && frame.vars.get(key).constant) throw new _E.FlowError(`Il nome "${n}" è già usato dalla costante "${frame.vars.get(key).name}"`);
           if (frame.vars.has(key)) throw new _E.FlowError(frame.vars.get(key).name === n ? `La variabile "${n}" è già stata dichiarata` : `La variabile "${n}" è già stata dichiarata come "${frame.vars.get(key).name}" (maiuscole e minuscole non contano)`);
-          if (s.array) frame.vars.set(key, { name: n, type: s.type, array: true, items: new Array(size).fill(undefined) });
+          if (s.array) frame.vars.set(key, { name: n, type: s.type, array: true, dims: dims.slice(), items: new Array(size).fill(undefined) });
           else frame.vars.set(key, { name: n, type: s.type, array: false, value: undefined });
         }
         return;
@@ -218,7 +225,7 @@ class Interpreter {
         if (cell.constant) throw new _E.FlowError(`"${cell.name}" è una costante: non si può leggere un nuovo valore`);
         if (cell.array && !lv.index) throw new _E.FlowError(`"${lv.name}" è un array: indica l'elemento, es. ${lv.name}[i]`);
         // verifica l'indice prima di chiedere il valore
-        if (cell.array) { const iv = yield* _E.evalE(lv.index, this.ctx); _E.arrIndex(iv, cell, lv); }
+        if (cell.array) { const ivs = []; for (const ix of lv.indices) ivs.push(yield* _E.evalE(ix, this.ctx)); _E.arrOffset(ivs, cell, lv); }
         for (;;) {
           const text = yield { type: 'input', stmt: s, frame, varType: cell.type, varName: s.variable };
           if (text === null || text === undefined) throw new _E.FlowError('Input annullato');
@@ -344,9 +351,11 @@ class Interpreter {
     if (cell.constant) throw new _E.FlowError(`"${cell.name}" è una costante: il suo valore non si può modificare`);
     if (cell.array) {
       if (!lv.index) throw new _E.FlowError(`"${lv.name}" è un array: indica l'elemento da modificare, es. ${lv.name}[i]`);
-      const iv = yield* _E.evalE(lv.index, this.ctx);
-      const i = _E.arrIndex(iv, cell, lv);
-      cell.items[i] = _E.coerce(val, cell.type, `il valore assegnato a ${lv.name}[${i}]`);
+      const ivs = [];
+      for (const ix of lv.indices) ivs.push(yield* _E.evalE(ix, this.ctx));
+      const off = _E.arrOffset(ivs, cell, lv);
+      cell.items[off] = _E.coerce(val, cell.type, `il valore assegnato a ${lv.name}[${ivs.map((x) => x.v).join(', ')}]`);
+      cell.lastWrite = off;
     } else {
       if (lv.index) throw new _E.FlowError(`"${lv.name}" non è un array`);
       cell.value = _E.coerce(val, cell.type, `il valore assegnato a "${lv.name}"`);

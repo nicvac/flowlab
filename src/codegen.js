@@ -15,10 +15,10 @@ const REL = ['==', '!=', '<', '<=', '>', '>='];
 
 function buildScope(prog, func) {
   const vars = new Map();
-  for (const p of func.params) vars.set(p.name.toLowerCase(), { type: p.type, array: p.array, name: p.name });
+  for (const p of func.params) vars.set(p.name.toLowerCase(), { type: p.type, array: p.array, dims: p.array ? (p.dims || 1) : 0, name: p.name });
   _CM.walk(func.body, (s) => {
     if (s.kind === 'const' && s.name.trim() && !vars.has(s.name.trim().toLowerCase())) vars.set(s.name.trim().toLowerCase(), { type: s.type, array: false, name: s.name.trim(), constant: true });
-    if (s.kind === 'declare') for (const n of s.name.split(',').map((x) => x.trim()).filter(Boolean)) if (!vars.has(n.toLowerCase())) vars.set(n.toLowerCase(), { type: s.type, array: s.array, name: n });
+    if (s.kind === 'declare') for (const n of s.name.split(',').map((x) => x.trim()).filter(Boolean)) if (!vars.has(n.toLowerCase())) vars.set(n.toLowerCase(), { type: s.type, array: s.array, dims: s.array ? _CE.splitTop(s.size).length : 0, name: n });
   });
   const funcs = new Map();
   for (const f of prog.functions) funcs.set(f.name.toLowerCase(), { type: f.type, rets: _CM.rets(f), f, name: f.name });
@@ -44,6 +44,16 @@ const LANGS = {};
 
 function escStr(s, q) { return q + s.replace(/\\/g, '\\\\').replace(new RegExp(q, 'g'), '\\' + q) + q; }
 
+const idxBrackets = (nm, ix) => nm + ix.map((i) => `[${i}]`).join('');
+const idxComma = (nm, ix) => `${nm}[${ix.join(', ')}]`;
+/* Size(a) e Size(m, d): dimensione richiesta (solo come numero scritto nel programma) e dimensioni dell'array */
+function sizeInfo(n, sc) {
+  const a = strip(n.args[0]); const dn = n.args[1] ? strip(n.args[1]) : null;
+  const v = a && a.k === 'var' ? sc.vars.get(a.name.toLowerCase()) : null;
+  return { d: dn && dn.k === 'num' ? dn.v : 0, nd: v && v.dims ? v.dims : 1 };
+}
+const dimsOf = (s, E, sc) => _CE.splitTop(s.size).map((x) => E(x, sc));
+
 /* Stampa generica di espressioni, con regole per linguaggio */
 function exprPrinter(L) {
   function pr(n, sc) {
@@ -53,7 +63,7 @@ function exprPrinter(L) {
       case 'str': return { s: L.str(n.v), p: P.atom };
       case 'bool': return { s: n.v ? L.T : L.F, p: P.atom };
       case 'pi': L.use && L.use('pi'); return { s: L.pi, p: P.atom };
-      case 'var': { const nm = vname(n.name, sc); return { s: n.index ? `${nm}[${pr(n.index, sc).s}]` : nm, p: P.atom }; }
+      case 'var': { const nm = vname(n.name, sc); return { s: n.indices ? (L.idx || idxBrackets)(nm, n.indices.map((ix) => pr(ix, sc).s)) : nm, p: P.atom }; }
       case 'un':
         if (n.op === 'neg') { const e = pr(n.e, sc); return { s: '-' + (e.p < P.un ? `(${e.s})` : e.s), p: P.un }; }
         { const np = L.notPrec; const e = pr(n.e, sc); return { s: L.not + (e.p < np || (np === P.un && e.p === P.un && e.s[0] === '-') ? `(${e.s})` : e.s), p: np }; }
@@ -107,7 +117,7 @@ LANGS.pseudo = {
   keywords: ['ALGORITMO', 'FINE', 'FUNZIONE', 'PROCEDURA', 'VARIABILI', 'SE', 'ALLORA', 'ALTRIMENTI', 'MENTRE', 'ESEGUI', 'PER', 'DA', 'A', 'PASSO', 'RIPETI', 'LEGGI', 'SCRIVI', 'CHIAMA', 'RESTITUISCI', 'AND', 'OR', 'NOT', 'MOD', 'VERO', 'FALSO', 'DICHIARA', 'ARRAY', 'DI', 'INDIETRO', 'APRI', 'CHIUDI', 'IN', 'LETTURA', 'SCRITTURA'],
   generate(prog) {
     const L = {
-      str: (s) => '"' + s + '"', T: 'VERO', F: 'FALSO', pi: 'π', not: 'NOT ', notPrec: P.un, or: 'OR', and: 'AND', mod: 'MOD', pow: '^',
+      idx: idxComma, str: (s) => '"' + s + '"', T: 'VERO', F: 'FALSO', pi: 'π', not: 'NOT ', notPrec: P.un, or: 'OR', and: 'AND', mod: 'MOD', pow: '^',
       rel: { '==': '=', '!=': '≠', '<': '<', '<=': '≤', '>': '>', '>=': '≥' },
       call: (n, sc, pr) => ({ s: `${_CE.BUILTIN_NAMES[n.name.toLowerCase()] && !sc.funcs.has(n.name.toLowerCase()) ? _CE.BUILTIN_NAMES[n.name.toLowerCase()] : fname(n.name, sc)}(${n.args.map((a) => pr(a, sc).s).join(', ')})`, p: P.atom }),
       bin: (n, sc, pr, generic) => (n.op === '&' ? generic(n, sc, '&', P.add - 0.5, 'left') : null),
@@ -119,7 +129,7 @@ LANGS.pseudo = {
       for (const s of stmts) {
         switch (s.kind) {
           case 'const': o.line(`COSTANTE ${s.name} : ${TIPO[s.type]} = ${E(s.expression, sc)}`); break;
-          case 'declare': o.line(`DICHIARA ${s.array ? `ARRAY ${s.name.split(',').map((x) => x.trim() + '[' + E(s.size, sc) + ']').join(', ')} DI ${TIPO[s.type]}` : `${s.name} : ${TIPO[s.type]}`}`); break;
+          case 'declare': o.line(`DICHIARA ${s.array ? `ARRAY ${s.name.split(',').map((x) => x.trim() + '[' + dimsOf(s, E, sc).join(', ') + ']').join(', ')} DI ${TIPO[s.type]}` : `${s.name} : ${TIPO[s.type]}`}`); break;
           case 'assign': o.line(`${targetsOf(s).map((x) => E(x, sc)).join(', ')} ← ${E(s.expression, sc)}`); break;
           case 'input': o.line(`LEGGI ${E(s.variable, sc)}`); break;
           case 'output': o.line(`SCRIVI ${E(s.expression, sc)}${s.newline ? '' : '   // senza a capo'}`); break;
@@ -149,7 +159,7 @@ LANGS.pseudo = {
       if (i > 0) o.line('');
       if (i === 0) o.line(`ALGORITMO ${prog.attrs.name ? prog.attrs.name.replace(/\s+/g, '_') : 'Main'}`);
       else {
-        const ps = f.params.map((p) => `${p.name} : ${p.array ? 'array di ' : ''}${TIPO[p.type]}`).join(', ');
+        const ps = f.params.map((p) => `${p.name} : ${p.array ? ((p.dims || 1) > 1 ? `array a ${p.dims} dimensioni di ` : 'array di ') : ''}${TIPO[p.type]}`).join(', ');
         const rl = _CM.rets(f);
         o.line(!rl.length ? `PROCEDURA ${f.name}(${ps})` : `FUNZIONE ${f.name}(${ps}) : ${rl.map((r) => TIPO[r.type]).join(', ')}`);
       }
@@ -194,7 +204,8 @@ LANGS.python = {
           case 'int': return { s: `int(${A(0)})`, p: P.atom };
           case 'sgn': return { s: `((${A(0)} > 0) - (${A(0)} < 0))`, p: P.atom };
           case 'random': used.add('random'); return { s: `random.randrange(${A(0)})`, p: P.atom };
-          case 'len': case 'size': return { s: `len(${A(0)})`, p: P.atom };
+          case 'len': return { s: `len(${A(0)})`, p: P.atom };
+          case 'size': return { s: `len(${A(0)}${'[0]'.repeat(sizeInfo(n, sc).d)})`, p: P.atom };
           case 'char': return { s: `${At(0)}[${A(1)}]`, p: P.atom };
           case 'tochar': return { s: `chr(${A(0)})`, p: P.atom };
           case 'tocode': return { s: `ord(${A(0)})`, p: P.atom };
@@ -219,7 +230,13 @@ LANGS.python = {
         switch (s.kind) {
           case 'const': o.line(`${vname(s.name.trim(), sc)} = ${E(s.expression, sc)}  # costante`); break;
           case 'declare':
-            for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(s.array ? `${nm} = [${DEF[s.type]}] * (${E(s.size, sc)})` : `${nm} = ${DEF[s.type]}`);
+            for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) {
+              if (!s.array) { o.line(`${nm} = ${DEF[s.type]}`); continue; }
+              const D = dimsOf(s, E, sc);
+              let init = `[${DEF[s.type]}] * (${D[D.length - 1]})`;
+              for (let k = D.length - 2; k >= 0; k--) init = `[${init} for _ in range(${D[k]})]`;
+              o.line(`${nm} = ${init}`);
+            }
             break;
           case 'assign': o.line(`${targetsOf(s).map((x) => E(x, sc)).join(', ')} = ${E(s.expression, sc)}`); break;
           case 'input': o.line(`${E(s.variable, sc)} = ${CAST[lvType(s.variable, sc)]}`); break;
@@ -312,7 +329,7 @@ function cFamily(cfg) {
     generate(prog) {
       const used = new Set();
       const L = {
-        str: (s) => cfg.strLit(s), T: 'true', F: 'false', pi: cfg.pi, use: () => used.add('pi'),
+        idx: cfg.idx, str: (s) => cfg.strLit(s), T: 'true', F: 'false', pi: cfg.pi, use: () => used.add('pi'),
         not: '!', notPrec: P.un, or: '||', and: '&&', pow: '**',
         rel: { '==': cfg.eq || '==', '!=': cfg.neq || '!=', '<': '<', '<=': '<=', '>': '>', '>=': '>=' },
         bin(n, sc, pr) {
@@ -357,7 +374,7 @@ function cFamily(cfg) {
           switch (s.kind) {
             case 'const': o.line(cfg.constDecl(s.name.trim(), s.type, E(s.expression, sc), isLiteralExpr(s.expression))); break;
             case 'declare':
-              for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declare(nm, s.type, s.array, s.array ? E(s.size, sc) : null));
+              for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declare(nm, s.type, s.array, s.array ? dimsOf(s, E, sc) : null, used));
               break;
             case 'assign': {
               const tg = targetsOf(s);
@@ -422,7 +439,7 @@ LANGS.cpp = cFamily({
       case 'sgn': return `((${A(0)} > 0) - (${A(0)} < 0))`;
       case 'random': used.add('rand'); return { s: `rand() % ${At(0)}`, p: P.mul };
       case 'len': return `(int) ${At(0)}.length()`;
-      case 'size': return `(int) ${At(0)}.size()`;
+      case 'size': return `(int) ${At(0)}${'[0]'.repeat(sizeInfo(n, sc).d)}.size()`;
       case 'char': return `string(1, ${At(0)}[${A(1)}])`;
       case 'tochar': return `string(1, (char) ${At(0)})`;
       case 'tocode': return `(int) ${At(0)}[0]`;
@@ -434,7 +451,12 @@ LANGS.cpp = cFamily({
     }
     return null;
   },
-  declare: (n, t, arr, size) => (arr ? `vector<${T_CPP[t]}> ${n}(${size});` : `${T_CPP[t]} ${n};`),
+  declare: (n, t, arr, D) => {
+    if (!arr) return `${T_CPP[t]} ${n};`;
+    const ty = (k) => 'vector<'.repeat(D.length - k) + T_CPP[t] + '>'.repeat(D.length - k);
+    const init = (k) => (k === D.length - 1 ? D[k] : `${D[k]}, ${ty(k + 1)}(${init(k + 1)})`);
+    return `${ty(0)} ${n}(${init(0)});`;
+  },
   constDecl: (n, t, e) => `const ${T_CPP[t]} ${n} = ${e};`,
   input: (o, v, t) => { if (t === 'String') o.line(`getline(cin >> ws, ${v});`); else o.line(`cin >> ${v};`); },
   output: (e, nl) => `cout << ${e}${nl ? ' << endl' : ''}`,
@@ -449,7 +471,7 @@ LANGS.cpp = cFamily({
   program(prog, g) {
     const o = new g.Out();
     const retT = (f) => { const rl = _CM.rets(f); if (rl.length > 1) { g.used.add('tuple'); return `tuple<${rl.map((r) => T_CPP[r.type]).join(', ')}>`; } return T_CPP[f.type]; };
-    const sig = (f) => `${retT(f)} ${f.name}(${f.params.map((p) => (p.array ? `vector<${T_CPP[p.type]}>& ${p.name}` : `${T_CPP[p.type]} ${p.name}`)).join(', ')})`;
+    const sig = (f) => `${retT(f)} ${f.name}(${f.params.map((p) => (p.array ? `${'vector<'.repeat(p.dims || 1)}${T_CPP[p.type]}${'>'.repeat(p.dims || 1)}& ${p.name}` : `${T_CPP[p.type]} ${p.name}`)).join(', ')})`;
     const fns = prog.functions.slice(1);
     const bodyOut = new g.Out();
     for (const f of fns) {
@@ -509,7 +531,7 @@ LANGS.java = cFamily({
       case 'sgn': return { s: `(int) Math.signum(${A(0)})`, p: P.un };
       case 'random': return { s: `(int) (Math.random() * ${At(0)})`, p: P.un };
       case 'len': return `${At(0)}.length()`;
-      case 'size': return `${At(0)}.length`;
+      case 'size': return `${At(0)}${'[0]'.repeat(sizeInfo(n, sc).d)}.length`;
       case 'char': return `String.valueOf(${At(0)}.charAt(${A(1)}))`;
       case 'tochar': return `String.valueOf((char) ${At(0)})`;
       case 'tocode': return { s: `(int) ${At(0)}.charAt(0)`, p: P.un };
@@ -521,7 +543,7 @@ LANGS.java = cFamily({
     }
     return null;
   },
-  declare: (n, t, arr, size) => (arr ? `${T_JAVA[t]}[] ${n} = new ${T_JAVA[t]}[${size}];` : `${T_JAVA[t]} ${n} = ${DEF_C[t]};`),
+  declare: (n, t, arr, D) => (arr ? `${T_JAVA[t]}${'[]'.repeat(D.length)} ${n} = new ${T_JAVA[t]}${D.map((d) => `[${d}]`).join('')};` : `${T_JAVA[t]} ${n} = ${DEF_C[t]};`),
   constDecl: (n, t, e) => `final ${T_JAVA[t]} ${n} = ${e};`,
   input: (o, v, t) => o.line(`${v} = ${t === 'Integer' ? 'Integer.parseInt(input.nextLine().trim())' : t === 'Real' ? 'Double.parseDouble(input.nextLine().trim())' : t === 'Boolean' ? 'Boolean.parseBoolean(input.nextLine().trim())' : 'input.nextLine()'};`),
   output: (e, nl) => `System.out.${nl ? 'println' : 'print'}(${e})`,
@@ -551,7 +573,7 @@ LANGS.java = cFamily({
       const sc = g.buildScope(f);
       const rl = _CM.rets(f);
       inner.line('');
-      inner.line(`public static ${rl.length > 1 ? recName(f) : T_JAVA[f.type]} ${f.name}(${f.params.map((p) => `${T_JAVA[p.type]}${p.array ? '[]' : ''} ${p.name}`).join(', ')})${g.used.has('files') ? ' throws Exception' : ''} {`);
+      inner.line(`public static ${rl.length > 1 ? recName(f) : T_JAVA[f.type]} ${f.name}(${f.params.map((p) => `${T_JAVA[p.type]}${p.array ? '[]'.repeat(p.dims || 1) : ''} ${p.name}`).join(', ')})${g.used.has('files') ? ' throws Exception' : ''} {`);
       inner.in(); g.block(inner, f.body, sc);
       if (rl.length) { inner.line(''); inner.line(rl.length > 1 ? `return new ${recName(f)}(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
       inner.out(); inner.line('}');
@@ -590,7 +612,8 @@ LANGS.csharp = cFamily({
     switch (low) {
       case 'int': return { s: `(int) ${At(0)}`, p: P.un };
       case 'random': used.add('rnd'); return `rnd.Next(${A(0)})`;
-      case 'len': case 'size': return `${At(0)}.Length`;
+      case 'len': return `${At(0)}.Length`;
+      case 'size': { const z = sizeInfo(n, sc); return z.nd > 1 ? `${At(0)}.GetLength(${z.d})` : `${At(0)}.Length`; }
       case 'char': return `${At(0)}[${A(1)}].ToString()`;
       case 'tochar': return `((char) ${At(0)}).ToString()`;
       case 'tocode': return { s: `(int) ${At(0)}[0]`, p: P.un };
@@ -602,7 +625,8 @@ LANGS.csharp = cFamily({
     }
     return null;
   },
-  declare: (n, t, arr, size) => (arr ? `${T_CPP[t]}[] ${n} = new ${T_CPP[t]}[${size}];` : `${T_CPP[t]} ${n} = ${DEF_C[t]};`),
+  idx: idxComma,
+  declare: (n, t, arr, D) => (arr ? `${T_CPP[t]}[${','.repeat(D.length - 1)}] ${n} = new ${T_CPP[t]}[${D.join(', ')}];` : `${T_CPP[t]} ${n} = ${DEF_C[t]};`),
   // in C# const vuole un valore noto in compilazione; altrimenti una variabile normale
   constDecl: (n, t, e, lit) => (lit ? `const ${T_CPP[t]} ${n} = ${e};` : `${T_CPP[t]} ${n} = ${e}; // costante`),
   input: (o, v, t) => o.line(`${v} = ${t === 'Integer' ? 'int.Parse(Console.ReadLine())' : t === 'Real' ? 'double.Parse(Console.ReadLine())' : t === 'Boolean' ? 'bool.Parse(Console.ReadLine())' : 'Console.ReadLine()'};`),
@@ -625,7 +649,7 @@ LANGS.csharp = cFamily({
       inner.line('');
       const rl = _CM.rets(f);
       const rt = rl.length > 1 ? `(${rl.map((r) => T_CPP[r.type]).join(', ')})` : T_CPP[f.type];
-      inner.line(`static ${rt} ${f.name}(${f.params.map((p) => `${T_CPP[p.type]}${p.array ? '[]' : ''} ${p.name}`).join(', ')}) {`);
+      inner.line(`static ${rt} ${f.name}(${f.params.map((p) => `${T_CPP[p.type]}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''} ${p.name}`).join(', ')}) {`);
       inner.in(); g.block(inner, f.body, sc);
       if (rl.length) { inner.line(''); inner.line(rl.length > 1 ? `return (${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
       inner.out(); inner.line('}');
@@ -649,13 +673,14 @@ LANGS.javascript = cFamily({
   pi: 'Math.PI', eq: '===', neq: '!==', concatPrefix: '""',
   strLit: (s) => escStr(s, '"'),
   toStr: (x, t, e) => (e.p <= P.add ? `(${e.s})` : e.s),
-  builtin(low, a) {
+  builtin(low, a, n, sc) {
     const A = (i) => (a[i] ? a[i].s : ''); const At = (i) => (a[i] ? (a[i].p < P.atom ? `(${a[i].s})` : a[i].s) : '');
     const map = { abs: 'abs', arccos: 'acos', arcsin: 'asin', arctan: 'atan', cos: 'cos', sin: 'sin', tan: 'tan', cosh: 'cosh', sinh: 'sinh', tanh: 'tanh', arccosh: 'acosh', arcsinh: 'asinh', arctanh: 'atanh', ln: 'log', log: 'log', log10: 'log10', sqrt: 'sqrt', sgn: 'sign', int: 'trunc' };
     if (map[low]) return `Math.${map[low]}(${A(0)})`;
     switch (low) {
       case 'random': return `Math.floor(Math.random() * ${At(0)})`;
-      case 'len': case 'size': return `${At(0)}.length`;
+      case 'len': return `${At(0)}.length`;
+      case 'size': return `${At(0)}${'[0]'.repeat(sizeInfo(n, sc).d)}.length`;
       case 'char': return `${At(0)}.charAt(${A(1)})`;
       case 'tochar': return `String.fromCharCode(${A(0)})`;
       case 'tocode': return `${At(0)}.charCodeAt(0)`;
@@ -666,7 +691,7 @@ LANGS.javascript = cFamily({
     }
     return null;
   },
-  declare: (n, t, arr, size) => (arr ? `let ${n} = new Array(${size});` : `let ${n};`),
+  declare: (n, t, arr, D, used) => { if (!arr) return `let ${n};`; if (D.length === 1) return `let ${n} = new Array(${D[0]});`; used.add('creaArray'); return `let ${n} = creaArray([${D.join(', ')}]);`; },
   constDecl: (n, t, e) => `const ${n} = ${e};`,
   input: (o, v, t) => o.line(`${v} = ${t === 'Integer' ? 'parseInt(prompt())' : t === 'Real' ? 'parseFloat(prompt())' : t === 'Boolean' ? 'prompt() === "true"' : 'prompt()'};`),
   output: (e, nl) => `output(${e}, ${nl})`,
@@ -691,6 +716,14 @@ LANGS.javascript = cFamily({
     o.line(''); o.line('// Main');
     g.block(o, prog.functions[0].body, g.buildScope(prog.functions[0]));
     o.line('if (rigaCorrente) console.log(rigaCorrente);');
+    if (g.used.has('creaArray')) {
+      o.line('');
+      o.line('// array a più dimensioni: creaArray([3, 4]) crea una matrice 3 × 4');
+      o.line('function creaArray(dimensioni) {');
+      o.line('    if (dimensioni.length === 1) return new Array(dimensioni[0]);');
+      o.line('    return Array.from({ length: dimensioni[0] }, () => creaArray(dimensioni.slice(1)));');
+      o.line('}');
+    }
     return o.text();
   },
 });

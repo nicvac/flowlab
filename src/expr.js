@@ -168,10 +168,15 @@ function parseExpr(src) {
         return node({ k: 'call', name: t.v, args }, t);
       }
       if (isOp('[')) {
-        p++;
-        const idx = orE();
-        eat(']');
-        return node({ k: 'var', name: t.v, index: idx }, t);
+        // indici: v[i]  m[i, j]  m[i][j]  (anche misti)
+        const indices = [];
+        while (isOp('[')) {
+          p++;
+          indices.push(orE());
+          while (isOp(',')) { p++; indices.push(orE()); }
+          eat(']');
+        }
+        return node({ k: 'var', name: t.v, index: indices[0], indices }, t);
       }
       return node({ k: 'var', name: t.v }, t);
     }
@@ -326,7 +331,7 @@ const BUILTINS = {
   tointeger:{ sig: ['String'], ret: 'Integer', fn: (a, n) => { try { return parseInputText(a[0].v, 'Integer'); } catch (e) { throw new FlowError(`ToInteger: ${e.message}`, { node: n }); } }, doc: 'ToInteger(s) — converte testo in intero' },
   toreal:   { sig: ['String'], ret: 'Real', fn: (a, n) => { try { return parseInputText(a[0].v, 'Real'); } catch (e) { throw new FlowError(`ToReal: ${e.message}`, { node: n }); } }, doc: 'ToReal(s) — converte testo in reale' },
   tostring: { sig: ['Any'], ret: 'String', fn: (a) => V.str(fmtValue(a[0])), doc: 'ToString(x) — converte in testo' },
-  size:     { sig: ['Array'], ret: 'Integer', fn: null, doc: 'Size(a) — numero di elementi dell\'array' },
+  size:     { sig: ['Array'], ret: 'Integer', fn: null, doc: 'Size(a) — numero di elementi dell\'array; Size(m, d) — elementi della dimensione d (da 0)' },
   eof:      { sig: [], ret: 'Boolean', fn: null, doc: 'EOF() — vero se il file in lettura è finito' },
 };
 const BUILTIN_NAMES = { abs: 'Abs', arccos: 'Arccos', arcsin: 'Arcsin', arctan: 'Arctan', cos: 'Cos', sin: 'Sin', tan: 'Tan', cosh: 'Cosh', sinh: 'Sinh', tanh: 'Tanh', arccosh: 'Arccosh', arcsinh: 'Arcsinh', arctanh: 'Arctanh', int: 'Int', ln: 'Ln', log: 'Log', log10: 'Log10', sgn: 'Sgn', sqrt: 'Sqrt', random: 'Random', len: 'Len', char: 'Char', tochar: 'ToChar', tocode: 'ToCode', tofixed: 'ToFixed', tointeger: 'ToInteger', toreal: 'ToReal', tostring: 'ToString', size: 'Size', eof: 'EOF' };
@@ -344,11 +349,12 @@ function* evalE(node, ctx) {
     case 'var': {
       const cell = ctx.getVar(node.name, node);
       if (cell.array) {
-        if (!node.index) throw new FlowError(`"${node.name}" è un array: serve un indice, es. ${node.name}[0]`, { node });
-        const iv = yield* evalE(node.index, ctx);
-        const i = arrIndex(iv, cell, node);
-        const item = cell.items[i];
-        if (item === undefined) throw new FlowError(`L'elemento ${node.name}[${i}] non ha ancora un valore`, { node });
+        if (!node.index) throw new FlowError(`"${node.name}" è un array: serve un indice, es. ${node.name}[${(cell.dims || [0]).map(() => 0).join(', ')}]`, { node });
+        const ivs = [];
+        for (const ix of node.indices) ivs.push(yield* evalE(ix, ctx));
+        const off = arrOffset(ivs, cell, node);
+        const item = cell.items[off];
+        if (item === undefined) throw new FlowError(`L'elemento ${node.name}[${ivs.map((x) => x.v).join(', ')}] non ha ancora un valore`, { node });
         return item;
       }
       if (node.index) throw new FlowError(`"${node.name}" non è un array`, { node });
@@ -370,6 +376,23 @@ function* evalE(node, ctx) {
   throw new FlowError('Espressione non riconosciuta');
 }
 
+/* posizione nell'elenco piatto degli elementi (ordine per righe) */
+function arrOffset(ivs, cell, node) {
+  const dims = cell.dims || [cell.items.length];
+  if (ivs.length !== dims.length) {
+    throw new FlowError(dims.length === 1 ? `"${node.name}" ha una sola dimensione: serve un solo indice, es. ${node.name}[i]` : `"${node.name}" ha ${dims.length} dimensioni: servono ${dims.length} indici, es. ${node.name}[${dims.map((_, k) => 'ijklmn'[k] || 'x').join(', ')}]`, { node });
+  }
+  let off = 0;
+  for (let k = 0; k < dims.length; k++) {
+    const iv = ivs[k];
+    if (iv.t !== 'Integer') throw new FlowError(`Gli indici di "${node.name}" devono essere interi, non ${TYPE_IT[iv.t]}`, { node });
+    if (iv.v < 0 || iv.v >= dims[k]) {
+      throw new FlowError(dims.length === 1 ? `Indice ${iv.v} fuori dai limiti: "${node.name}" ha ${dims[0]} elementi (indici da 0 a ${dims[0] - 1})` : `Indice ${iv.v} fuori dai limiti nella dimensione ${k + 1} di "${node.name}" (indici da 0 a ${dims[k] - 1})`, { node });
+    }
+    off = off * dims[k] + iv.v;
+  }
+  return off;
+}
 function arrIndex(iv, cell, node) {
   if (iv.t !== 'Integer') throw new FlowError(`L'indice di "${node.name}" deve essere intero, non ${TYPE_IT[iv.t]}`, { node });
   if (iv.v < 0 || iv.v >= cell.items.length) throw new FlowError(`Indice ${iv.v} fuori dai limiti: "${node.name}" ha ${cell.items.length} elementi (indici da 0 a ${cell.items.length - 1})`, { node });
@@ -441,15 +464,24 @@ function* evalCall(node, ctx) {
   if (ctx.hasUser(node.name)) return yield* ctx.callUser(node.name, node.args, node);
   const b = BUILTINS[low];
   if (!b) throw new FlowError(`Funzione "${node.name}" non definita`, { node });
-  if (node.args.length !== b.sig.length) throw new FlowError(`${BUILTIN_NAMES[low]} richiede ${b.sig.length} argomenti, ne sono stati passati ${node.args.length}`, { node });
   if (low === 'size') {
+    // Size(a) = elementi della prima dimensione; Size(m, d) = elementi della dimensione d (da 0)
+    if (node.args.length < 1 || node.args.length > 2) throw new FlowError('Size richiede il nome di un array e, per più dimensioni, il numero della dimensione: Size(m, 1)', { node });
     const a = node.args[0];
     const inner = a.k === 'par' ? a.e : a;
     if (inner.k !== 'var' || inner.index) throw new FlowError('Size richiede il nome di un array', { node });
     const cell = ctx.getVar(inner.name, inner);
     if (!cell.array) throw new FlowError(`"${inner.name}" non è un array`, { node });
-    return V.int(cell.items.length);
+    const dims = cell.dims || [cell.items.length];
+    let d = 0;
+    if (node.args.length === 2) {
+      const dv = yield* evalE(node.args[1], ctx);
+      if (dv.t !== 'Integer' || dv.v < 0 || dv.v >= dims.length) throw new FlowError(`Size: "${inner.name}" ha ${dims.length} ${dims.length === 1 ? 'dimensione' : 'dimensioni'}, la dimensione va da 0 a ${dims.length - 1}`, { node });
+      d = dv.v;
+    }
+    return V.int(dims[d]);
   }
+  if (node.args.length !== b.sig.length) throw new FlowError(`${BUILTIN_NAMES[low]} richiede ${b.sig.length} argomenti, ne sono stati passati ${node.args.length}`, { node });
   if (low === 'eof') return V.bool(ctx.env.eof(node));
   const args = [];
   for (let i = 0; i < node.args.length; i++) {
@@ -499,5 +531,5 @@ function inferType(node, scope) {
   return 'Unknown';
 }
 
-const ExprLib = { FlowError, TYPES, TYPE_IT, tokenize, parseExpr, parseLValue, splitTop, parseLValueList, validIdent, RESERVED, V, isNum, fmtValue, fmtReal, literalOf, checkInt, coerce, parseInputText, BUILTINS, BUILTIN_NAMES, evalE, arrIndex, inferType };
+const ExprLib = { FlowError, TYPES, TYPE_IT, tokenize, parseExpr, parseLValue, splitTop, parseLValueList, arrOffset, validIdent, RESERVED, V, isNum, fmtValue, fmtReal, literalOf, checkInt, coerce, parseInputText, BUILTINS, BUILTIN_NAMES, evalE, arrIndex, inferType };
 if (typeof module !== 'undefined') module.exports = ExprLib;

@@ -318,7 +318,7 @@
     wrap.append(h('label', { class: 'flabel', for: id }, spec.label), input);
     const msg = h('div', { class: 'fmsg' }, spec.hint || '');
     wrap.append(msg);
-    if (['expr', 'lvalue', 'lvalues'].includes(spec.type) && vars && vars.length) {
+    if (['expr', 'exprlist', 'lvalue', 'lvalues'].includes(spec.type) && vars && vars.length) {
       const chips = h('div', { class: 'chips', 'aria-label': 'Variabili disponibili' });
       vars.slice(0, 24).forEach((v) => chips.append(h('button', { type: 'button', class: 'chip', tabindex: '-1', onclick: () => {
         const s = input.selectionStart ?? input.value.length, e = input.selectionEnd ?? s;
@@ -334,6 +334,7 @@
       else if (String(v).trim()) {
         try {
           if (spec.type === 'expr') E.parseExpr(v);
+          if (spec.type === 'exprlist') E.splitTop(v).forEach((x, i) => { if (!x) throw new Error(`manca la dimensione ${i + 1}`); E.parseExpr(x); });
           if (spec.type === 'lvalue') E.parseLValue(v);
           if (spec.type === 'lvalues') E.parseLValueList(v);
           if (spec.type === 'names') {
@@ -372,7 +373,7 @@
       { key: 'name', label: 'Nomi delle variabili', type: 'names', required: true, placeholder: 'es. a, b, totale' },
       { key: 'type', label: 'Tipo', type: 'seg', options: TYPE_OPTS },
       { key: 'array', label: 'Array (elenco di valori con indice da 0)', type: 'check' },
-      { key: 'size', label: 'Numero di elementi', type: 'expr', placeholder: 'es. 10', showIf: 'array' }] },
+      { key: 'size', label: 'Numero di elementi', type: 'exprlist', placeholder: 'es. 10   oppure   3, 4 per una matrice', hint: 'Per un array a più dimensioni separa le dimensioni con la virgola: 3, 4 è una matrice 3 × 4', showIf: 'array' }] },
     const: { title: 'Costante', help: 'Un valore con un nome che non cambia durante il programma. Per convenzione si scrive in maiuscolo.', fields: [
       { key: 'name', label: 'Nome della costante', type: 'ident', required: true, placeholder: 'es. MAX' },
       { key: 'type', label: 'Tipo', type: 'seg', options: TYPE_OPTS },
@@ -470,7 +471,8 @@
       params.forEach((p, i) => {
         const nm = h('input', { type: 'text', class: 'mono', value: p.name, 'aria-label': 'Nome parametro ' + (i + 1), placeholder: 'nome', oninput: (e) => { p.name = e.target.value.trim(); } });
         const tp = h('select', { 'aria-label': 'Tipo parametro ' + (i + 1), onchange: (e) => { p.type = e.target.value; } }, TYPE_OPTS.map(([v, l]) => h('option', { value: v, selected: v === p.type }, l)));
-        const arr = h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: p.array, onchange: (e) => { p.array = e.target.checked; } }), h('span', null, 'array'));
+        const shape = p.array ? (p.dims || 1) : 0;
+        const arr = h('select', { 'aria-label': 'Forma del parametro ' + (i + 1), title: 'Valore singolo o array', onchange: (e) => { const d = +e.target.value; p.array = d > 0; p.dims = Math.max(1, d); } }, [[0, 'valore'], [1, 'array [ ]'], [2, 'matrice [ , ]'], [3, '3 dimensioni'], [4, '4 dimensioni'], [5, '5 dimensioni']].map(([v, l]) => h('option', { value: v, selected: v === shape }, l)));
         plist.append(h('div', { class: 'prow' }, nm, tp, arr,
           h('button', { class: 'iconbtn', type: 'button', title: 'Sposta su', 'aria-label': 'Sposta su', disabled: i === 0, onclick: () => { params.splice(i - 1, 0, params.splice(i, 1)[0]); drawParams(); } }, '↑'),
           h('button', { class: 'iconbtn', type: 'button', title: 'Rimuovi', 'aria-label': 'Rimuovi parametro', onclick: () => { params.splice(i, 1); drawParams(); } }, '✕')));
@@ -954,6 +956,8 @@
     const box = $('#varsBody');
     const interp = run.interp;
     const stack = interp && isRunning() ? interp.stack : (run.mainFrame ? [run.mainFrame] : []);
+    // le finestre degli array seguono la chiamata più recente della loro funzione
+    if (ArrayView.count) ArrayView.refresh((fn, vn) => { for (let i = stack.length - 1; i >= 0; i--) { const fr = stack[i]; if (fr.func.name === fn) { const c = fr.vars.get(vn.toLowerCase()); if (c && c.array) return c; } } return null; });
     box.innerHTML = '';
     if (!stack.length) { box.append(h('p', { class: 'empty' }, 'Le variabili compaiono qui quando esegui il programma. Usa Passo per osservarle cambiare istruzione dopo istruzione.')); return; }
     const frame = run.viewFrame && stack.includes(run.viewFrame) ? run.viewFrame : stack[stack.length - 1];
@@ -973,12 +977,15 @@
       const key = frame.depth + ':' + c.name;
       if (c.array) {
         const n = c.items.length;
-        const summary = h('tr', { class: 'arr' }, h('td', null, c.name), h('td', null, `${TYPE_IT[c.type]}[${n}]`), h('td', { class: 'muted' }, `${n} elementi`));
+        const dims = c.dims || [n];
+        const openBtn = h('button', { class: 'iconbtn avopen', type: 'button', title: 'Apri in una finestra per il debug', 'aria-label': `Apri ${c.name} in una finestra`, html: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg>', onclick: () => ArrayView.open(frame.func.name, c) });
+        const summary = h('tr', { class: 'arr' }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null, openBtn), h('td', null, `${TYPE_IT[c.type]}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`));
         tb.append(summary);
+        const label = (i) => { if (dims.length === 1) return `[${i}]`; const ix = []; for (let k = dims.length - 1; k >= 0; k--) { ix.unshift(i % dims[k]); i = Math.floor(i / dims[k]); } return `[${ix.join(', ')}]`; };
         c.items.slice(0, 300).forEach((it, i) => {
           const k = key + '[' + i + ']'; const sv = it === undefined ? '∅' : E.literalOf(it); next.set(k, sv);
           const changed = prev.has(k) && prev.get(k) !== sv;
-          tb.append(h('tr', { class: 'item' + (changed ? ' changed' : '') }, h('td', null, `[${i}]`), h('td', null, ''), h('td', null, fmt(it))));
+          tb.append(h('tr', { class: 'item' + (changed ? ' changed' : '') }, h('td', null, label(i)), h('td', null, ''), h('td', null, fmt(it))));
         });
         if (n > 300) tb.append(h('tr', { class: 'item' }, h('td', { colspan: 3, class: 'muted' }, `… altri ${n - 300} elementi`)));
       } else {
@@ -1262,8 +1269,8 @@
   }
   async function saveFile() {
     const xml = M.serializeFprg(st.prog);
-    const multi = st.prog.functions.filter((f) => M.rets(f).length > 1).map((f) => f.name);
-    if (multi.length) toast(`Attenzione: ${multi.join(', ')} ${multi.length > 1 ? 'restituiscono' : 'restituisce'} più valori. FlowLab riapre il file senza problemi, ma gli altri programmi che usano il formato .fprg non potranno eseguirlo.`, 'warn');
+    const ext = M.extendedFeatures(st.prog);
+    if (ext.length) toast(`Salvato in formato .fprg esteso (${ext.join(', ')}). FlowLab lo riapre senza problemi; gli altri editor .fprg potrebbero non eseguirlo.`, 'warn');
     const name = st.fileName || safeName(st.prog.attrs.name) + '.fprg';
     const saved = await download(name, xml, 'application/xml');
     if (saved) { st.fileName = saved; st.dirty = false; autosave(); }
@@ -1508,6 +1515,7 @@
   }
 
   function init() {
+    ArrayView.configure({ host: () => $('#floatLayer'), nextZ: () => ++zTop });
     bindUi(); bindChart(); bindKeys();
     const saved = store.get('autosave', null);
     let ok = false;

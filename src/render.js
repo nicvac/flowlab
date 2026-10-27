@@ -318,7 +318,7 @@ class Renderer {
     this.reset();
     this.expanded = expanded;
     const isMain = f.name.toLowerCase() === 'main';
-    const sig = isMain ? 'Inizio' : `${f.name}(${f.params.map((p) => `${p.name}${p.array ? '[]' : ''}: ${ExprLib.TYPE_IT[p.type]}`).join(', ')})`;
+    const sig = isMain ? 'Inizio' : `${f.name}(${f.params.map((p) => `${p.name}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''}: ${ExprLib.TYPE_IT[p.type]}`).join(', ')})`;
     const rsl = ModelLib.rets(f);
     const endText = rsl.length ? `Restituisci ${rsl.map((x) => x.name || '?').join(', ')}` : 'Fine';
     const sw = this.boxW(sig, 'rect') + 10, ew = this.boxW(endText, 'rect') + 10;

@@ -16,6 +16,8 @@ Il software è stato creato con **Claude Opus 5.5** di Anthropic.
 - **Blocchi:** Dichiara, Costante, Assegna, Input, Output, Chiama, Se, Mentre, Per, Fai-mentre, Commento, Punto di interruzione, File (Apri, Leggi, Scrivi, Chiudi).
 - **Esecuzione:** quattro velocità, esecuzione passo-passo con evidenziazione del blocco corrente e un cursore che percorre le frecce seguite (rami dei Se e ritorni dei cicli compresi), punti di interruzione, messaggi di errore in italiano con il blocco in errore segnato in rosso.
 - **Pannelli:** console di input/output, variabili (in giallo quelle appena cambiate, con lo stack delle chiamate), file di testo virtuali. Le schede si riordinano trascinandole e si possono sganciare in finestre mobili da posizionare ovunque, riducibili alla sola barra del titolo; il pannello laterale si nasconde e si riapre con il pulsantino sul divisore. La disposizione viene ricordata.
+- **Array a più dimensioni**: `m[3, 4]` si dichiara indicando le dimensioni separate da virgola e si usa con `m[i, j]` oppure `m[i][j]`; `Size(m, d)` dà il numero di elementi della dimensione `d`.
+- **Visualizzatore di array per il debug**: dalla scheda Variabili ogni array si apre in una finestra mobile. Un array a una dimensione è una striscia, a due una scacchiera, a tre un cubo aperto a libro (si sfoglia la prima dimensione, ogni pagina è una scacchiera su carta a quadretti); oltre le tre dimensioni le prime si scelgono con dei selettori di indice. Si vedono solo le celle che entrano nella finestra, con una sfumatura verso la trasparenza dove ce ne sono altre, e durante l'esecuzione la vista si sposta sulla cella appena modificata.
 - **Costanti**: un blocco dedicato (`MAX: Intero = 100`) con un valore che non può essere modificato; nel codice diventano `const` (C++, C#, JavaScript), `final` (Java) o una variabile in maiuscolo (Python).
 - **Funzioni con più valori restituiti**, come in Python: `min, max, idxMin, idxMax ← calcolaMassimoEMinimo(V, N)`. Nel codice generato diventano tuple in Python e C#, `std::tie` in C++, un `record` in Java (16+), un array destrutturato in JavaScript. È un'estensione di FlowLab: gli altri programmi che usano il formato `.fprg` non possono eseguire questi programmi.
 - **Codice generato:** pseudocodice italiano, Python, C++, Java, C#, JavaScript.
@@ -37,6 +39,7 @@ Se il programma usa una delle funzionalità estese di FlowLab, il file viene sal
 | Funzionalità | Come viene salvata | Negli altri editor |
 |---|---|---|
 | **Costanti** | dichiarazione con l'attributo `flowlab-const="True"`, seguita dall'assegnamento del valore | il file si apre e il programma gira: la costante è vista come una variabile normale |
+| **Array a più dimensioni** | dimensioni separate da virgola nel campo della dichiarazione (`3, 4`), accessi `m[i, j]`, attributo `flowlab-dims` sui parametri | il programma non si può eseguire |
 | **Funzioni con più valori restituiti** | attributo `flowlab-returns` sulla funzione e assegnamento con più variabili (`a, b ← f(...)`) | il programma non si può eseguire |
 
 FlowLab apre e salva i file in formato esteso senza perdere nulla. Al salvataggio di un programma con più valori restituiti compare un avviso.

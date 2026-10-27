@@ -122,7 +122,8 @@ function parseFprg(text) {
         const ct = c.nodeName.toLowerCase();
         if (ct === 'parameters') {
           for (const p of c.children) {
-            f.params.push({ name: p.getAttribute('name') || '', type: normType(p.getAttribute('type')), array: boolAttr(p.getAttribute('array'), false) });
+            const dims = parseInt(p.getAttribute('flowlab-dims') || '1', 10) || 1;
+            f.params.push({ name: p.getAttribute('name') || '', type: normType(p.getAttribute('type')), array: boolAttr(p.getAttribute('array'), false), dims: boolAttr(p.getAttribute('array'), false) ? dims : 1 });
           }
         } else if (ct === 'body') {
           f.body = parseBlock(c);
@@ -253,7 +254,7 @@ function serializeFprg(prog) {
     L.push(`    <function name="${xmlEsc(f.name)}" type="${rs.length ? rs[0].type : 'None'}" variable="${xmlEsc(rs.length ? rs[0].name : (f.variable || ''))}"${extra}>`);
     if (f.params.length) {
       L.push('        <parameters>');
-      for (const p of f.params) L.push(`            <parameter name="${xmlEsc(p.name)}" type="${p.type}" array="${TF(p.array)}"/>`);
+      for (const p of f.params) L.push(`            <parameter name="${xmlEsc(p.name)}" type="${p.type}" array="${TF(p.array)}"${p.array && (p.dims || 1) > 1 ? ` flowlab-dims="${p.dims}"` : ''}/>`);
       L.push('        </parameters>');
     } else L.push('        <parameters/>');
     if (f.body.length) {
@@ -310,6 +311,24 @@ function writeBlock(stmts, L, depth) {
   }
 }
 
+/* Funzionalità del formato .fprg esteso usate dal programma */
+function extendedFeatures(prog) {
+  const out = new Set();
+  for (const f of prog.functions) {
+    if (rets(f).length > 1) out.add('funzioni con più valori restituiti');
+    if (f.params.some((p) => p.array && (p.dims || 1) > 1)) out.add('array a più dimensioni');
+    walk(f.body, (s) => {
+      if (s.kind === 'const') out.add('costanti');
+      if (s.kind === 'declare' && s.array && _MX.splitTop(s.size).length > 1) out.add('array a più dimensioni');
+      for (const k of ['variable', 'expression', 'start', 'end', 'step']) {
+        if (typeof s[k] !== 'string' || !s[k].includes('[')) continue;
+        try { const visit = (n) => { if (!n || typeof n !== 'object') return; if (n.k === 'var' && n.indices && n.indices.length > 1) out.add('array a più dimensioni'); Object.values(n).forEach(visit); }; (k === 'variable' ? _MX.parseLValueList(s[k]) : [_MX.parseExpr(s[k])]).forEach(visit); } catch (e) { /* espressione incompleta */ }
+      }
+    });
+  }
+  return [...out];
+}
+
 /* Completezza di un blocco (campi obbligatori compilati) */
 function isIncomplete(s) {
   switch (s.kind) {
@@ -325,5 +344,5 @@ function isIncomplete(s) {
   }
 }
 
-const ModelLib = { FPRG_ROOT, KINDS, rets, setRets, fgExpr, newId, makeStmt, makeFunction, newProgram, cloneStmt, reId, walk, findStmt, parseFprg, serializeFprg, isIncomplete, normType };
+const ModelLib = { FPRG_ROOT, KINDS, extendedFeatures, rets, setRets, fgExpr, newId, makeStmt, makeFunction, newProgram, cloneStmt, reId, walk, findStmt, parseFprg, serializeFprg, isIncomplete, normType };
 if (typeof module !== 'undefined') module.exports = ModelLib;

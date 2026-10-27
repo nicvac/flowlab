@@ -24,6 +24,7 @@ const Examples = (() => {
   };
   const prog = (name, about, mainBody, funcs = []) => {
     const p = ModelLib.newProgram();
+    Object.defineProperty(p, 'also', { value: (fn) => { fn(p); return p; }, enumerable: false });
     p.attrs.name = name; p.attrs.about = about; p.attrs.authors = 'Esempi FlowLab';
     p.functions[0].body = mainBody;
     for (const f of funcs) p.functions.push(f);
@@ -144,6 +145,24 @@ const Examples = (() => {
           X.out('"Massimo " & max & " in posizione " & idxMax'),
         ], [f]);
       },
+    },
+    {
+      id: 'matrici', title: 'Matrici e cubi (array a più dimensioni)', tags: 'Array 2D · 3D · 4D',
+      make: () => prog('Matrici e cubi', 'Riempie una tavola pitagorica 10 × 10, un cubo 4 × 6 × 8 e un array a 4 dimensioni. Apri gli array dalla scheda Variabili ed esegui con Passo.', [
+        X.com('Apri la scheda Variabili e premi il pulsante accanto a un array per vederlo in una finestra.'),
+        X.cost('N', 'Integer', '10'),
+        X.decl('tavola', 'Integer', 'N, N'), X.decl('cubo', 'Integer', '4, 6, 8'), X.decl('quattro', 'Integer', '2, 3, 4, 5'),
+        X.decl('i, j, k, l', 'Integer'),
+        X.for('i', '0', 'N - 1', [X.for('j', '0', 'N - 1', [X.set('tavola[i, j]', '(i + 1) * (j + 1)')])]),
+        X.for('i', '0', 'Size(cubo, 0) - 1', [X.for('j', '0', 'Size(cubo, 1) - 1', [X.for('k', '0', 'Size(cubo, 2) - 1', [X.set('cubo[i][j][k]', 'i * 100 + j * 10 + k')])])]),
+        X.for('i', '0', '1', [X.for('j', '0', '2', [X.for('k', '0', '3', [X.for('l', '0', '4', [X.set('quattro[i, j, k, l]', 'i + j + k + l')])])])]),
+        X.out('"7 × 8 = " & tavola[6, 7] & " · cubo[3, 5, 7] = " & cubo[3, 5, 7] & " · somma diagonale = " & SommaDiagonale(tavola)'),
+      ], [
+        fn('SommaDiagonale', 'Integer', 's', [['m', 'Integer', true]], [
+          X.decl('s, i', 'Integer'), X.set('s', '0'),
+          X.for('i', '0', 'Size(m) - 1', [X.set('s', 's + m[i, i]')]),
+        ]),
+      ]).also((p) => { p.functions[1].params[0].dims = 2; }),
     },
     {
       id: 'file', title: 'Scrivere e leggere un file', tags: 'File',
