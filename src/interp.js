@@ -172,10 +172,22 @@ class Interpreter {
           if (!_E.validIdent(n)) throw new _E.FlowError(`"${n}" non è un nome di variabile valido`);
           if (_E.RESERVED.has(n.toLowerCase())) throw new _E.FlowError(`"${n}" è una parola riservata`);
           const key = n.toLowerCase();
+          if (frame.vars.has(key) && frame.vars.get(key).constant) throw new _E.FlowError(`Il nome "${n}" è già usato dalla costante "${frame.vars.get(key).name}"`);
           if (frame.vars.has(key)) throw new _E.FlowError(frame.vars.get(key).name === n ? `La variabile "${n}" è già stata dichiarata` : `La variabile "${n}" è già stata dichiarata come "${frame.vars.get(key).name}" (maiuscole e minuscole non contano)`);
           if (s.array) frame.vars.set(key, { name: n, type: s.type, array: true, items: new Array(size).fill(undefined) });
           else frame.vars.set(key, { name: n, type: s.type, array: false, value: undefined });
         }
+        return;
+      }
+      case 'const': {
+        yield { type: 'stmt', stmt: s, frame };
+        const n = s.name.trim();
+        if (!_E.validIdent(n)) throw new _E.FlowError(`"${n}" non è un nome valido per una costante`);
+        if (_E.RESERVED.has(n.toLowerCase())) throw new _E.FlowError(`"${n}" è una parola riservata`);
+        const key = n.toLowerCase();
+        if (frame.vars.has(key)) throw new _E.FlowError(`Il nome "${n}" è già usato da ${frame.vars.get(key).constant ? 'un\'altra costante' : 'una variabile'}`);
+        const v = yield* ev(s.expression);
+        frame.vars.set(key, { name: n, type: s.type, array: false, value: _E.coerce(v, s.type, `il valore della costante "${n}"`), constant: true });
         return;
       }
       case 'assign': {
@@ -203,6 +215,7 @@ class Interpreter {
         yield { type: 'stmt', stmt: s, frame };
         const lv = this.parse(s.variable, 'lv');
         const cell = this.getVar(lv.name, lv);
+        if (cell.constant) throw new _E.FlowError(`"${cell.name}" è una costante: non si può leggere un nuovo valore`);
         if (cell.array && !lv.index) throw new _E.FlowError(`"${lv.name}" è un array: indica l'elemento, es. ${lv.name}[i]`);
         // verifica l'indice prima di chiedere il valore
         if (cell.array) { const iv = yield* _E.evalE(lv.index, this.ctx); _E.arrIndex(iv, cell, lv); }
@@ -328,6 +341,7 @@ class Interpreter {
 
   *store(lv, val) {
     const cell = this.getVar(lv.name, lv);
+    if (cell.constant) throw new _E.FlowError(`"${cell.name}" è una costante: il suo valore non si può modificare`);
     if (cell.array) {
       if (!lv.index) throw new _E.FlowError(`"${lv.name}" è un array: indica l'elemento da modificare, es. ${lv.name}[i]`);
       const iv = yield* _E.evalE(lv.index, this.ctx);

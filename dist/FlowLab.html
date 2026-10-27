@@ -150,6 +150,7 @@ body.side-hidden #sideToggle { left: auto; right: 3px; transform: translateY(-50
 .chart .shape text { text-anchor: middle; }
 .chart .badge { font: 700 11px var(--font-ui); letter-spacing: 0.02em; }
 .chart .c-in .badge { fill: var(--s-in); }
+.chart .c-decl .badge { fill: var(--s-decl); }
 .chart .c-out .badge { fill: var(--s-out); }
 .chart .blabel { font-size: 11px; font-weight: 700; fill: var(--muted); letter-spacing: 0.02em; }
 .chart .flow { fill: none; stroke: var(--flow); stroke-width: 1.6; }
@@ -1019,6 +1020,7 @@ const newId = () => 's' + (__id++);
 /* Definizione dei tipi di blocco: campi salvati nel file e valori di default */
 const KINDS = {
   declare:    { fields: { name: '', type: 'Integer', array: false, size: '' } },
+  const:      { fields: { name: '', type: 'Integer', expression: '' } },
   assign:     { fields: { variable: '', expression: '' } },
   input:      { fields: { variable: '' } },
   output:     { fields: { expression: '', newline: true } },
@@ -1157,7 +1159,18 @@ function normType(t, allowNone) {
 let _skipped = [];
 function parseBlock(el) {
   const out = [];
-  for (const c of el.children) {
+  const kids = [...el.children];
+  for (let i = 0; i < kids.length; i++) {
+    const c = kids[i];
+    // estensione FlowLab: costante = <declare flowlab-const="True"/> seguita dall'assegnamento del valore
+    if (c.nodeName.toLowerCase() === 'declare' && String(c.getAttribute('flowlab-const')).toLowerCase() === 'true') {
+      const name = (c.getAttribute('name') || '').trim();
+      const nx = kids[i + 1];
+      let expression = '';
+      if (nx && nx.nodeName.toLowerCase() === 'assign' && (nx.getAttribute('variable') || '').trim().toLowerCase() === name.toLowerCase()) { expression = nx.getAttribute('expression') || ''; i++; }
+      out.push(makeStmt('const', { name, type: normType(c.getAttribute('type')), expression }));
+      continue;
+    }
     const s = parseStmt(c);
     if (s) out.push(s); else _skipped.push(c.nodeName);
   }
@@ -1276,6 +1289,11 @@ function writeBlock(stmts, L, depth) {
     switch (s.kind) {
       case 'declare': open('declare', [['name', s.name], ['type', s.type], ['array', TF(s.array)], ['size', s.array ? s.size : '']]); break;
       case 'assign': open('assign', [['variable', s.variable], ['expression', s.expression]]); break;
+      case 'const':
+        // gli altri editor vedono una variabile dichiarata e assegnata: il programma resta eseguibile
+        open('declare', [['name', s.name], ['type', s.type], ['array', 'False'], ['size', ''], ['flowlab-const', 'True']]);
+        open('assign', [['variable', s.name], ['expression', s.expression]]);
+        break;
       case 'input': open('input', [['variable', s.variable]]); break;
       case 'output': open('output', [['expression', s.expression], ['newline', TF(s.newline)]]); break;
       case 'if':
@@ -1304,6 +1322,7 @@ function writeBlock(stmts, L, depth) {
 function isIncomplete(s) {
   switch (s.kind) {
     case 'declare': return !s.name.trim() || (s.array && !String(s.size).trim());
+    case 'const': return !s.name.trim() || !String(s.expression).trim();
     case 'assign': return !s.variable.trim() || !s.expression.trim();
     case 'input': case 'read': return !s.variable.trim();
     case 'output': case 'if': case 'while': case 'do': case 'call': case 'open': case 'write':
@@ -1497,6 +1516,17 @@ class Interpreter {
         }
         return;
       }
+      case 'const': {
+        yield { type: 'stmt', stmt: s, frame };
+        const n = s.name.trim();
+        if (!_E.validIdent(n)) throw new _E.FlowError(`"${n}" non è un nome valido per una costante`);
+        if (_E.RESERVED.has(n.toLowerCase())) throw new _E.FlowError(`"${n}" è una parola riservata`);
+        const key = n.toLowerCase();
+        if (frame.vars.has(key)) throw new _E.FlowError(`Il nome "${n}" è già usato da ${frame.vars.get(key).constant ? 'un\'altra costante' : 'una variabile'}`);
+        const v = yield* ev(s.expression);
+        frame.vars.set(key, { name: n, type: s.type, array: false, value: _E.coerce(v, s.type, `il valore della costante "${n}"`), constant: true });
+        return;
+      }
       case 'assign': {
         yield { type: 'stmt', stmt: s, frame };
         const targets = _E.splitTop(s.variable);
@@ -1522,6 +1552,7 @@ class Interpreter {
         yield { type: 'stmt', stmt: s, frame };
         const lv = this.parse(s.variable, 'lv');
         const cell = this.getVar(lv.name, lv);
+        if (cell.constant) throw new _E.FlowError(`"${cell.name}" è una costante: non si può leggere un nuovo valore`);
         if (cell.array && !lv.index) throw new _E.FlowError(`"${lv.name}" è un array: indica l'elemento, es. ${lv.name}[i]`);
         // verifica l'indice prima di chiedere il valore
         if (cell.array) { const iv = yield* _E.evalE(lv.index, this.ctx); _E.arrIndex(iv, cell, lv); }
@@ -1647,6 +1678,7 @@ class Interpreter {
 
   *store(lv, val) {
     const cell = this.getVar(lv.name, lv);
+    if (cell.constant) throw new _E.FlowError(`"${cell.name}" è una costante: il suo valore non si può modificare`);
     if (cell.array) {
       if (!lv.index) throw new _E.FlowError(`"${lv.name}" è un array: indica l'elemento da modificare, es. ${lv.name}[i]`);
       const iv = yield* _E.evalE(lv.index, this.ctx);
@@ -1680,6 +1712,7 @@ function buildScope(prog, func) {
   const vars = new Map();
   for (const p of func.params) vars.set(p.name.toLowerCase(), { type: p.type, array: p.array, name: p.name });
   _CM.walk(func.body, (s) => {
+    if (s.kind === 'const' && s.name.trim() && !vars.has(s.name.trim().toLowerCase())) vars.set(s.name.trim().toLowerCase(), { type: s.type, array: false, name: s.name.trim(), constant: true });
     if (s.kind === 'declare') for (const n of s.name.split(',').map((x) => x.trim()).filter(Boolean)) if (!vars.has(n.toLowerCase())) vars.set(n.toLowerCase(), { type: s.type, array: s.array, name: n });
   });
   const funcs = new Map();
@@ -1691,6 +1724,10 @@ function tryParse(src) { try { return _CE.parseExpr(src); } catch (e) { return n
 const strip = (n) => (n && n.k === 'par' ? strip(n.e) : n);
 /* destinazioni di un'assegnazione (più di una se la funzione restituisce più valori) */
 const targetsOf = (s) => _CE.splitTop(s.variable);
+function isLiteralExpr(src) {
+  const ok = (n) => !!n && (['num', 'str', 'bool'].includes(n.k) || (n.k === 'par' && ok(n.e)) || (n.k === 'un' && ok(n.e)) || (n.k === 'bin' && n.op !== '&' && ok(n.l) && ok(n.r)));
+  return ok(tryParse(src));
+}
 /* funzione chiamata a destra di un'assegnazione multipla */
 function calleeOf(s, sc) { const e = strip(tryParse(s.expression)); const g = e && e.k === 'call' && sc.funcs.get(e.name.toLowerCase()); return g ? g.f : null; }
 /* nome come è stato dichiarato (il formato .fprg non distingue maiuscole e minuscole, i linguaggi sì) */
@@ -1776,6 +1813,7 @@ LANGS.pseudo = {
     const block = (stmts, sc) => {
       for (const s of stmts) {
         switch (s.kind) {
+          case 'const': o.line(`COSTANTE ${s.name} : ${TIPO[s.type]} = ${E(s.expression, sc)}`); break;
           case 'declare': o.line(`DICHIARA ${s.array ? `ARRAY ${s.name.split(',').map((x) => x.trim() + '[' + E(s.size, sc) + ']').join(', ')} DI ${TIPO[s.type]}` : `${s.name} : ${TIPO[s.type]}`}`); break;
           case 'assign': o.line(`${targetsOf(s).map((x) => E(x, sc)).join(', ')} ← ${E(s.expression, sc)}`); break;
           case 'input': o.line(`LEGGI ${E(s.variable, sc)}`); break;
@@ -1874,6 +1912,7 @@ LANGS.python = {
       const start = o.lines.length;
       for (const s of stmts) {
         switch (s.kind) {
+          case 'const': o.line(`${vname(s.name.trim(), sc)} = ${E(s.expression, sc)}  # costante`); break;
           case 'declare':
             for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(s.array ? `${nm} = [${DEF[s.type]}] * (${E(s.size, sc)})` : `${nm} = ${DEF[s.type]}`);
             break;
@@ -2011,6 +2050,7 @@ function cFamily(cfg) {
       function block(o, stmts, sc) {
         for (const s of stmts) {
           switch (s.kind) {
+            case 'const': o.line(cfg.constDecl(s.name.trim(), s.type, E(s.expression, sc), isLiteralExpr(s.expression))); break;
             case 'declare':
               for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declare(nm, s.type, s.array, s.array ? E(s.size, sc) : null));
               break;
@@ -2090,6 +2130,7 @@ LANGS.cpp = cFamily({
     return null;
   },
   declare: (n, t, arr, size) => (arr ? `vector<${T_CPP[t]}> ${n}(${size});` : `${T_CPP[t]} ${n};`),
+  constDecl: (n, t, e) => `const ${T_CPP[t]} ${n} = ${e};`,
   input: (o, v, t) => { if (t === 'String') o.line(`getline(cin >> ws, ${v});`); else o.line(`cin >> ${v};`); },
   output: (e, nl) => `cout << ${e}${nl ? ' << endl' : ''}`,
   files(o, s, E, sc, lvInfo, used) {
@@ -2176,6 +2217,7 @@ LANGS.java = cFamily({
     return null;
   },
   declare: (n, t, arr, size) => (arr ? `${T_JAVA[t]}[] ${n} = new ${T_JAVA[t]}[${size}];` : `${T_JAVA[t]} ${n} = ${DEF_C[t]};`),
+  constDecl: (n, t, e) => `final ${T_JAVA[t]} ${n} = ${e};`,
   input: (o, v, t) => o.line(`${v} = ${t === 'Integer' ? 'Integer.parseInt(input.nextLine().trim())' : t === 'Real' ? 'Double.parseDouble(input.nextLine().trim())' : t === 'Boolean' ? 'Boolean.parseBoolean(input.nextLine().trim())' : 'input.nextLine()'};`),
   output: (e, nl) => `System.out.${nl ? 'println' : 'print'}(${e})`,
   files(o, s, E, sc, lvInfo, used) {
@@ -2256,6 +2298,8 @@ LANGS.csharp = cFamily({
     return null;
   },
   declare: (n, t, arr, size) => (arr ? `${T_CPP[t]}[] ${n} = new ${T_CPP[t]}[${size}];` : `${T_CPP[t]} ${n} = ${DEF_C[t]};`),
+  // in C# const vuole un valore noto in compilazione; altrimenti una variabile normale
+  constDecl: (n, t, e, lit) => (lit ? `const ${T_CPP[t]} ${n} = ${e};` : `${T_CPP[t]} ${n} = ${e}; // costante`),
   input: (o, v, t) => o.line(`${v} = ${t === 'Integer' ? 'int.Parse(Console.ReadLine())' : t === 'Real' ? 'double.Parse(Console.ReadLine())' : t === 'Boolean' ? 'bool.Parse(Console.ReadLine())' : 'Console.ReadLine()'};`),
   output: (e, nl) => `Console.${nl ? 'WriteLine' : 'Write'}(${e})`,
   multiAssign(o, tg, call) { o.line(`(${tg.join(', ')}) = ${call};`); },
@@ -2318,6 +2362,7 @@ LANGS.javascript = cFamily({
     return null;
   },
   declare: (n, t, arr, size) => (arr ? `let ${n} = new Array(${size});` : `let ${n};`),
+  constDecl: (n, t, e) => `const ${n} = ${e};`,
   input: (o, v, t) => o.line(`${v} = ${t === 'Integer' ? 'parseInt(prompt())' : t === 'Real' ? 'parseFloat(prompt())' : t === 'Boolean' ? 'prompt() === "true"' : 'prompt()'};`),
   output: (e, nl) => `output(${e}, ${nl})`,
   multiAssign(o, tg, call) { o.line(`[${tg.join(', ')}] = ${call};`); },
@@ -2412,7 +2457,7 @@ function dedupe(pts) {
 const cat2 = (a, b) => a.concat(b);
 
 const KIND_IT = {
-  declare: 'Dichiara', assign: 'Assegna', input: 'Input', output: 'Output', if: 'Se', while: 'Mentre', for: 'Per', do: 'Fai-mentre',
+  declare: 'Dichiara', const: 'Costante', assign: 'Assegna', input: 'Input', output: 'Output', if: 'Se', while: 'Mentre', for: 'Per', do: 'Fai-mentre',
   call: 'Chiama', comment: 'Commento', breakpoint: 'Interruzione',
   open: 'Apri file', close: 'Chiudi file', read: 'Leggi da file', write: 'Scrivi su file',
 };
@@ -2426,6 +2471,7 @@ function caption(s) {
       return { text: `${s.array ? names.map((n) => `${n}[${s.size}]`).join(', ') : names.join(', ')}: ${T[s.type]}` };
     }
     case 'assign': return { text: `${s.variable} ← ${s.expression}` };
+    case 'const': return { text: `${s.name}: ${T[s.type]} = ${s.expression}`, badge: 'C' };
     case 'input': return { text: s.variable, badge: 'I' };
     case 'output': return { text: `${s.expression}${s.newline ? '' : '  ⋯'}`, badge: 'O' };
     case 'if': case 'while': case 'do': return { text: s.expression };
@@ -2462,12 +2508,12 @@ function shapePath(shape, cx, y, w, h) {
   return '';
 }
 const SHAPE_OF = {
-  declare: 'decl', assign: 'rect', input: 'para', output: 'para', if: 'diamond', while: 'diamond', do: 'diamond', for: 'hex',
+  declare: 'decl', const: 'decl', assign: 'rect', input: 'para', output: 'para', if: 'diamond', while: 'diamond', do: 'diamond', for: 'hex',
   call: 'call', comment: 'note', breakpoint: 'oct',
   open: 'doc', close: 'doc', read: 'doc', write: 'doc',
 };
 const CAT_OF = {
-  declare: 'decl', assign: 'assign', input: 'in', output: 'out', if: 'cond', while: 'loop', do: 'loop', for: 'loop', call: 'call',
+  declare: 'decl', const: 'decl', assign: 'assign', input: 'in', output: 'out', if: 'cond', while: 'loop', do: 'loop', for: 'loop', call: 'call',
   comment: 'comment', breakpoint: 'brk',
   open: 'file', close: 'file', read: 'file', write: 'file',
 };
@@ -2703,6 +2749,7 @@ const RenderLib = { Renderer, caption, KIND_IT, textW, R_ };
 const Examples = (() => {
   const S = (k, p) => ModelLib.makeStmt(k, p);
   const X = {
+    cost: (name, type, expression) => S('const', { name, type, expression }),
     decl: (name, type, size) => S('declare', { name, type, array: size != null, size: size != null ? String(size) : '' }),
     set: (variable, expression) => S('assign', { variable, expression }),
     inp: (variable) => S('input', { variable }),
@@ -2797,7 +2844,7 @@ const Examples = (() => {
     {
       id: 'bolle', title: 'Ordinamento a bolle', tags: 'Array · procedura',
       make: () => prog('Ordinamento a bolle', 'Riempie un array con numeri casuali e lo ordina.', [
-        X.decl('dati', 'Integer', 8), X.decl('i', 'Integer'),
+        X.cost('DIM', 'Integer', '8'), X.decl('dati', 'Integer', 'DIM'), X.decl('i', 'Integer'),
         X.for('i', '0', 'Size(dati) - 1', [X.set('dati[i]', 'Random(90) + 10')]),
         X.out('"Prima:  "', false), X.call('Stampa(dati)'),
         X.call('Ordina(dati)'),
@@ -2929,7 +2976,7 @@ const Examples = (() => {
   function declaredNames(f) {
     const out = [];
     for (const p of f.params) out.push(p.name);
-    M.walk(f.body, (s) => { if (s.kind === 'declare') s.name.split(',').map((x) => x.trim()).filter(Boolean).forEach((n) => out.push(n)); });
+    M.walk(f.body, (s) => { if (s.kind === 'declare' || s.kind === 'const') s.name.split(',').map((x) => x.trim()).filter(Boolean).forEach((n) => out.push(n)); });
     return [...new Set(out)];
   }
 
@@ -2990,6 +3037,7 @@ const Examples = (() => {
   const ICON = {
     declare: '<rect x="3" y="5" width="26" height="16" rx="1.5"/><path class="inner" d="M7 5V21M3 9H29"/>',
     assign: '<rect x="3" y="5" width="26" height="16" rx="1.5"/>',
+    const: '<rect x="3" y="5" width="26" height="16" rx="1.5"/><path class="inner" d="M7 5V21M3 9H29M14 13H22M14 17H22"/>',
     input: '<path d="M9 5H29L23 21H3Z"/><path class="inner" d="M12 13H20M17 10L20 13L17 16"/>',
     output: '<path d="M9 5H29L23 21H3Z"/><path class="inner" d="M20 13H12M15 10L12 13L15 16"/>',
     if: '<path d="M16 3L29 13L16 23L3 13Z"/>',
@@ -3004,11 +3052,11 @@ const Examples = (() => {
     read: '<path d="M3 4H29V19C22 16 14 26 3 19Z"/>',
     write: '<path d="M3 4H29V19C22 16 14 26 3 19Z"/>',
   };
-  const CAT = { declare: 'decl', assign: 'assign', input: 'in', output: 'out', if: 'cond', while: 'loop', for: 'loop', do: 'loop', call: 'call', comment: 'comment', breakpoint: 'brk', open: 'file', close: 'file', read: 'file', write: 'file' };
+  const CAT = { declare: 'decl', const: 'decl', assign: 'assign', input: 'in', output: 'out', if: 'cond', while: 'loop', for: 'loop', do: 'loop', call: 'call', comment: 'comment', breakpoint: 'brk', open: 'file', close: 'file', read: 'file', write: 'file' };
   const icon = (k) => `<svg class="mini c-${CAT[k]}" viewBox="0 0 32 26" aria-hidden="true">${ICON[k]}</svg>`;
 
   const GROUPS = [
-    ['Base', ['declare', 'assign', 'input', 'output', 'call']],
+    ['Base', ['declare', 'const', 'assign', 'input', 'output', 'call']],
     ['Controllo', ['if', 'while', 'for', 'do']],
     ['Altro', ['comment', 'breakpoint']],
     ['File', ['open', 'read', 'write', 'close']],
@@ -3234,6 +3282,10 @@ const Examples = (() => {
       { key: 'type', label: 'Tipo', type: 'seg', options: TYPE_OPTS },
       { key: 'array', label: 'Array (elenco di valori con indice da 0)', type: 'check' },
       { key: 'size', label: 'Numero di elementi', type: 'expr', placeholder: 'es. 10', showIf: 'array' }] },
+    const: { title: 'Costante', help: 'Un valore con un nome che non cambia durante il programma. Per convenzione si scrive in maiuscolo.', fields: [
+      { key: 'name', label: 'Nome della costante', type: 'ident', required: true, placeholder: 'es. MAX' },
+      { key: 'type', label: 'Tipo', type: 'seg', options: TYPE_OPTS },
+      { key: 'expression', label: 'Valore', type: 'expr', required: true, placeholder: 'es. 100' }] },
     assign: { title: 'Assegnamento', help: 'Calcola l\'espressione e mette il risultato nella variabile.', fields: [
       { key: 'variable', label: 'Variabile', type: 'lvalues', required: true, placeholder: 'es. x  oppure  v[i]', hint: 'Per una funzione che restituisce più valori: più variabili separate da virgola, es. min, max ← MinMax(v)' },
       { key: 'expression', label: 'Espressione', type: 'expr', required: true, placeholder: 'es. x + 1' }] },
@@ -3841,7 +3893,7 @@ const Examples = (() => {
       } else {
         const sv = c.value === undefined ? '∅' : E.literalOf(c.value); next.set(key, sv);
         const changed = prev.has(key) && prev.get(key) !== sv;
-        tb.append(h('tr', { class: changed ? 'changed' : '' }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null), h('td', null, TYPE_IT[c.type]), h('td', null, fmt(c.value))));
+        tb.append(h('tr', { class: changed ? 'changed' : '' }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null, c.constant ? h('span', { class: 'ptag', title: 'costante' }, 'cost') : null), h('td', null, TYPE_IT[c.type]), h('td', null, fmt(c.value))));
       }
     }
     for (const [k, v] of next) prev.set(k, v);
@@ -4183,7 +4235,7 @@ const Examples = (() => {
   function exportCss() {
     const cs = getComputedStyle(document.documentElement);
     const v = (n) => cs.getPropertyValue(n).trim();
-    let css = `text{font:${RenderLib.R_.font};fill:${v('--sh-text')};text-anchor:middle}.cline-t{text-anchor:start}.comment text{font-weight:400;font-style:italic}.badge{font-size:10px}.c-in .badge{fill:${v('--s-in')}}.c-out .badge{fill:${v('--s-out')}}.blabel{font-size:11px;font-weight:600;fill:${v('--muted')}}.flow{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ahead{fill:${v('--flow')}}.joint{fill:${v('--flow')}}.shape>path,.shape>rect{stroke-width:1.6}.inner{fill:none!important}.note{stroke-dasharray:4 3}svg{background:${v('--paper')}}`;
+    let css = `text{font:${RenderLib.R_.font};fill:${v('--sh-text')};text-anchor:middle}.cline-t{text-anchor:start}.comment text{font-weight:400;font-style:italic}.badge{font-size:10px}.c-in .badge{fill:${v('--s-in')}}.c-out .badge{fill:${v('--s-out')}}.c-decl .badge{fill:${v('--s-decl')}}.blabel{font-size:11px;font-weight:600;fill:${v('--muted')}}.flow{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ahead{fill:${v('--flow')}}.joint{fill:${v('--flow')}}.shape>path,.shape>rect{stroke-width:1.6}.inner{fill:none!important}.note{stroke-dasharray:4 3}svg{background:${v('--paper')}}`;
     for (const c of ['term', 'decl', 'assign', 'in', 'out', 'cond', 'loop', 'call', 'comment', 'brk', 'file', 'inc']) css += `.c-${c}>path,.c-${c}>rect{fill:${v('--f-' + c)};stroke:${v('--s-' + c)}}`;
     return css;
   }

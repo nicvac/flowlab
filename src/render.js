@@ -56,7 +56,7 @@ function dedupe(pts) {
 const cat2 = (a, b) => a.concat(b);
 
 const KIND_IT = {
-  declare: 'Dichiara', assign: 'Assegna', input: 'Input', output: 'Output', if: 'Se', while: 'Mentre', for: 'Per', do: 'Fai-mentre',
+  declare: 'Dichiara', const: 'Costante', assign: 'Assegna', input: 'Input', output: 'Output', if: 'Se', while: 'Mentre', for: 'Per', do: 'Fai-mentre',
   call: 'Chiama', comment: 'Commento', breakpoint: 'Interruzione',
   open: 'Apri file', close: 'Chiudi file', read: 'Leggi da file', write: 'Scrivi su file',
 };
@@ -70,6 +70,7 @@ function caption(s) {
       return { text: `${s.array ? names.map((n) => `${n}[${s.size}]`).join(', ') : names.join(', ')}: ${T[s.type]}` };
     }
     case 'assign': return { text: `${s.variable} ← ${s.expression}` };
+    case 'const': return { text: `${s.name}: ${T[s.type]} = ${s.expression}`, badge: 'C' };
     case 'input': return { text: s.variable, badge: 'I' };
     case 'output': return { text: `${s.expression}${s.newline ? '' : '  ⋯'}`, badge: 'O' };
     case 'if': case 'while': case 'do': return { text: s.expression };
@@ -106,12 +107,12 @@ function shapePath(shape, cx, y, w, h) {
   return '';
 }
 const SHAPE_OF = {
-  declare: 'decl', assign: 'rect', input: 'para', output: 'para', if: 'diamond', while: 'diamond', do: 'diamond', for: 'hex',
+  declare: 'decl', const: 'decl', assign: 'rect', input: 'para', output: 'para', if: 'diamond', while: 'diamond', do: 'diamond', for: 'hex',
   call: 'call', comment: 'note', breakpoint: 'oct',
   open: 'doc', close: 'doc', read: 'doc', write: 'doc',
 };
 const CAT_OF = {
-  declare: 'decl', assign: 'assign', input: 'in', output: 'out', if: 'cond', while: 'loop', do: 'loop', for: 'loop', call: 'call',
+  declare: 'decl', const: 'decl', assign: 'assign', input: 'in', output: 'out', if: 'cond', while: 'loop', do: 'loop', for: 'loop', call: 'call',
   comment: 'comment', breakpoint: 'brk',
   open: 'file', close: 'file', read: 'file', write: 'file',
 };

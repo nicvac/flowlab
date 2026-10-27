@@ -1,0 +1,15 @@
+global.ModelLib = require('../src/model.js'); global.ExprLib = require('../src/expr.js');
+const { Interpreter } = require('../src/interp.js'); const C = require('../src/codegen.js'); const fs = require('fs');
+const M = ModelLib, S = M.makeStmt;
+const run = (p) => { let out = ''; const env = { output: (t, nl) => { out += t + (nl ? '\n' : ''); }, eof: () => true }; const g = new Interpreter(p, env).run(); try { for (let r = g.next(); !r.done; r = g.next()) if (r.value.type === 'input') g.next('1'); } catch (e) { out += 'ERRORE: ' + e.message + '\n'; } return out.trim(); };
+const mk = (body) => { const p = M.newProgram(); p.functions[0].body = body; return p; };
+const base = () => [S('const', { name: 'MAX', type: 'Integer', expression: '5' }), S('const', { name: 'Saluto', type: 'String', expression: '"Ciao"' }), S('const', { name: 'RAD2', type: 'Real', expression: 'Sqrt(2)' }), S('declare', { name: 'v', type: 'Integer', array: true, size: 'max' }), S('declare', { name: 'i', type: 'Integer' })];
+const ok = mk([...base(), S('for', { variable: 'i', start: '0', end: 'MAX - 1', body: [S('assign', { variable: 'v[i]', expression: 'i * MAX' })] }), S('output', { expression: 'saluto & ", v[4] = " & v[4] & ", Size = " & Size(v) & ", RAD2 = " & ToFixed(RAD2, 3)' })]);
+console.log('esecuzione:', run(ok));
+console.log('assegnare  :', run(mk([...base(), S('assign', { variable: 'MAX', expression: '10' })])));
+console.log('input      :', run(mk([...base(), S('input', { variable: 'Max' })])));
+console.log('per        :', run(mk([...base(), S('for', { variable: 'MAX', start: '1', end: '3', body: [] })])));
+console.log('ridichiara :', run(mk([...base(), S('declare', { name: 'MAX', type: 'Integer' })])));
+console.log('tipo       :', run(mk([S('const', { name: 'K', type: 'Integer', expression: '"x"' })])));
+fs.mkdirSync(__dirname + '/out', { recursive: true });
+for (const l of Object.keys(C.LANGS)) fs.writeFileSync(__dirname + '/out/cost.' + C.LANGS[l].ext, C.generate(ok, l));

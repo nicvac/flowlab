@@ -17,6 +17,7 @@ function buildScope(prog, func) {
   const vars = new Map();
   for (const p of func.params) vars.set(p.name.toLowerCase(), { type: p.type, array: p.array, name: p.name });
   _CM.walk(func.body, (s) => {
+    if (s.kind === 'const' && s.name.trim() && !vars.has(s.name.trim().toLowerCase())) vars.set(s.name.trim().toLowerCase(), { type: s.type, array: false, name: s.name.trim(), constant: true });
     if (s.kind === 'declare') for (const n of s.name.split(',').map((x) => x.trim()).filter(Boolean)) if (!vars.has(n.toLowerCase())) vars.set(n.toLowerCase(), { type: s.type, array: s.array, name: n });
   });
   const funcs = new Map();
@@ -28,6 +29,10 @@ function tryParse(src) { try { return _CE.parseExpr(src); } catch (e) { return n
 const strip = (n) => (n && n.k === 'par' ? strip(n.e) : n);
 /* destinazioni di un'assegnazione (più di una se la funzione restituisce più valori) */
 const targetsOf = (s) => _CE.splitTop(s.variable);
+function isLiteralExpr(src) {
+  const ok = (n) => !!n && (['num', 'str', 'bool'].includes(n.k) || (n.k === 'par' && ok(n.e)) || (n.k === 'un' && ok(n.e)) || (n.k === 'bin' && n.op !== '&' && ok(n.l) && ok(n.r)));
+  return ok(tryParse(src));
+}
 /* funzione chiamata a destra di un'assegnazione multipla */
 function calleeOf(s, sc) { const e = strip(tryParse(s.expression)); const g = e && e.k === 'call' && sc.funcs.get(e.name.toLowerCase()); return g ? g.f : null; }
 /* nome come è stato dichiarato (il formato .fprg non distingue maiuscole e minuscole, i linguaggi sì) */
@@ -113,6 +118,7 @@ LANGS.pseudo = {
     const block = (stmts, sc) => {
       for (const s of stmts) {
         switch (s.kind) {
+          case 'const': o.line(`COSTANTE ${s.name} : ${TIPO[s.type]} = ${E(s.expression, sc)}`); break;
           case 'declare': o.line(`DICHIARA ${s.array ? `ARRAY ${s.name.split(',').map((x) => x.trim() + '[' + E(s.size, sc) + ']').join(', ')} DI ${TIPO[s.type]}` : `${s.name} : ${TIPO[s.type]}`}`); break;
           case 'assign': o.line(`${targetsOf(s).map((x) => E(x, sc)).join(', ')} ← ${E(s.expression, sc)}`); break;
           case 'input': o.line(`LEGGI ${E(s.variable, sc)}`); break;
@@ -211,6 +217,7 @@ LANGS.python = {
       const start = o.lines.length;
       for (const s of stmts) {
         switch (s.kind) {
+          case 'const': o.line(`${vname(s.name.trim(), sc)} = ${E(s.expression, sc)}  # costante`); break;
           case 'declare':
             for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(s.array ? `${nm} = [${DEF[s.type]}] * (${E(s.size, sc)})` : `${nm} = ${DEF[s.type]}`);
             break;
@@ -348,6 +355,7 @@ function cFamily(cfg) {
       function block(o, stmts, sc) {
         for (const s of stmts) {
           switch (s.kind) {
+            case 'const': o.line(cfg.constDecl(s.name.trim(), s.type, E(s.expression, sc), isLiteralExpr(s.expression))); break;
             case 'declare':
               for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declare(nm, s.type, s.array, s.array ? E(s.size, sc) : null));
               break;
@@ -427,6 +435,7 @@ LANGS.cpp = cFamily({
     return null;
   },
   declare: (n, t, arr, size) => (arr ? `vector<${T_CPP[t]}> ${n}(${size});` : `${T_CPP[t]} ${n};`),
+  constDecl: (n, t, e) => `const ${T_CPP[t]} ${n} = ${e};`,
   input: (o, v, t) => { if (t === 'String') o.line(`getline(cin >> ws, ${v});`); else o.line(`cin >> ${v};`); },
   output: (e, nl) => `cout << ${e}${nl ? ' << endl' : ''}`,
   files(o, s, E, sc, lvInfo, used) {
@@ -513,6 +522,7 @@ LANGS.java = cFamily({
     return null;
   },
   declare: (n, t, arr, size) => (arr ? `${T_JAVA[t]}[] ${n} = new ${T_JAVA[t]}[${size}];` : `${T_JAVA[t]} ${n} = ${DEF_C[t]};`),
+  constDecl: (n, t, e) => `final ${T_JAVA[t]} ${n} = ${e};`,
   input: (o, v, t) => o.line(`${v} = ${t === 'Integer' ? 'Integer.parseInt(input.nextLine().trim())' : t === 'Real' ? 'Double.parseDouble(input.nextLine().trim())' : t === 'Boolean' ? 'Boolean.parseBoolean(input.nextLine().trim())' : 'input.nextLine()'};`),
   output: (e, nl) => `System.out.${nl ? 'println' : 'print'}(${e})`,
   files(o, s, E, sc, lvInfo, used) {
@@ -593,6 +603,8 @@ LANGS.csharp = cFamily({
     return null;
   },
   declare: (n, t, arr, size) => (arr ? `${T_CPP[t]}[] ${n} = new ${T_CPP[t]}[${size}];` : `${T_CPP[t]} ${n} = ${DEF_C[t]};`),
+  // in C# const vuole un valore noto in compilazione; altrimenti una variabile normale
+  constDecl: (n, t, e, lit) => (lit ? `const ${T_CPP[t]} ${n} = ${e};` : `${T_CPP[t]} ${n} = ${e}; // costante`),
   input: (o, v, t) => o.line(`${v} = ${t === 'Integer' ? 'int.Parse(Console.ReadLine())' : t === 'Real' ? 'double.Parse(Console.ReadLine())' : t === 'Boolean' ? 'bool.Parse(Console.ReadLine())' : 'Console.ReadLine()'};`),
   output: (e, nl) => `Console.${nl ? 'WriteLine' : 'Write'}(${e})`,
   multiAssign(o, tg, call) { o.line(`(${tg.join(', ')}) = ${call};`); },
@@ -655,6 +667,7 @@ LANGS.javascript = cFamily({
     return null;
   },
   declare: (n, t, arr, size) => (arr ? `let ${n} = new Array(${size});` : `let ${n};`),
+  constDecl: (n, t, e) => `const ${n} = ${e};`,
   input: (o, v, t) => o.line(`${v} = ${t === 'Integer' ? 'parseInt(prompt())' : t === 'Real' ? 'parseFloat(prompt())' : t === 'Boolean' ? 'prompt() === "true"' : 'prompt()'};`),
   output: (e, nl) => `output(${e}, ${nl})`,
   multiAssign(o, tg, call) { o.line(`[${tg.join(', ')}] = ${call};`); },

@@ -12,6 +12,7 @@ const newId = () => 's' + (__id++);
 /* Definizione dei tipi di blocco: campi salvati nel file e valori di default */
 const KINDS = {
   declare:    { fields: { name: '', type: 'Integer', array: false, size: '' } },
+  const:      { fields: { name: '', type: 'Integer', expression: '' } },
   assign:     { fields: { variable: '', expression: '' } },
   input:      { fields: { variable: '' } },
   output:     { fields: { expression: '', newline: true } },
@@ -150,7 +151,18 @@ function normType(t, allowNone) {
 let _skipped = [];
 function parseBlock(el) {
   const out = [];
-  for (const c of el.children) {
+  const kids = [...el.children];
+  for (let i = 0; i < kids.length; i++) {
+    const c = kids[i];
+    // estensione FlowLab: costante = <declare flowlab-const="True"/> seguita dall'assegnamento del valore
+    if (c.nodeName.toLowerCase() === 'declare' && String(c.getAttribute('flowlab-const')).toLowerCase() === 'true') {
+      const name = (c.getAttribute('name') || '').trim();
+      const nx = kids[i + 1];
+      let expression = '';
+      if (nx && nx.nodeName.toLowerCase() === 'assign' && (nx.getAttribute('variable') || '').trim().toLowerCase() === name.toLowerCase()) { expression = nx.getAttribute('expression') || ''; i++; }
+      out.push(makeStmt('const', { name, type: normType(c.getAttribute('type')), expression }));
+      continue;
+    }
     const s = parseStmt(c);
     if (s) out.push(s); else _skipped.push(c.nodeName);
   }
@@ -269,6 +281,11 @@ function writeBlock(stmts, L, depth) {
     switch (s.kind) {
       case 'declare': open('declare', [['name', s.name], ['type', s.type], ['array', TF(s.array)], ['size', s.array ? s.size : '']]); break;
       case 'assign': open('assign', [['variable', s.variable], ['expression', s.expression]]); break;
+      case 'const':
+        // gli altri editor vedono una variabile dichiarata e assegnata: il programma resta eseguibile
+        open('declare', [['name', s.name], ['type', s.type], ['array', 'False'], ['size', ''], ['flowlab-const', 'True']]);
+        open('assign', [['variable', s.name], ['expression', s.expression]]);
+        break;
       case 'input': open('input', [['variable', s.variable]]); break;
       case 'output': open('output', [['expression', s.expression], ['newline', TF(s.newline)]]); break;
       case 'if':
@@ -297,6 +314,7 @@ function writeBlock(stmts, L, depth) {
 function isIncomplete(s) {
   switch (s.kind) {
     case 'declare': return !s.name.trim() || (s.array && !String(s.size).trim());
+    case 'const': return !s.name.trim() || !String(s.expression).trim();
     case 'assign': return !s.variable.trim() || !s.expression.trim();
     case 'input': case 'read': return !s.variable.trim();
     case 'output': case 'if': case 'while': case 'do': case 'call': case 'open': case 'write':

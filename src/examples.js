@@ -6,6 +6,7 @@
 const Examples = (() => {
   const S = (k, p) => ModelLib.makeStmt(k, p);
   const X = {
+    cost: (name, type, expression) => S('const', { name, type, expression }),
     decl: (name, type, size) => S('declare', { name, type, array: size != null, size: size != null ? String(size) : '' }),
     set: (variable, expression) => S('assign', { variable, expression }),
     inp: (variable) => S('input', { variable }),
@@ -100,7 +101,7 @@ const Examples = (() => {
     {
       id: 'bolle', title: 'Ordinamento a bolle', tags: 'Array · procedura',
       make: () => prog('Ordinamento a bolle', 'Riempie un array con numeri casuali e lo ordina.', [
-        X.decl('dati', 'Integer', 8), X.decl('i', 'Integer'),
+        X.cost('DIM', 'Integer', '8'), X.decl('dati', 'Integer', 'DIM'), X.decl('i', 'Integer'),
         X.for('i', '0', 'Size(dati) - 1', [X.set('dati[i]', 'Random(90) + 10')]),
         X.out('"Prima:  "', false), X.call('Stampa(dati)'),
         X.call('Ordina(dati)'),

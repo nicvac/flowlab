@@ -67,7 +67,7 @@
   function declaredNames(f) {
     const out = [];
     for (const p of f.params) out.push(p.name);
-    M.walk(f.body, (s) => { if (s.kind === 'declare') s.name.split(',').map((x) => x.trim()).filter(Boolean).forEach((n) => out.push(n)); });
+    M.walk(f.body, (s) => { if (s.kind === 'declare' || s.kind === 'const') s.name.split(',').map((x) => x.trim()).filter(Boolean).forEach((n) => out.push(n)); });
     return [...new Set(out)];
   }
 
@@ -128,6 +128,7 @@
   const ICON = {
     declare: '<rect x="3" y="5" width="26" height="16" rx="1.5"/><path class="inner" d="M7 5V21M3 9H29"/>',
     assign: '<rect x="3" y="5" width="26" height="16" rx="1.5"/>',
+    const: '<rect x="3" y="5" width="26" height="16" rx="1.5"/><path class="inner" d="M7 5V21M3 9H29M14 13H22M14 17H22"/>',
     input: '<path d="M9 5H29L23 21H3Z"/><path class="inner" d="M12 13H20M17 10L20 13L17 16"/>',
     output: '<path d="M9 5H29L23 21H3Z"/><path class="inner" d="M20 13H12M15 10L12 13L15 16"/>',
     if: '<path d="M16 3L29 13L16 23L3 13Z"/>',
@@ -142,11 +143,11 @@
     read: '<path d="M3 4H29V19C22 16 14 26 3 19Z"/>',
     write: '<path d="M3 4H29V19C22 16 14 26 3 19Z"/>',
   };
-  const CAT = { declare: 'decl', assign: 'assign', input: 'in', output: 'out', if: 'cond', while: 'loop', for: 'loop', do: 'loop', call: 'call', comment: 'comment', breakpoint: 'brk', open: 'file', close: 'file', read: 'file', write: 'file' };
+  const CAT = { declare: 'decl', const: 'decl', assign: 'assign', input: 'in', output: 'out', if: 'cond', while: 'loop', for: 'loop', do: 'loop', call: 'call', comment: 'comment', breakpoint: 'brk', open: 'file', close: 'file', read: 'file', write: 'file' };
   const icon = (k) => `<svg class="mini c-${CAT[k]}" viewBox="0 0 32 26" aria-hidden="true">${ICON[k]}</svg>`;
 
   const GROUPS = [
-    ['Base', ['declare', 'assign', 'input', 'output', 'call']],
+    ['Base', ['declare', 'const', 'assign', 'input', 'output', 'call']],
     ['Controllo', ['if', 'while', 'for', 'do']],
     ['Altro', ['comment', 'breakpoint']],
     ['File', ['open', 'read', 'write', 'close']],
@@ -372,6 +373,10 @@
       { key: 'type', label: 'Tipo', type: 'seg', options: TYPE_OPTS },
       { key: 'array', label: 'Array (elenco di valori con indice da 0)', type: 'check' },
       { key: 'size', label: 'Numero di elementi', type: 'expr', placeholder: 'es. 10', showIf: 'array' }] },
+    const: { title: 'Costante', help: 'Un valore con un nome che non cambia durante il programma. Per convenzione si scrive in maiuscolo.', fields: [
+      { key: 'name', label: 'Nome della costante', type: 'ident', required: true, placeholder: 'es. MAX' },
+      { key: 'type', label: 'Tipo', type: 'seg', options: TYPE_OPTS },
+      { key: 'expression', label: 'Valore', type: 'expr', required: true, placeholder: 'es. 100' }] },
     assign: { title: 'Assegnamento', help: 'Calcola l\'espressione e mette il risultato nella variabile.', fields: [
       { key: 'variable', label: 'Variabile', type: 'lvalues', required: true, placeholder: 'es. x  oppure  v[i]', hint: 'Per una funzione che restituisce più valori: più variabili separate da virgola, es. min, max ← MinMax(v)' },
       { key: 'expression', label: 'Espressione', type: 'expr', required: true, placeholder: 'es. x + 1' }] },
@@ -979,7 +984,7 @@
       } else {
         const sv = c.value === undefined ? '∅' : E.literalOf(c.value); next.set(key, sv);
         const changed = prev.has(key) && prev.get(key) !== sv;
-        tb.append(h('tr', { class: changed ? 'changed' : '' }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null), h('td', null, TYPE_IT[c.type]), h('td', null, fmt(c.value))));
+        tb.append(h('tr', { class: changed ? 'changed' : '' }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null, c.constant ? h('span', { class: 'ptag', title: 'costante' }, 'cost') : null), h('td', null, TYPE_IT[c.type]), h('td', null, fmt(c.value))));
       }
     }
     for (const [k, v] of next) prev.set(k, v);
@@ -1321,7 +1326,7 @@
   function exportCss() {
     const cs = getComputedStyle(document.documentElement);
     const v = (n) => cs.getPropertyValue(n).trim();
-    let css = `text{font:${RenderLib.R_.font};fill:${v('--sh-text')};text-anchor:middle}.cline-t{text-anchor:start}.comment text{font-weight:400;font-style:italic}.badge{font-size:10px}.c-in .badge{fill:${v('--s-in')}}.c-out .badge{fill:${v('--s-out')}}.blabel{font-size:11px;font-weight:600;fill:${v('--muted')}}.flow{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ahead{fill:${v('--flow')}}.joint{fill:${v('--flow')}}.shape>path,.shape>rect{stroke-width:1.6}.inner{fill:none!important}.note{stroke-dasharray:4 3}svg{background:${v('--paper')}}`;
+    let css = `text{font:${RenderLib.R_.font};fill:${v('--sh-text')};text-anchor:middle}.cline-t{text-anchor:start}.comment text{font-weight:400;font-style:italic}.badge{font-size:10px}.c-in .badge{fill:${v('--s-in')}}.c-out .badge{fill:${v('--s-out')}}.c-decl .badge{fill:${v('--s-decl')}}.blabel{font-size:11px;font-weight:600;fill:${v('--muted')}}.flow{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ahead{fill:${v('--flow')}}.joint{fill:${v('--flow')}}.shape>path,.shape>rect{stroke-width:1.6}.inner{fill:none!important}.note{stroke-dasharray:4 3}svg{background:${v('--paper')}}`;
     for (const c of ['term', 'decl', 'assign', 'in', 'out', 'cond', 'loop', 'call', 'comment', 'brk', 'file', 'inc']) css += `.c-${c}>path,.c-${c}>rect{fill:${v('--f-' + c)};stroke:${v('--s-' + c)}}`;
     return css;
   }
