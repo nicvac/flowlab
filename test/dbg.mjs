@@ -1,0 +1,11 @@
+import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
+const browser = await chromium.launch();
+const page = await browser.newPage();
+page.on('pageerror', e => console.log('PAGEERR', e.message));
+await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(400);
+const ins = await page.$$('#chart .ins'); await ins[0].click(); await page.click('.insbtn[title="Input"]');
+await page.fill('#f_variable', 'numero');
+console.log('focused:', await page.evaluate(() => document.activeElement.id));
+await page.press('#f_variable','Enter'); await page.waitForTimeout(200);
+console.log('closed:', await page.$('.modal') === null, await page.evaluate(() => FlowLab.state.prog.functions[0].body.map(s=>s.kind)));
+await browser.close();

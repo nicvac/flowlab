@@ -1,0 +1,10 @@
+import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
+const browser = await chromium.launch(); const page = await browser.newPage();
+const errs=[]; page.on('pageerror', e => errs.push(e.message));
+await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
+await page.evaluate(() => FlowLab.loadText(`<?xml version="1.0"?><${ModelLib.FPRG_ROOT} fileversion="4.2"><attributes/><function name="Main" type="None" variable=""><parameters/><body><forward expression="50" pen="down"/><turn expression="90" rotate="left"/><output expression="&quot;ok&quot;" newline="True"/></body></function></${ModelLib.FPRG_ROOT}>`, 't.fprg'));
+console.log('toast:', await page.innerText('#toast'), '| blocchi:', await page.evaluate(() => FlowLab.state.prog.functions[0].body.map(s=>s.kind)));
+await page.click('#tabs [data-tab=code]'); await page.waitForTimeout(200);
+await page.screenshot({ path: 'test/notturtle.png' });
+console.log('tabs:', await page.$$eval('#tabs [role=tab]', b => b.map(x => x.textContent).join(',')), 'ERR', errs);
+await browser.close();
