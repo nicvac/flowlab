@@ -528,7 +528,10 @@ body.udragging, body.udragging .uml .ubox { cursor: grabbing; }
 .uml .urow { cursor: pointer; }
 .uml .urow:hover .uhit { fill: var(--line-soft); }
 .uml .urow.method:hover .uhit { fill: var(--accent-soft); }
-.uml .urow.ctor .umem { font-style: italic; }
+.uml .ubox.abstract .uname, .uml .urow.abs .umem { font-style: italic; }
+.uml .ubox.warn .ubg { stroke: var(--err); stroke-dasharray: 6 3; }
+.uml .uwarn circle { fill: var(--err); }
+.uml .uwarn text { font: 700 12px var(--font-ui); fill: #fff; text-anchor: middle; }
 .uml .urow.mainm .umem { font-weight: 600; }
 .uml .urow.sel .uhit { fill: var(--accent-soft); stroke: var(--sel); stroke-width: 1.4; }
 .uml .ubox:hover .ubg { stroke-width: 2.2; }
@@ -578,3 +581,10 @@ svg.wlinks { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1
 @media print { svg.wlinks { display: none; } }
 .wl-line { paint-order: stroke; }
 .wlink .wl-halo { fill: none; stroke: var(--paper); stroke-width: 6; stroke-linecap: round; opacity: .85; }
+
+/* metodo astratto: al posto del diagramma di flusso */
+.abscard { margin: 70px auto 0; max-width: 460px; padding: 22px 24px; background: var(--panel); border: 1.5px dashed var(--s-call); border-radius: 12px; box-shadow: var(--shadow); text-align: center; }
+.abscard h3 { margin: 0 0 4px; font: italic 700 17px var(--font-mono); color: var(--s-call); }
+.abscard .tag { display: inline-block; font: 700 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.abscard p { margin: 8px 0; color: var(--ink); }
+.abscard .impls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 12px; }

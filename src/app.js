@@ -141,6 +141,22 @@
     bar.hidden = !isOO() || st.uml;
     if (!bar.hidden) { const f = func(); const c = M.classOf(st.prog, f); $('#crumbWhere').textContent = `${c ? c.name : ''} › ${f === st.prog.functions[0] ? 'Main (inizio del programma)' : f.ctor ? 'costruttore' : f.name + '()'}`; }
   }
+  /* metodo astratto: niente diagramma di flusso, solo le versioni delle sottoclassi */
+  function abstractCard(f) {
+    st.ins = []; st.edges = [];
+    const c = M.classOf(st.prog, f);
+    const sig = (g) => g.params.map((p) => p.type.toLowerCase() + (p.array ? '[' + (p.dims || 1) : '')).join(',');
+    const impls = st.prog.functions.filter((g) => g !== f && !g.ctor && !g.abstract && g.name.toLowerCase() === f.name.toLowerCase() && sig(g) === sig(f) && M.isSubclass(st.prog, M.classOf(st.prog, g), c));
+    const card = h('div', { class: 'abscard', role: 'note' },
+      h('div', { class: 'tag' }, 'metodo astratto'),
+      h('h3', null, UmlLib.methodText(st.prog, f)),
+      h('p', null, `In ${c.name} questo metodo non ha un corpo: ogni sottoclasse concreta lo deve definire. Quando il programma lo chiama, viene eseguita la versione della classe dell'oggetto.`),
+      impls.length ? h('p', { class: 'muted small' }, 'Definito in:') : h('p', { class: 'muted small' }, 'Nessuna sottoclasse lo definisce ancora: aggiungi il metodo con lo stesso nome e gli stessi parametri in una sottoclasse.'),
+      h('div', { class: 'impls' },
+        ...impls.map((g) => h('button', { class: 'btn small', type: 'button', onclick: () => showFunc(st.prog.functions.indexOf(g)) }, `${M.classOf(st.prog, g).name}.${g.name}()`)),
+        h('button', { class: 'btn small', type: 'button', onclick: () => { if (!isRunning()) editFunction(st.prog.functions.indexOf(f)); } }, 'Modifica il metodo…')));
+    const holder = $('#chart'); holder.innerHTML = ''; holder.append(card);
+  }
   function showUml() { st.uml = true; st.sel = null; render(); $('#canvasWrap').scrollTo(0, 0); }
 
   /* --------------------------- Disegno ----------------------------------- */
@@ -153,6 +169,8 @@
       st.ins = []; st.edges = [];
       holder.innerHTML = out.svg;
       applyZoom();
+    } else if (isOO() && func().abstract) {
+      abstractCard(func());
     } else {
       const f = func();
       const c = isOO() ? M.classOf(st.prog, f) : null;
@@ -207,7 +225,7 @@
         const ms = M.membersOf(st.prog, c);
         for (const f of [...ms.filter((x) => x.ctor), ...ms.filter((x) => !x.ctor)]) {
           const i = st.prog.functions.indexOf(f);
-          og.append(h('option', { value: i, selected: !st.uml && i === st.fi }, i === 0 ? 'Inizio (principale)' : f.ctor ? `new ${c.name}(${f.params.map((p) => p.name).join(', ')}) · costruttore` : `${f.name}(${f.params.map((p) => p.name).join(', ')})`));
+          og.append(h('option', { value: i, selected: !st.uml && i === st.fi }, i === 0 ? 'Inizio (principale)' : f.ctor ? `new ${c.name}(${f.params.map((p) => p.name).join(', ')}) · costruttore` : `${f.name}(${f.params.map((p) => p.name).join(', ')})${f.abstract ? ' · astratto' : ''}`));
         }
         sel.append(og);
       }
@@ -326,7 +344,7 @@
     else toast('Blocco copiato: fai clic su una freccia e scegli «Incolla qui»');
   }
   function paste(target) {
-    if (!st.clip) return;
+    if (!st.clip || (!target && (isUml() || func().abstract))) return;
     const c = M.cloneStmt(st.clip);
     if (!target) {
       const f = st.sel && M.findStmt(st.prog, st.sel);
@@ -580,11 +598,18 @@
     if (ctor) nameW._input.disabled = true;
     const rets = ctor ? [] : M.rets(f).map((r) => ({ ...r }));
     body.append(nameW);
-    let visW = null, statW = null;
+    let visW = null, statW = null, absW = null;
     if (oo) {
       visW = field({ key: 'fvis', label: 'Accesso', type: 'seg', options: VIS_OPTS }, isNew ? 'public' : (f.visibility || 'public'));
       body.append(visW);
       if (!ctor) { statW = field({ key: 'fstatic', label: 'Statico: si chiama con ' + cls.name + '.nome(...) senza creare un oggetto', type: 'check' }, isNew ? cls === M.mainClass(st.prog) : !!f.static); body.append(statW); }
+      if (!ctor && cls !== M.mainClass(st.prog)) {
+        // astratto: senza corpo, lo definiscono le sottoclassi (la classe diventa astratta)
+        absW = field({ key: 'fabs', label: 'Astratto: senza corpo, lo definiscono le sottoclassi', type: 'check' }, !isNew && !!f.abstract);
+        body.append(absW);
+        const syncAbs = () => { const a = absW._get(); statW._input.disabled = a; if (a) statW._input.checked = false; };
+        absW._input.addEventListener('change', syncAbs); syncAbs();
+      }
     }
     const plist = h('div', { class: 'params' });
     const drawParams = () => {
@@ -626,7 +651,9 @@
         const name = ctor ? cls.name : nameW._get().trim();
         if (name.toLowerCase() === 'main') return 'Il nome Main è riservato al programma principale (Inizio)';
         if (E.BUILTINS[name.toLowerCase()]) return `${name} è già una funzione integrata`;
-        const isStatic = !ctor && !!(statW && statW._get());
+        const isAbs = !!(absW && absW._get());
+        const isStatic = !ctor && !isAbs && !!(statW && statW._get());
+        if (isAbs && visW && visW._get() === 'private') return 'Un metodo astratto non può essere privato: le sottoclassi devono poterlo ridefinire';
         if (oo) {
           const sigOf = (list) => list.map((p) => p.type.toLowerCase() + (p.array ? '[' + (p.dims || 1) : '')).join(',');
           if (!ctor && name.toLowerCase() === cls.name.toLowerCase()) return `${name} è il nome della classe: per un costruttore usa «Nuovo costruttore»`;
@@ -657,7 +684,8 @@
         mutate(() => {
           const target = isNew ? M.makeFunction(name, { params }) : f;
           Object.assign(target, { name, params });
-          if (oo) Object.assign(target, { cls: cls.id, visibility: visW ? visW._get() : 'public', static: isStatic || target === st.prog.functions[0], ctor });
+          if (oo) Object.assign(target, { cls: cls.id, visibility: visW ? visW._get() : 'public', static: isStatic || target === st.prog.functions[0], ctor, abstract: isAbs });
+          if (isAbs && !cls.abstract) { cls.abstract = true; setTimeout(() => toast(`${cls.name} è diventata una classe astratta: contiene un metodo astratto`), 0); }
           M.setRets(target, rets);
           // dichiara le variabili restituite che non sono ancora dichiarate (raggruppate per tipo)
           const known = new Set(params.map((p) => p.name));
@@ -735,7 +763,9 @@
     const nameW = field({ key: 'cname', label: 'Nome della classe', type: 'ident', required: true, placeholder: 'es. Punto', hint: 'Per convenzione inizia con la lettera maiuscola' }, c ? c.name : '');
     const banned = c ? [c, ...descendants(c)] : [];
     const parW = field({ key: 'cpar', label: 'Eredita da (classe madre)', type: 'select', options: [['', '— nessuna —'], ...st.prog.classes.filter((k) => !banned.includes(k)).map((k) => [k.name, k.name])] }, c ? (c.parent || '') : '');
-    const body = h('div', { class: 'fields' }, h('p', { class: 'help' }, 'Una classe descrive un tipo di oggetti: i loro attributi (i dati) e i metodi (le operazioni). Con l\'ereditarietà la classe riceve attributi e metodi della classe madre e può ridefinire i metodi.'), nameW, parW);
+    const isMainCls = c && c === M.mainClass(st.prog);
+    const absW = isMainCls ? null : field({ key: 'cabs', label: 'Astratta: non si creano oggetti di questa classe, solo delle sue sottoclassi', type: 'check' }, c ? !!c.abstract : false);
+    const body = h('div', { class: 'fields' }, h('p', { class: 'help' }, 'Una classe descrive un tipo di oggetti: i loro attributi (i dati) e i metodi (le operazioni). Con l\'ereditarietà la classe riceve attributi e metodi della classe madre e può ridefinire i metodi.'), nameW, parW, absW);
     openModal({
       title: isNew ? 'Nuova classe' : 'Modifica classe ' + c.name, body, okText: isNew ? 'Crea' : 'Salva',
       onOk: () => {
@@ -744,6 +774,8 @@
         if (E.BUILTINS[name.toLowerCase()]) return `${name} è il nome di una funzione integrata`;
         if (st.prog.classes.some((k) => k !== c && k.name.toLowerCase() === name.toLowerCase())) return `Esiste già una classe chiamata ${name}`;
         const parent = parW._get();
+        const abs = !!(absW && absW._get());
+        if (c && !abs) { const am = M.membersOf(st.prog, c).filter((f) => f.abstract); if (am.length) return `${c.name} ha metodi astratti (${am.map((f) => f.name + '()').join(', ')}): per renderla concreta togli prima «astratto» da quei metodi`; }
         // gli attributi non possono avere lo stesso nome di quelli della nuova classe madre
         if (parent) {
           const up = new Set(); M.chainOf(st.prog, M.classByName(st.prog, parent)).forEach((k) => k.attributes.forEach((a) => up.add(a.name.toLowerCase())));
@@ -751,10 +783,10 @@
         }
         mutate(() => {
           if (isNew) {
-            const nc = M.makeClass(name, Object.assign({ parent }, UmlLib.freeSpot(st.prog, pos)));
+            const nc = M.makeClass(name, Object.assign({ parent, abstract: abs }, UmlLib.freeSpot(st.prog, pos)));
             st.prog.classes.push(nc);
             st.usel = { cls: nc.id, kind: 'class' };
-          } else { renameClass(c, name); c.parent = parent; }
+          } else { renameClass(c, name); c.parent = parent; c.abstract = abs; }
         });
         return true;
       },
@@ -1876,7 +1908,7 @@
       ['p ← new Punto(1, 2)', 'Crea un oggetto: esegue il costruttore con quei parametri'], ['p.x   p.sposta(3, 4)', 'Attributo e metodo di un oggetto'],
       ['this.x', 'Attributo dell\'oggetto su cui si sta lavorando (in un metodo basta x)'], ['Punto.contatore   Punto.crea()', 'Attributo o metodo statico: si usa con il nome della classe'],
       ['super(nome)', 'Blocco Chiamata, primo blocco del costruttore: esegue il costruttore della classe madre'], ['super.descrivi()', 'Esegue la versione del metodo della classe madre'],
-      ['null   p = null', 'Nessun oggetto: si può assegnare e confrontare'], ['+  -  #', 'Accesso pubblico, privato, protetto (controllato durante l\'esecuzione)'],
+      ['null   p = null', 'Nessun oggetto: si può assegnare e confrontare'], ['«abstract»', 'Classe astratta: non si creano oggetti. Un metodo astratto non ha corpo e lo definiscono le sottoclassi'], ['+  -  #', 'Accesso pubblico, privato, protetto (controllato durante l\'esecuzione)'],
     ].map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
     const keys = [['F5  ·  Ctrl+Invio', 'Esegui / continua'], ['F10', 'Passo successivo (entra nelle funzioni chiamate)'], ['F8', 'Passo sopra (esegue la chiamata senza entrarci)'], ['Esc', 'Chiudi finestre e menu'], ['Invio  ·  doppio clic', 'Modifica il blocco selezionato'], ['Canc', 'Elimina il blocco selezionato'], ['Ctrl+C  X  V  D', 'Copia, taglia, incolla, duplica'], ['Ctrl+Z  ·  Ctrl+Y', 'Annulla, ripeti'], ['Ctrl+rotella', 'Zoom']]
       .map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));

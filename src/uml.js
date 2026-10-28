@@ -34,13 +34,15 @@ const UmlLib = (() => {
       const members = ModelLib.membersOf(prog, c);
       const methods = [...members.filter((f) => f.ctor), ...members.filter((f) => !f.ctor)];
       const attrs = c.attributes.map((a, i) => ({ text: attrText(a), i, st: !!a.static }));
-      const meths = methods.map((f) => ({ text: methodText(prog, f), f, st: !!f.static, ctor: !!f.ctor, main: f === prog.functions[0] }));
+      const meths = methods.map((f) => ({ text: methodText(prog, f), f, st: !!f.static, ctor: !!f.ctor, abs: !!f.abstract, main: f === prog.functions[0] }));
+      // classe concreta che non definisce metodi astratti ereditati
+      const missing = c.abstract ? [] : ModelLib.missingAbstract(prog, c);
       let w = Math.max(MINW, tw(c.name, FN) + PADX * 2 + 24, ...attrs.map((r) => tw(r.text, FM) + PADX * 2), ...meths.map((r) => tw(r.text, FM) + PADX * 2));
       w = Math.ceil(Math.min(MAXW, w));
-      const head = HEAD + (c === main ? STEREO : 0);
+      const head = HEAD + (c === main || c.abstract ? STEREO : 0);
       const ah = Math.max(1, attrs.length) * ROW + CPAD * 2 - (attrs.length ? 0 : ROW - 10);
       const mh = Math.max(1, meths.length) * ROW + CPAD * 2 - (meths.length ? 0 : ROW - 10);
-      boxes.set(c.id, { c, x: c.x || 0, y: c.y || 0, w, h: head + ah + mh, head, ah, mh, attrs, meths, main: c === main });
+      boxes.set(c.id, { c, x: c.x || 0, y: c.y || 0, w, h: head + ah + mh, head, ah, mh, attrs, meths, main: c === main, missing });
     }
     return boxes;
   }
@@ -107,13 +109,15 @@ const UmlLib = (() => {
     for (const b of boxes.values()) {
       const { c, x, y, w } = b;
       const isSel = sel && sel.cls === c.id;
-      let g = `<g class="ubox${isSel && sel.kind === 'class' ? ' sel' : ''}${isSel ? ' cur' : ''}${b.main ? ' main' : ''}" data-cls="${c.id}">`;
-      g += `<title>${esc(c.name)}${c.parent ? ' — eredita da ' + esc(c.parent) : ''}: doppio clic sul nome per modificarla, clic destro per aggiungere membri</title>`;
+      const warn = b.missing.length ? `${c.name} non definisce ${b.missing.map((m) => m.f.name + '()').join(', ')} (${b.missing.length === 1 ? 'astratto' : 'astratti'} in ${[...new Set(b.missing.map((m) => m.owner.name))].join(', ')}): aggiungi ${b.missing.length === 1 ? 'il metodo' : 'i metodi'} oppure rendi astratta la classe` : '';
+      let g = `<g class="ubox${isSel && sel.kind === 'class' ? ' sel' : ''}${isSel ? ' cur' : ''}${b.main ? ' main' : ''}${c.abstract ? ' abstract' : ''}${warn ? ' warn' : ''}" data-cls="${c.id}">`;
+      g += `<title>${c.abstract ? 'Classe astratta ' : ''}${esc(c.name)}${c.parent ? ' — eredita da ' + esc(c.parent) : ''}${warn ? ' — ⚠ ' + esc(warn) : ''}: doppio clic sul nome per modificarla, clic destro per aggiungere membri</title>`;
       g += `<rect class="ubg" x="${x}" y="${y}" width="${w}" height="${b.h}" rx="6"/>`;
       g += `<path class="uheadbg" d="M${x} ${y + b.head}V${y + 6}Q${x} ${y} ${x + 6} ${y}H${x + w - 6}Q${x + w} ${y} ${x + w} ${y + 6}V${y + b.head}Z"/>`;
       g += `<rect class="uhit head" data-part="head" x="${x}" y="${y}" width="${w}" height="${b.head}"/>`;
-      if (b.main) g += `<text class="ustereo" x="${x + w / 2}" y="${y + 15}">«principale»</text>`;
+      if (b.main || c.abstract) g += `<text class="ustereo" x="${x + w / 2}" y="${y + 15}">${b.main ? '«principale»' : '«abstract»'}</text>`;
       g += `<text class="uname" x="${x + w / 2}" y="${y + b.head - 13}">${esc(c.name)}</text>`;
+      if (warn) g += `<g class="uwarn"><circle cx="${x + 15}" cy="${y + b.head / 2}" r="8"/><text x="${x + 15}" y="${y + b.head / 2 + 4}">!</text></g>`;
       // attributi
       let yy = y + b.head;
       g += `<path class="usep" d="M${x} ${yy}H${x + w}"/>`;
@@ -129,8 +133,8 @@ const UmlLib = (() => {
       b.meths.forEach((r, k) => {
         const ry = yy + CPAD + k * ROW;
         const on = isSel && sel.kind === 'method' && sel.fid === r.f.id;
-        const tip = r.ctor ? 'costruttore' : r.main ? 'punto di partenza del programma' : r.st ? 'metodo statico' : 'metodo';
-        g += `<g class="urow method${on ? ' sel' : ''}${r.ctor ? ' ctor' : ''}${r.main ? ' mainm' : ''}" data-kind="method" data-fid="${r.f.id}"><rect class="uhit" x="${x + 2}" y="${ry}" width="${w - 4}" height="${ROW}" rx="3"/><text class="umem" x="${x + PADX}" y="${ry + ROW / 2 + 4.5}"${r.st ? ' text-decoration="underline"' : ''}>${esc(RenderLib.fitText(r.text, w - PADX * 2, FM))}</text><title>${esc(r.text)} (${tip}) — doppio clic per aprire il diagramma di flusso</title></g>`;
+        const tip = r.ctor ? 'costruttore' : r.main ? 'punto di partenza del programma' : r.st ? 'metodo statico' : r.abs ? 'metodo astratto, senza corpo: lo definiscono le sottoclassi' : 'metodo';
+        g += `<g class="urow method${on ? ' sel' : ''}${r.ctor ? ' ctor' : ''}${r.abs ? ' abs' : ''}${r.main ? ' mainm' : ''}" data-kind="method" data-fid="${r.f.id}"><rect class="uhit" x="${x + 2}" y="${ry}" width="${w - 4}" height="${ROW}" rx="3"/><text class="umem" x="${x + PADX}" y="${ry + ROW / 2 + 4.5}"${r.st ? ' text-decoration="underline"' : ''}>${esc(RenderLib.fitText(r.text, w - PADX * 2, FM))}</text><title>${esc(r.text)} (${tip})${r.abs ? '' : ' — doppio clic per aprire il diagramma di flusso'}</title></g>`;
       });
       g += addBtn(x + w - 13, yy, 'method', 'Aggiungi un metodo o un costruttore');
       g += '</g>';

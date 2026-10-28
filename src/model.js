@@ -64,7 +64,7 @@ const VISIBILITY = { public: '+', private: '-', protected: '#' };
 const VIS_IT = { public: 'pubblico', private: 'privato', protected: 'protetto' };
 
 function makeClass(name, props) {
-  return Object.assign({ id: newId(), name, parent: '', attributes: [], x: 40, y: 40 }, props || {});
+  return Object.assign({ id: newId(), name, parent: '', abstract: false, attributes: [], x: 40, y: 40 }, props || {});
 }
 function makeAttribute(props) {
   return Object.assign({ name: '', type: 'Integer', array: false, size: '', visibility: 'private', static: false, init: '' }, props || {});
@@ -105,10 +105,17 @@ function isTrivialOO(prog) {
   if (!hasClasses(prog)) return true;
   if (prog.classes.length !== 1) return false;
   const c = prog.classes[0];
-  if (c.parent || c.attributes.length) return false;
+  if (c.parent || c.abstract || c.attributes.length) return false;
   return prog.functions.every((f) => f.cls === c.id && f.static && !f.ctor && (f.visibility || 'public') === 'public');
 }
 /* come sopra e con il nome predefinito: si salva nel formato standard senza perdere nulla */
+/* metodi astratti ereditati e non ancora definiti: [{ f, owner }] (per una classe concreta devono essere zero) */
+function missingAbstract(prog, c) {
+  const sig = (f) => f.name.toLowerCase() + '(' + f.params.map((p) => p.type.toLowerCase() + (p.array ? '[' + (p.dims || 1) : '')).join(',') + ')';
+  const best = new Map(); // firma -> versione più derivata
+  for (const k of chainOf(prog, c)) for (const f of membersOf(prog, k)) if (!f.ctor && !f.static && !best.has(sig(f))) best.set(sig(f), { f, owner: k });
+  return [...best.values()].filter((x) => x.f.abstract);
+}
 const isPlainOO = (prog) => isTrivialOO(prog) && (!hasClasses(prog) || prog.classes[0].name === defaultClassName(prog));
 function unwrapClasses(prog) {
   delete prog.classes;
@@ -169,7 +176,7 @@ function parseFprg(text) {
   if (clsEl) {
     prog.classes = [];
     for (const c of clsEl.children) if (c.nodeName.toLowerCase() === 'class') {
-      const cl = makeClass((c.getAttribute('name') || '').trim(), { parent: (c.getAttribute('parent') || '').trim(), x: +c.getAttribute('x') || 40, y: +c.getAttribute('y') || 40 });
+      const cl = makeClass((c.getAttribute('name') || '').trim(), { parent: (c.getAttribute('parent') || '').trim(), abstract: boolAttr(c.getAttribute('abstract'), false), x: +c.getAttribute('x') || 40, y: +c.getAttribute('y') || 40 });
       if (!cl.name || _classNames.has(cl.name.toLowerCase())) continue;
       _classNames.set(cl.name.toLowerCase(), cl.name);
       prog.classes.push(cl);
@@ -205,6 +212,7 @@ function parseFprg(text) {
         f.visibility = VISIBILITY[vis] ? vis : 'public';
         f.static = boolAttr(el.getAttribute('flowlab-static'), false);
         f.ctor = boolAttr(el.getAttribute('flowlab-ctor'), false);
+        f.abstract = !f.ctor && !f.static && boolAttr(el.getAttribute('flowlab-abstract'), false);
       }
       // estensione FlowLab: più valori restituiti, "nome:Tipo;nome:Tipo"
       const multi = el.getAttribute('flowlab-returns');
@@ -355,7 +363,7 @@ function serializeFprg(prog) {
   if (oo) {
     L.push('    <flowlab-classes>');
     for (const c of prog.classes) {
-      const head = `        <class name="${xmlEsc(c.name)}" parent="${xmlEsc(c.parent || '')}" x="${Math.round(c.x || 0)}" y="${Math.round(c.y || 0)}"`;
+      const head = `        <class name="${xmlEsc(c.name)}" parent="${xmlEsc(c.parent || '')}"${c.abstract ? ' abstract="True"' : ''} x="${Math.round(c.x || 0)}" y="${Math.round(c.y || 0)}"`;
       if (!c.attributes.length) { L.push(head + '/>'); continue; }
       L.push(head + '>');
       for (const a of c.attributes) L.push(`            <attribute name="${xmlEsc(a.name)}" type="${xmlEsc(a.type)}" array="${TF(a.array)}" size="${xmlEsc(a.array ? fgExpr(a.size) : '')}" visibility="${a.visibility}" static="${TF(a.static)}" init="${xmlEsc(fgExpr(a.init || ''))}"/>`);
@@ -366,7 +374,7 @@ function serializeFprg(prog) {
   for (const f of prog.functions) {
     const rs = rets(f);
     let extra = rs.length > 1 ? ` flowlab-returns="${xmlEsc(rs.map((r) => r.name + ':' + r.type).join(';'))}"` : '';
-    if (oo) { const c = classOf(prog, f); extra += ` flowlab-class="${xmlEsc(c ? c.name : '')}" flowlab-visibility="${f.visibility || 'public'}" flowlab-static="${TF(!!f.static)}"${f.ctor ? ' flowlab-ctor="True"' : ''}`; }
+    if (oo) { const c = classOf(prog, f); extra += ` flowlab-class="${xmlEsc(c ? c.name : '')}" flowlab-visibility="${f.visibility || 'public'}" flowlab-static="${TF(!!f.static)}"${f.ctor ? ' flowlab-ctor="True"' : ''}${f.abstract ? ' flowlab-abstract="True"' : ''}`; }
     // per le procedure si conserva il nome eventualmente lasciato in "variable" da altri editor
     L.push(`    <function name="${xmlEsc(f.name)}" type="${rs.length ? rs[0].type : 'None'}" variable="${xmlEsc(rs.length ? rs[0].name : (f.variable || ''))}"${extra}>`);
     if (f.params.length) {
@@ -462,5 +470,5 @@ function isIncomplete(s) {
   }
 }
 
-const ModelLib = { FPRG_ROOT, KINDS, VISIBILITY, VIS_IT, makeClass, makeAttribute, hasClasses, classById, classByName, classOf, mainClass, membersOf, chainOf, isSubclass, defaultClassName, wrapInClass, isTrivialOO, isPlainOO, unwrapClasses, typeList, extendedFeatures, rets, setRets, fgExpr, newId, makeStmt, makeFunction, newProgram, cloneStmt, reId, walk, findStmt, parseFprg, serializeFprg, isIncomplete, normType };
+const ModelLib = { FPRG_ROOT, KINDS, VISIBILITY, VIS_IT, makeClass, makeAttribute, hasClasses, classById, classByName, classOf, mainClass, membersOf, chainOf, isSubclass, defaultClassName, wrapInClass, isTrivialOO, isPlainOO, missingAbstract, unwrapClasses, typeList, extendedFeatures, rets, setRets, fgExpr, newId, makeStmt, makeFunction, newProgram, cloneStmt, reId, walk, findStmt, parseFprg, serializeFprg, isIncomplete, normType };
 if (typeof module !== 'undefined') module.exports = ModelLib;

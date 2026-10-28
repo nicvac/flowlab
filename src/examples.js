@@ -38,11 +38,11 @@ const Examples = (() => {
     const main = ModelLib.wrapInClass(p);
     Object.assign(main, mainPos || {});
     for (const [cn, c] of Object.entries(classes)) {
-      p.classes.push(ModelLib.makeClass(cn, { parent: c.parent || '', x: c.x, y: c.y, attributes: (c.attrs || []).map(([n, t, vis, o]) => ModelLib.makeAttribute(Object.assign({ name: n, type: t, visibility: vis || 'private' }, o || {}))) }));
+      p.classes.push(ModelLib.makeClass(cn, { parent: c.parent || '', abstract: !!c.abstract, x: c.x, y: c.y, attributes: (c.attrs || []).map(([n, t, vis, o]) => ModelLib.makeAttribute(Object.assign({ name: n, type: t, visibility: vis || 'private' }, o || {}))) }));
     }
     for (const m of methods) {
       const c = p.classes.find((k) => k.name === m.cls) || main;
-      const f = ModelLib.makeFunction(m.ctor ? c.name : m.name, { params: (m.params || []).map(([n, t, a]) => ({ name: n, type: t, array: !!a })), body: m.body || [], cls: c.id, visibility: m.vis || 'public', static: !!m.static, ctor: !!m.ctor });
+      const f = ModelLib.makeFunction(m.ctor ? c.name : m.name, { params: (m.params || []).map(([n, t, a]) => ({ name: n, type: t, array: !!a })), body: m.body || [], cls: c.id, visibility: m.vis || 'public', static: !!m.static, ctor: !!m.ctor, abstract: !!m.abstract });
       if (m.rets) ModelLib.setRets(f, m.rets.map(([n, t]) => ({ name: n, type: t })));
       p.functions.push(f);
     }
@@ -205,8 +205,8 @@ const Examples = (() => {
       ], { x: 40, y: 60 }),
     },
     {
-      id: 'forme', title: 'Forme geometriche (ereditarietà e polimorfismo)', tags: 'Oggetti · super · override',
-      make: () => ooProg('Forme geometriche', 'Rettangolo, Quadrato e Cerchio ereditano da Forma e ridefiniscono area e perimetro. Il Disegno contiene un array di forme: ogni forma usa la propria versione dei metodi.', [
+      id: 'forme', title: 'Forme geometriche (ereditarietà e polimorfismo)', tags: 'Oggetti · astratta · super',
+      make: () => ooProg('Forme geometriche', 'Forma è una classe astratta: area e perimetro non hanno un corpo e li definiscono Rettangolo, Quadrato e Cerchio. Il Disegno contiene un array di forme: ogni forma usa la propria versione dei metodi.', [
         X.decl('d', 'Disegno'),
         X.set('d', 'new Disegno()'),
         X.call('d.aggiungi(new Rettangolo(3, 2))'),
@@ -215,15 +215,15 @@ const Examples = (() => {
         X.call('d.stampa()'),
         X.out('"Area totale: " & ToFixed(d.areaTotale(), 2)'),
       ], {
-        Forma: { x: 330, y: 40, attrs: [['nome', 'String', 'protected']] },
+        Forma: { abstract: true, x: 330, y: 40, attrs: [['nome', 'String', 'protected']] },
         Rettangolo: { parent: 'Forma', x: 140, y: 300, attrs: [['base', 'Real'], ['altezza', 'Real']] },
         Cerchio: { parent: 'Forma', x: 540, y: 300, attrs: [['raggio', 'Real']] },
         Quadrato: { parent: 'Rettangolo', x: 140, y: 560 },
         Disegno: { x: 780, y: 40, attrs: [['forme', 'Forma', 'private', { array: true, size: '10' }], ['quante', 'Integer', 'private', { init: '0' }]] },
       }, [
         { cls: 'Forma', ctor: true, params: [['n', 'String']], body: [X.set('nome', 'n')] },
-        { cls: 'Forma', name: 'area', rets: [['a', 'Real']], body: [X.decl('a', 'Real'), X.set('a', '0')] },
-        { cls: 'Forma', name: 'perimetro', rets: [['p', 'Real']], body: [X.decl('p', 'Real'), X.set('p', '0')] },
+        { cls: 'Forma', name: 'area', abstract: true, rets: [['a', 'Real']] },
+        { cls: 'Forma', name: 'perimetro', abstract: true, rets: [['p', 'Real']] },
         { cls: 'Forma', name: 'descrivi', rets: [['testo', 'String']], body: [X.decl('testo', 'String'), X.set('testo', 'nome & ": area " & ToFixed(area(), 2) & ", perimetro " & ToFixed(perimetro(), 2)')] },
         { cls: 'Rettangolo', ctor: true, params: [['b', 'Real'], ['h', 'Real']], body: [X.call('super("rettangolo")'), X.set('base', 'b'), X.set('altezza', 'h')] },
         { cls: 'Rettangolo', name: 'area', rets: [['a', 'Real']], body: [X.decl('a', 'Real'), X.set('a', 'base * altezza')] },
@@ -236,6 +236,29 @@ const Examples = (() => {
         { cls: 'Disegno', name: 'areaTotale', rets: [['t', 'Real']], body: [X.decl('t', 'Real'), X.decl('i', 'Integer'), X.set('t', '0'), X.for('i', '0', 'quante - 1', [X.set('t', 't + forme[i].area()')])] },
         { cls: 'Disegno', name: 'stampa', body: [X.decl('i', 'Integer'), X.for('i', '0', 'quante - 1', [X.out('forme[i].descrivi()')])] },
       ], { x: 780, y: 330 }),
+    },
+    {
+      id: 'animali', title: 'Animali (classi e metodi astratti)', tags: 'Oggetti · astratta · override',
+      make: () => ooProg('Animali', 'Animale è astratta: ogni animale fa un verso, ma solo Cane e Gatto sanno quale. presentati() è scritto una volta sola in Animale e usa il verso giusto per ogni oggetto.', [
+        X.com('Prova ad aggiungere il blocco  a ← new Animale("x") : Animale è astratta e il programma si ferma con un errore.'),
+        X.decl('a, b', 'Animale'),
+        X.set('a', 'new Cane("Fido")'),
+        X.set('b', 'new Gatto("Micia")'),
+        X.out('a.presentati()'),
+        X.out('b.presentati()'),
+      ], {
+        Animale: { abstract: true, x: 340, y: 40, attrs: [['nome', 'String', 'protected']] },
+        Cane: { parent: 'Animale', x: 220, y: 290 },
+        Gatto: { parent: 'Animale', x: 470, y: 290 },
+      }, [
+        { cls: 'Animale', ctor: true, params: [['n', 'String']], body: [X.set('nome', 'n')] },
+        { cls: 'Animale', name: 'verso', abstract: true, rets: [['v', 'String']] },
+        { cls: 'Animale', name: 'presentati', rets: [['testo', 'String']], body: [X.decl('testo', 'String'), X.set('testo', '"Sono " & nome & " e faccio " & verso()')] },
+        { cls: 'Cane', ctor: true, params: [['n', 'String']], body: [X.call('super(n)')] },
+        { cls: 'Cane', name: 'verso', rets: [['v', 'String']], body: [X.decl('v', 'String'), X.set('v', '"Bau"')] },
+        { cls: 'Gatto', ctor: true, params: [['n', 'String']], body: [X.call('super(n)')] },
+        { cls: 'Gatto', name: 'verso', rets: [['v', 'String']], body: [X.decl('v', 'String'), X.set('v', '"Miao"')] },
+      ], { x: 40, y: 60 }),
     },
     {
       id: 'lista', title: 'Lista collegata (oggetti che puntano ad altri oggetti)', tags: 'Oggetti · null · associazione',

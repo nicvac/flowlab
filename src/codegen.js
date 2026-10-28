@@ -232,6 +232,31 @@ function ucall(entry, sc, self) {
   if (!sc.ooMode || !entry || !entry.owner) return '';
   return entry.f.static ? entry.owner.name + '.' : self + '.';
 }
+/* dichiarazione seguita subito dall'assegnazione della stessa variabile: diventa una
+   dichiarazione con valore iniziale (double a = 0.0;). Restituisce l'espressione o null. */
+function initOf(s, next) {
+  if (!next || next.kind !== 'assign' || s.array) return null;
+  const names = s.name.split(',').map((x) => x.trim()).filter(Boolean);
+  if (names.length !== 1) return null;
+  const tg = targetsOf(next); if (tg.length !== 1) return null;
+  const lv = strip(tryParse(tg[0]));
+  const low = names[0].toLowerCase();
+  if (!lv || lv.k !== 'var' || lv.indices || lv.name.toLowerCase() !== low) return null;
+  const e = tryParse(next.expression); if (!e) return null;
+  let uses = false; // a ← a + 1 non si può unire
+  const visit = (n) => { if (!n || typeof n !== 'object' || uses) return; if (n.k === 'var' && n.name.toLowerCase() === low) uses = true; Object.values(n).forEach(visit); };
+  visit(e);
+  return uses ? null : next.expression;
+}
+/* valore per una variabile reale: un intero scritto (0, -3) diventa 0.0, -3.0 */
+function asReal(src, type, E, sc) {
+  const s = E(src, sc);
+  if (type !== 'Real') return s;
+  const n = strip(tryParse(src));
+  const intLit = (x) => !!x && x.k === 'num' && x.t === 'Integer';
+  return n && (intLit(n) || (n.k === 'un' && n.op === 'neg' && intLit(strip(n.e)))) ? s + '.0' : s;
+}
+
 /* tipo di un riferimento modificabile (variabile, elemento, attributo) */
 function lvTypeOf(v, sc) { const t = tryParse(v); const x = t && strip(t); return x ? _CE.inferType(x, sc) : 'String'; }
 
@@ -254,7 +279,7 @@ class Out {
 const TIPO = { Integer: 'intero', Real: 'reale', String: 'stringa', Boolean: 'booleano' };
 LANGS.pseudo = {
   label: 'Pseudocodice', ext: 'txt', comment: '//',
-  keywords: ['ALGORITMO', 'FINE', 'FUNZIONE', 'PROCEDURA', 'VARIABILI', 'SE', 'ALLORA', 'ALTRIMENTI', 'MENTRE', 'ESEGUI', 'PER', 'DA', 'A', 'PASSO', 'RIPETI', 'LEGGI', 'SCRIVI', 'CHIAMA', 'RESTITUISCI', 'AND', 'OR', 'NOT', 'MOD', 'VERO', 'FALSO', 'DICHIARA', 'ARRAY', 'DI', 'INDIETRO', 'APRI', 'CHIUDI', 'IN', 'LETTURA', 'SCRITTURA', 'CLASSE', 'EREDITA', 'ATTRIBUTI', 'METODO', 'STATICO', 'COSTRUTTORE', 'NUOVO', 'QUESTO', 'NULLO', 'SUPER'],
+  keywords: ['ALGORITMO', 'FINE', 'FUNZIONE', 'PROCEDURA', 'VARIABILI', 'SE', 'ALLORA', 'ALTRIMENTI', 'MENTRE', 'ESEGUI', 'PER', 'DA', 'A', 'PASSO', 'RIPETI', 'LEGGI', 'SCRIVI', 'CHIAMA', 'RESTITUISCI', 'AND', 'OR', 'NOT', 'MOD', 'VERO', 'FALSO', 'DICHIARA', 'ARRAY', 'DI', 'INDIETRO', 'APRI', 'CHIUDI', 'IN', 'LETTURA', 'SCRITTURA', 'CLASSE', 'EREDITA', 'ATTRIBUTI', 'METODO', 'STATICO', 'COSTRUTTORE', 'NUOVO', 'QUESTO', 'NULLO', 'SUPER', 'ASTRATTA', 'ASTRATTO'],
   generate(prog) {
     const L = {
       idx: idxComma, str: (s) => '"' + s + '"', T: 'VERO', F: 'FALSO', pi: 'π', not: 'NOT ', notPrec: P.un, or: 'OR', and: 'AND', mod: 'MOD', pow: '^',
@@ -302,7 +327,7 @@ LANGS.pseudo = {
       const V = (v) => _CM.VISIBILITY[v || 'public'];
       OO.ordered(prog, true).forEach((c, ci) => {
         if (ci) o.line('');
-        o.line(`CLASSE ${c.name}${c.parent ? ' EREDITA DA ' + c.parent : ''}${c === main ? '   // classe principale: il programma parte da Main' : ''}`);
+        o.line(`${c.abstract ? 'CLASSE ASTRATTA' : 'CLASSE'} ${c.name}${c.parent ? ' EREDITA DA ' + c.parent : ''}${c === main ? '   // classe principale: il programma parte da Main' : ''}`);
         o.in();
         if (c.attributes.length) {
           o.line('ATTRIBUTI'); o.in();
@@ -316,7 +341,8 @@ LANGS.pseudo = {
           const sc = buildScope(prog, f);
           const rl = _CM.rets(f);
           o.line('');
-          const kw = f.ctor ? 'COSTRUTTORE' : (f.static ? 'METODO STATICO' : 'METODO');
+          const kw = f.ctor ? 'COSTRUTTORE' : (f.static ? 'METODO STATICO' : f.abstract ? 'METODO ASTRATTO' : 'METODO');
+          if (f.abstract) { o.line(`${kw} ${V(f.visibility)} ${f.name}(${psig(f)})${rl.length ? ' : ' + rl.map((r) => T(r.type)).join(', ') : ''}   // senza corpo: lo definiscono le sottoclassi`); continue; }
           o.line(`${kw} ${V(f.visibility)} ${f.name}(${psig(f)})${rl.length ? ' : ' + rl.map((r) => T(r.type)).join(', ') : ''}`);
           o.in(); block(f.body, sc);
           if (rl.length) o.line(`RESTITUISCI ${rl.map((r) => r.name).join(', ')}`);
@@ -347,7 +373,7 @@ LANGS.pseudo = {
 /* =============================== PYTHON ================================== */
 LANGS.python = {
   label: 'Python', ext: 'py', comment: '#',
-  keywords: ['def', 'return', 'if', 'elif', 'else', 'while', 'for', 'in', 'range', 'and', 'or', 'not', 'True', 'False', 'import', 'break', 'print', 'input', 'int', 'float', 'str', 'len', 'None', 'pass', 'global', 'open', 'with', 'as', 'class', 'self', 'super', 'is', 'elif', 'staticmethod', 'isinstance', 'raise', 'type', 'args'],
+  keywords: ['def', 'return', 'if', 'elif', 'else', 'while', 'for', 'in', 'range', 'and', 'or', 'not', 'True', 'False', 'import', 'break', 'print', 'input', 'int', 'float', 'str', 'len', 'None', 'pass', 'global', 'open', 'with', 'as', 'class', 'self', 'super', 'is', 'elif', 'staticmethod', 'isinstance', 'raise', 'type', 'args', 'abstractmethod', 'from'],
   generate(prog) {
     const used = new Set();
     const L = {
@@ -403,10 +429,13 @@ LANGS.python = {
     const body = new Out();
     const block = (stmts, sc, o) => {
       const start = o.lines.length;
-      for (const s of stmts) {
+      for (let si = 0; si < stmts.length; si++) {
+        const s = stmts[si];
         switch (s.kind) {
           case 'const': o.line(`${vname(s.name.trim(), sc)} = ${E(s.expression, sc)}  # costante`); break;
-          case 'declare':
+          case 'declare': {
+            const init = initOf(s, stmts[si + 1]);
+            if (init != null) { o.line(`${s.name.trim()} = ${asReal(init, s.type, E, sc)}`); si++; break; }
             for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) {
               if (!s.array) { o.line(`${nm} = ${DEFT(s.type)}`); continue; }
               const D = dimsOf(s, E, sc);
@@ -415,7 +444,8 @@ LANGS.python = {
               o.line(`${nm} = ${init}`);
             }
             break;
-          case 'assign': o.line(`${targetsOf(s).map((x) => E(x, sc)).join(', ')} = ${E(s.expression, sc)}`); break;
+          }
+          case 'assign': { const tg = targetsOf(s); o.line(`${tg.map((x) => E(x, sc)).join(', ')} = ${tg.length === 1 ? asReal(s.expression, lvType(s.variable, sc), E, sc) : E(s.expression, sc)}`); break; }
           case 'input': o.line(`${E(s.variable, sc)} = ${CAST[lvType(s.variable, sc)]}`); break;
           case 'output': o.line(s.newline ? `print(${E(s.expression, sc)})` : `print(${E(s.expression, sc)}, end="")`); break;
           case 'if': {
@@ -478,6 +508,7 @@ LANGS.python = {
       if (prog.attrs.name) hd.push(`# ${prog.attrs.name}`);
       if (used.has('math')) hd.push('import math');
       if (used.has('random')) hd.push('import random');
+      if (used.has('abc')) hd.push('from abc import ABC, abstractmethod');
       if (hd.length) hd.push('');
       if (used.has('eof')) hd.push('def fine_file():', '    pos = file_lettura.tell()', '    riga = file_lettura.readline()', '    file_lettura.seek(pos)', '    return riga == ""', '', '');
       return hd.join('\n') + (hd.length ? '\n' : '');
@@ -490,7 +521,11 @@ LANGS.python = {
       const pyType = { Integer: (x) => `type(${x}) is int`, Real: (x) => `isinstance(${x}, (int, float))`, String: (x) => `isinstance(${x}, str)`, Boolean: (x) => `isinstance(${x}, bool)` };
       const test = { len: (n) => `len(args) == ${n}`, type: (p, i) => (p.array ? `isinstance(args[${i}], list)` : (pyType[p.type] || ((x) => `isinstance(${x}, ${p.type})`))(`args[${i}]`)) };
       for (const c of OO.ordered(prog, false)) {
-        o.line(`class ${c.name}${c.parent ? `(${c.parent})` : ''}:`); o.in();
+        // classe astratta: deriva da ABC (se la madre non lo è già)
+        const par = _CM.classByName(prog, c.parent);
+        const bases = [...(c.parent ? [c.parent] : []), ...(c.abstract && !(par && _CM.chainOf(prog, par).some((k) => k.abstract)) ? ['ABC'] : [])];
+        if (c.abstract) used.add('abc');
+        o.line(`class ${c.name}${bases.length ? `(${bases.join(', ')})` : ''}:`); o.in();
         const start = o.lines.length;
         for (const a of c.attributes.filter((x) => x.static)) o.line(`${a.name} = ${attrInit(a, OO.classScope(prog, c, true))}  # statico, ${OO.tag(a.visibility)}`);
         const inst = c.attributes.filter((x) => !x.static);
@@ -505,6 +540,7 @@ LANGS.python = {
           if (out.lines[out.lines.length - 1].trim() === 'pass' && out.lines.length > 1 && /self\.|super\(\)/.test(out.lines[out.lines.length - 2])) out.lines.pop();
         };
         const methodBody = (f, out) => {
+          if (f.abstract) { out.line(`raise NotImplementedError("${f.name}() è astratto: lo definiscono le sottoclassi")`); return; }
           const before = out.lines.length;
           block(f.body, buildScope(prog, f), out);
           const rl = _CM.rets(f);
@@ -525,6 +561,13 @@ LANGS.python = {
           const name = isCtor ? '__init__' : (OO.isMain(prog, f0) ? 'main' : f0.name);
           const note = (f) => ((f.visibility || 'public') !== 'public' ? '  # ' + OO.tag(f.visibility) : '');
           if (isStatic) o.line('@staticmethod');
+          if (group.length === 1 && f0.abstract) {
+            used.add('abc');
+            o.line('@abstractmethod');
+            o.line(`def ${name}(${['self', ...f0.params.map((x) => x.name)].join(', ')}):${note(f0)}`);
+            o.in(); o.line('pass'); o.out();
+            return;
+          }
           if (group.length === 1) {
             o.line(`def ${name}(${[...(isStatic ? [] : ['self']), ...f0.params.map((x) => x.name)].join(', ')}):${note(f0)}`);
             o.in(); (isCtor ? ctorBody : methodBody)(f0, o); o.out();
@@ -617,16 +660,20 @@ function cFamily(cfg) {
       const blk = (o, stmts, sc) => { o.in(); block(o, stmts, sc); o.out(); };
       const unsupported = (o, what) => o.line(`// [${what}: non disponibile in ${cfg.label}]`);
       function block(o, stmts, sc) {
-        for (const s of stmts) {
+        for (let si = 0; si < stmts.length; si++) {
+          const s = stmts[si];
           switch (s.kind) {
             case 'const': o.line(cfg.constDecl(s.name.trim(), s.type, E(s.expression, sc), isLiteralExpr(s.expression))); break;
-            case 'declare':
+            case 'declare': {
+              const init = initOf(s, stmts[si + 1]);
+              if (init != null && cfg.declareInit) { o.line(cfg.declareInit(s.name.trim(), s.type, asReal(init, s.type, E, sc))); si++; break; }
               for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declare(nm, s.type, s.array, s.array ? dimsOf(s, E, sc) : null, used));
               break;
+            }
             case 'assign': {
               const tg = targetsOf(s);
               if (tg.length > 1) cfg.multiAssign(o, tg.map((x) => E(x, sc)), E(s.expression, sc), calleeOf(s, sc), sc, used);
-              else o.line(`${E(s.variable, sc)} = ${E(s.expression, sc)};`);
+              else o.line(`${E(s.variable, sc)} = ${asReal(s.expression, lvInfo(s.variable, sc).type, E, sc)};`);
               break;
             }
             case 'input': cfg.input(o, E(s.variable, sc), lvInfo(s.variable, sc).type, used); break;
@@ -722,6 +769,7 @@ LANGS.cpp = cFamily({
     return `${c.ty} ${n}(${c.args});`;
   },
   constDecl: (n, t, e) => `const ${tCpp(t)} ${n} = ${e};`,
+  declareInit: (n, t, e) => `${tCpp(t)} ${n} = ${e};`,
   nul: 'nullptr', self: 'this', arrow: '->', staticSep: (c, m) => `${c}::${m}`,
   superMethod: (m, a, par) => `${par ? par.name : 'Base'}::${m}(${a})`,
   input: (o, v, t) => { if (t === 'String') o.line(`getline(cin >> ws, ${v});`); else o.line(`cin >> ${v};`); },
@@ -744,7 +792,7 @@ LANGS.cpp = cFamily({
       const sc = g.buildScope(f);
       bodyOut.line(''); bodyOut.line(sig(f) + ' {'); bodyOut.in(); g.block(bodyOut, f.body, sc);
       const rl = _CM.rets(f);
-      if (rl.length) { bodyOut.line(''); bodyOut.line(rl.length > 1 ? `return make_tuple(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
+      if (rl.length) { bodyOut.line(rl.length > 1 ? `return make_tuple(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
       bodyOut.out(); bodyOut.line('}');
     }
     const mainOut = new g.Out();
@@ -789,14 +837,16 @@ LANGS.cpp = cFamily({
       }
       for (const f of OO.methods(prog, c)) {
         const nm = OO.isMain(prog, f) ? 'Main' : f.name;
-        vis(f.visibility).push(`${f.static ? 'static ' : (poly ? 'virtual ' : '')}${retT(f)} ${nm}(${params(f)});`);
+        // metodo astratto: virtuale puro, senza definizione
+        vis(f.visibility).push(`${f.static ? 'static ' : (poly || f.abstract ? 'virtual ' : '')}${retT(f)} ${nm}(${params(f)})${f.abstract ? ' = 0' : ''};`);
       }
       decls.line('');
-      decls.line(`class ${c.name}${c.parent ? ' : public ' + c.parent : ''} {`);
+      decls.line(`class ${c.name}${c.parent ? ' : public ' + c.parent : ''} {${c.abstract ? ' // classe astratta' : ''}`);
       for (const v of ['public', 'protected', 'private']) if (sec[v].length) { decls.line(v + ':'); decls.in(); sec[v].forEach((l) => decls.line(l)); decls.out(); }
       decls.line('};');
       // definizioni di costruttori e metodi
       for (const f of [...OO.ctors(prog, c), ...OO.methods(prog, c)]) {
+        if (f.abstract) continue;
         const sc = g.buildScope(f);
         defs.line('');
         if (f.ctor) {
@@ -808,7 +858,7 @@ LANGS.cpp = cFamily({
         defs.line(`${retT(f)} ${c.name}::${OO.isMain(prog, f) ? 'Main' : f.name}(${params(f)}) {`);
         defs.in(); g.block(defs, f.body, sc);
         const rl = _CM.rets(f);
-        if (rl.length) { defs.line(''); defs.line(rl.length > 1 ? `return make_tuple(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
+        if (rl.length) { defs.line(rl.length > 1 ? `return make_tuple(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
         defs.out(); defs.line('}');
       }
     }
@@ -843,7 +893,7 @@ let J_PFX = ''; // dalle altre classi lo Scanner e i file stanno nella classe pr
 const DEF_C = { Integer: '0', Real: '0.0', String: '""', Boolean: 'false' };
 LANGS.java = cFamily({
   label: 'Java', ext: 'java', intDiv: true, powFn: 'Math.pow', intCast: '(int) ', concatPrefix: '""',
-  keywords: ['public', 'static', 'void', 'class', 'int', 'double', 'String', 'boolean', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'new', 'import', 'Scanner', 'System', 'Math', 'private', 'protected', 'extends', 'this', 'super', 'null', 'final', 'record', 'throws'],
+  keywords: ['public', 'static', 'void', 'class', 'int', 'double', 'String', 'boolean', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'new', 'import', 'Scanner', 'System', 'Math', 'private', 'protected', 'extends', 'this', 'super', 'null', 'final', 'record', 'throws', 'abstract'],
   pi: 'Math.PI',
   strLit: (s) => escStr(s, '"'),
   toStr: (x, t, e) => (e.p <= P.add ? `(${e.s})` : e.s),
@@ -879,6 +929,7 @@ LANGS.java = cFamily({
   },
   declare: (n, t, arr, D) => (arr ? `${tJava(t)}${'[]'.repeat(D.length)} ${n} = new ${tJava(t)}${D.map((d) => `[${d}]`).join('')};` : `${tJava(t)} ${n} = ${DEF_C[t] || 'null'};`),
   constDecl: (n, t, e) => `final ${tJava(t)} ${n} = ${e};`,
+  declareInit: (n, t, e) => `${tJava(t)} ${n} = ${e};`,
   input: (o, v, t) => { const i = J_PFX + 'input'; o.line(`${v} = ${t === 'Integer' ? `Integer.parseInt(${i}.nextLine().trim())` : t === 'Real' ? `Double.parseDouble(${i}.nextLine().trim())` : t === 'Boolean' ? `Boolean.parseBoolean(${i}.nextLine().trim())` : `${i}.nextLine()`};`); },
   nul: 'null', self: 'this',
   output: (e, nl) => `System.out.${nl ? 'println' : 'print'}(${e})`,
@@ -912,7 +963,7 @@ LANGS.java = cFamily({
       inner.line('');
       inner.line(`public static ${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${f.params.map((p) => `${tJava(p.type)}${p.array ? '[]'.repeat(p.dims || 1) : ''} ${p.name}`).join(', ')})${g.used.has('files') ? ' throws Exception' : ''} {`);
       inner.in(); g.block(inner, f.body, sc);
-      if (rl.length) { inner.line(''); inner.line(rl.length > 1 ? `return new ${recName(f)}(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
+      if (rl.length) { inner.line(rl.length > 1 ? `return new ${recName(f)}(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
       inner.out(); inner.line('}');
     }
     if (records.length) o.line('// Richiede Java 16 o successivo: le funzioni con più valori restituiscono un record');
@@ -956,11 +1007,12 @@ LANGS.java = cFamily({
         const sc = g.buildScope(f);
         const rl = _CM.rets(f);
         if (o.lines.length) o.line('');
+        if (f.abstract) { o.line(`${V(f.visibility)}abstract ${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${params(f)});`); continue; }
         if (f.ctor) o.line(`${V(f.visibility)}${c.name}(${params(f)})${thr} {`);
         else if (OO.isMain(prog, f)) o.line(`public static void main(String[] args)${thr} {`);
         else o.line(`${V(f.visibility)}${f.static ? 'static ' : ''}${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${params(f)})${thr} {`);
         o.in(); g.block(o, f.body, sc);
-        if (rl.length) { o.line(''); o.line(rl.length > 1 ? `return new ${recName(f)}(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
+        if (rl.length) { o.line(rl.length > 1 ? `return new ${recName(f)}(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
         o.out(); o.line('}');
       }
       parts.push({ c, lines: o.lines });
@@ -971,7 +1023,7 @@ LANGS.java = cFamily({
     o.line('import java.util.*;');
     for (const { c, lines } of parts) {
       o.line('');
-      o.line(`${c === main ? 'public ' : ''}class ${c.name}${c.parent ? ' extends ' + c.parent : ''} {`);
+      o.line(`${c === main ? 'public ' : ''}${c.abstract ? 'abstract ' : ''}class ${c.name}${c.parent ? ' extends ' + c.parent : ''} {`);
       o.lines.push(...lines);
       o.line('}');
     }
@@ -983,7 +1035,7 @@ const tCs = (t) => T_CPP[t] || t;
 let CS_PFX = '';
 LANGS.csharp = cFamily({
   label: 'C#', ext: 'cs', intDiv: true, powFn: 'Math.Pow', intCast: '(int) ',
-  keywords: ['using', 'class', 'static', 'void', 'int', 'double', 'string', 'bool', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'new', 'Console', 'Math', 'System', 'public', 'private', 'protected', 'this', 'base', 'null', 'virtual', 'override', 'const'],
+  keywords: ['using', 'class', 'static', 'void', 'int', 'double', 'string', 'bool', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'new', 'Console', 'Math', 'System', 'public', 'private', 'protected', 'this', 'base', 'null', 'virtual', 'override', 'const', 'abstract'],
   pi: 'Math.PI',
   strLit: (s) => escStr(s, '"'),
   concatPrefix: '""',
@@ -1016,6 +1068,7 @@ LANGS.csharp = cFamily({
   declare: (n, t, arr, D) => (arr ? `${tCs(t)}[${','.repeat(D.length - 1)}] ${n} = new ${tCs(t)}[${D.join(', ')}];` : `${tCs(t)} ${n} = ${DEF_C[t] || 'null'};`),
   // in C# const vuole un valore noto in compilazione; altrimenti una variabile normale
   constDecl: (n, t, e, lit) => (lit ? `const ${tCs(t)} ${n} = ${e};` : `${tCs(t)} ${n} = ${e}; // costante`),
+  declareInit: (n, t, e) => `${tCs(t)} ${n} = ${e};`,
   nul: 'null', self: 'this', superMethod: (m, a) => `base.${m}(${a})`,
   input: (o, v, t) => o.line(`${v} = ${t === 'Integer' ? 'int.Parse(Console.ReadLine())' : t === 'Real' ? 'double.Parse(Console.ReadLine())' : t === 'Boolean' ? 'bool.Parse(Console.ReadLine())' : 'Console.ReadLine()'};`),
   output: (e, nl) => `Console.${nl ? 'WriteLine' : 'Write'}(${e})`,
@@ -1040,7 +1093,7 @@ LANGS.csharp = cFamily({
       const rt = rl.length > 1 ? `(${rl.map((r) => tCs(r.type)).join(', ')})` : tCs(f.type);
       inner.line(`static ${rt} ${f.name}(${f.params.map((p) => `${tCs(p.type)}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''} ${p.name}`).join(', ')}) {`);
       inner.in(); g.block(inner, f.body, sc);
-      if (rl.length) { inner.line(''); inner.line(rl.length > 1 ? `return (${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
+      if (rl.length) { inner.line(rl.length > 1 ? `return (${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
       inner.out(); inner.line('}');
     }
     o.line('using System;'); o.line('');
@@ -1073,6 +1126,7 @@ LANGS.csharp = cFamily({
         const rl = _CM.rets(f);
         if (o.lines.length) o.line('');
         let body = f.body;
+        if (f.abstract) { o.line(`${V(f.visibility)}abstract ${rl.length > 1 ? `(${rl.map((r) => tCs(r.type)).join(', ')})` : tCs(f.type)} ${f.name}(${params(f)});`); continue; }
         if (f.ctor) {
           const sp = OO.splitSuper(f); body = sp.rest;
           o.line(`${V(f.visibility)}${c.name}(${params(f)})${sp.args ? ` : base(${sp.args.map((x) => g.pr(x, sc).s).join(', ')})` : ''} {`);
@@ -1084,7 +1138,7 @@ LANGS.csharp = cFamily({
           o.line(`${V(f.visibility)}${vo}${rt} ${f.name}(${params(f)}) {`);
         }
         o.in(); g.block(o, body, sc);
-        if (rl.length) { o.line(''); o.line(rl.length > 1 ? `return (${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
+        if (rl.length) { o.line(rl.length > 1 ? `return (${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
         o.out(); o.line('}');
       }
       parts.push({ c, lines: o.lines });
@@ -1094,7 +1148,7 @@ LANGS.csharp = cFamily({
     o.line('using System;');
     for (const { c, lines } of parts) {
       o.line('');
-      o.line(`class ${c.name}${c.parent ? ' : ' + c.parent : ''} {`);
+      o.line(`${c.abstract ? 'abstract ' : ''}class ${c.name}${c.parent ? ' : ' + c.parent : ''} {`);
       if (c === main) {
         if (g.used.has('rnd')) o.line('    public static Random rnd = new Random();');
         if (g.used.has('files')) { o.line('    public static System.IO.StreamReader fileLettura;'); o.line('    public static System.IO.StreamWriter fileScrittura;'); }
@@ -1133,6 +1187,7 @@ LANGS.javascript = cFamily({
   },
   declare: (n, t, arr, D, used) => { if (!arr) return `let ${n};`; if (D.length === 1) return `let ${n} = new Array(${D[0]});`; used.add('creaArray'); return `let ${n} = creaArray([${D.join(', ')}]);`; },
   constDecl: (n, t, e) => `const ${n} = ${e};`,
+  declareInit: (n, t, e) => `let ${n} = ${e};`,
   nul: 'null', self: 'this', qualifyCalls: true,
   field: (h) => (h.attr.static ? `${h.owner.name}.${h.attr.name}` : `this.${h.attr.name}`),
   input: (o, v, t) => o.line(`${v} = ${t === 'Integer' ? 'parseInt(prompt())' : t === 'Real' ? 'parseFloat(prompt())' : t === 'Boolean' ? 'prompt() === "true"' : 'prompt()'};`),
@@ -1152,7 +1207,7 @@ LANGS.javascript = cFamily({
       o.line(`function ${f.name}(${f.params.map((p) => p.name).join(', ')}) {`);
       o.in(); g.block(o, f.body, sc);
       const rl = _CM.rets(f);
-      if (rl.length) { o.line(''); o.line(rl.length > 1 ? `return [${rl.map((r) => r.name).join(', ')}];` : `return ${rl[0].name};`); }
+      if (rl.length) { o.line(rl.length > 1 ? `return [${rl.map((r) => r.name).join(', ')}];` : `return ${rl[0].name};`); }
       o.out(); o.line('}');
     }
     o.line(''); o.line('// Main');
@@ -1185,7 +1240,7 @@ LANGS.javascript = cFamily({
     let multiDim = false;
     for (const c of OO.ordered(prog, false)) {
       o.line('');
-      o.line(`class ${c.name}${c.parent ? ' extends ' + c.parent : ''} {`); o.in();
+      o.line(`class ${c.name}${c.parent ? ' extends ' + c.parent : ''} {${c.abstract ? ' // classe astratta: non si creano oggetti' : ''}`); o.in();
       const start = o.lines.length;
       for (const a of c.attributes) {
         const sc = OO.classScope(prog, c, a.static);
@@ -1196,12 +1251,12 @@ LANGS.javascript = cFamily({
       }
       // corpo di un costruttore: in una sottoclasse super(...) va chiamato prima di usare this
       const ctorBody = (f) => { const sc = g.buildScope(f); const sp = OO.splitSuper(f); if (c.parent && !sp.args) o.line('super();'); g.block(o, f.body, sc); };
-      const methodBody = (f) => { g.block(o, f.body, g.buildScope(f)); const rl = _CM.rets(f); if (rl.length) o.line(rl.length > 1 ? `return [${rl.map((r) => r.name).join(', ')}];` : `return ${rl[0].name};`); };
+      const methodBody = (f) => { if (f.abstract) { o.line(`throw new Error("${f.name}() è astratto: lo definiscono le sottoclassi");`); return; } g.block(o, f.body, g.buildScope(f)); const rl = _CM.rets(f); if (rl.length) o.line(rl.length > 1 ? `return [${rl.map((r) => r.name).join(', ')}];` : `return ${rl[0].name};`); };
       const emit = (group, isCtor) => {
         if (o.lines.length > start) o.line('');
         const f0 = group[0];
         const head = isCtor ? 'constructor' : `${f0.static ? 'static ' : ''}${OO.isMain(prog, f0) ? 'main' : f0.name}`;
-        const note = (f0.visibility || 'public') !== 'public' ? ' // ' + OO.tag(f0.visibility) : '';
+        const note = ((f0.visibility || 'public') !== 'public' ? ' // ' + OO.tag(f0.visibility) : '') + (group.length === 1 && f0.abstract ? ' // astratto' : '');
         if (group.length === 1) { o.line(`${head}(${f0.params.map((p) => p.name).join(', ')}) {${note}`); o.in(); (isCtor ? ctorBody : methodBody)(f0); o.out(); o.line('}'); return; }
         o.line(`${head}(...args) { // ${group.length} versioni${note}`); o.in();
         group.forEach((f, k) => {

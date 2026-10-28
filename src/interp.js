@@ -330,6 +330,7 @@ class Interpreter {
     const pre = yield* this.prepArgs(argNodes);
     const f = this.pick(cands, pre, name, node);
     this.checkRetUse(f, opts, node);
+    if (f.abstract) throw new _E.FlowError(`${f.name} è un metodo astratto di ${this.classById(f.cls).name}: non ha un corpo da eseguire, lo definiscono le sottoclassi`, { node });
     let self = null;
     if (this.oo) {
       const owner = this.classById(f.cls);
@@ -365,6 +366,12 @@ class Interpreter {
   *construct(node) {
     const cls = this.byName.get(node.cls.toLowerCase());
     if (!cls) throw new _E.FlowError(`La classe "${node.cls}" non esiste`, { node });
+    if (cls.abstract) {
+      const subs = this.prog.classes.filter((k) => k !== cls && !k.abstract && this.isA(k, cls)).map((k) => k.name);
+      throw new _E.FlowError(`${cls.name} è una classe astratta: non si possono creare oggetti ${cls.name}${subs.length ? `. Crea un oggetto di una sottoclasse (${subs.join(', ')})` : ''}`, { node });
+    }
+    const missing = _M.missingAbstract(this.prog, cls);
+    if (missing.length) throw new _E.FlowError(`${cls.name} non definisce ${missing.map((m) => m.f.name + '()').join(', ')}, ${missing.length === 1 ? 'metodo astratto' : 'metodi astratti'} di ${[...new Set(missing.map((m) => m.owner.name))].join(', ')}: definisci${missing.length === 1 ? 'lo' : 'li'} in ${cls.name} oppure rendi astratta ${cls.name}`, { node });
     const n = (this.classCount.get(cls.id) || 0) + 1;
     this.classCount.set(cls.id, n);
     const obj = { id: n, uid: ++this.objCount, cls, fields: new Map() };

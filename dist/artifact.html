@@ -532,7 +532,10 @@ body.udragging, body.udragging .uml .ubox { cursor: grabbing; }
 .uml .urow { cursor: pointer; }
 .uml .urow:hover .uhit { fill: var(--line-soft); }
 .uml .urow.method:hover .uhit { fill: var(--accent-soft); }
-.uml .urow.ctor .umem { font-style: italic; }
+.uml .ubox.abstract .uname, .uml .urow.abs .umem { font-style: italic; }
+.uml .ubox.warn .ubg { stroke: var(--err); stroke-dasharray: 6 3; }
+.uml .uwarn circle { fill: var(--err); }
+.uml .uwarn text { font: 700 12px var(--font-ui); fill: #fff; text-anchor: middle; }
 .uml .urow.mainm .umem { font-weight: 600; }
 .uml .urow.sel .uhit { fill: var(--accent-soft); stroke: var(--sel); stroke-width: 1.4; }
 .uml .ubox:hover .ubg { stroke-width: 2.2; }
@@ -582,6 +585,13 @@ svg.wlinks { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1
 @media print { svg.wlinks { display: none; } }
 .wl-line { paint-order: stroke; }
 .wlink .wl-halo { fill: none; stroke: var(--paper); stroke-width: 6; stroke-linecap: round; opacity: .85; }
+
+/* metodo astratto: al posto del diagramma di flusso */
+.abscard { margin: 70px auto 0; max-width: 460px; padding: 22px 24px; background: var(--panel); border: 1.5px dashed var(--s-call); border-radius: 12px; box-shadow: var(--shadow); text-align: center; }
+.abscard h3 { margin: 0 0 4px; font: italic 700 17px var(--font-mono); color: var(--s-call); }
+.abscard .tag { display: inline-block; font: 700 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.abscard p { margin: 8px 0; color: var(--ink); }
+.abscard .impls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 12px; }
 
 </style>
 <div id="app">
@@ -1328,7 +1338,7 @@ const VISIBILITY = { public: '+', private: '-', protected: '#' };
 const VIS_IT = { public: 'pubblico', private: 'privato', protected: 'protetto' };
 
 function makeClass(name, props) {
-  return Object.assign({ id: newId(), name, parent: '', attributes: [], x: 40, y: 40 }, props || {});
+  return Object.assign({ id: newId(), name, parent: '', abstract: false, attributes: [], x: 40, y: 40 }, props || {});
 }
 function makeAttribute(props) {
   return Object.assign({ name: '', type: 'Integer', array: false, size: '', visibility: 'private', static: false, init: '' }, props || {});
@@ -1369,10 +1379,17 @@ function isTrivialOO(prog) {
   if (!hasClasses(prog)) return true;
   if (prog.classes.length !== 1) return false;
   const c = prog.classes[0];
-  if (c.parent || c.attributes.length) return false;
+  if (c.parent || c.abstract || c.attributes.length) return false;
   return prog.functions.every((f) => f.cls === c.id && f.static && !f.ctor && (f.visibility || 'public') === 'public');
 }
 /* come sopra e con il nome predefinito: si salva nel formato standard senza perdere nulla */
+/* metodi astratti ereditati e non ancora definiti: [{ f, owner }] (per una classe concreta devono essere zero) */
+function missingAbstract(prog, c) {
+  const sig = (f) => f.name.toLowerCase() + '(' + f.params.map((p) => p.type.toLowerCase() + (p.array ? '[' + (p.dims || 1) : '')).join(',') + ')';
+  const best = new Map(); // firma -> versione più derivata
+  for (const k of chainOf(prog, c)) for (const f of membersOf(prog, k)) if (!f.ctor && !f.static && !best.has(sig(f))) best.set(sig(f), { f, owner: k });
+  return [...best.values()].filter((x) => x.f.abstract);
+}
 const isPlainOO = (prog) => isTrivialOO(prog) && (!hasClasses(prog) || prog.classes[0].name === defaultClassName(prog));
 function unwrapClasses(prog) {
   delete prog.classes;
@@ -1433,7 +1450,7 @@ function parseFprg(text) {
   if (clsEl) {
     prog.classes = [];
     for (const c of clsEl.children) if (c.nodeName.toLowerCase() === 'class') {
-      const cl = makeClass((c.getAttribute('name') || '').trim(), { parent: (c.getAttribute('parent') || '').trim(), x: +c.getAttribute('x') || 40, y: +c.getAttribute('y') || 40 });
+      const cl = makeClass((c.getAttribute('name') || '').trim(), { parent: (c.getAttribute('parent') || '').trim(), abstract: boolAttr(c.getAttribute('abstract'), false), x: +c.getAttribute('x') || 40, y: +c.getAttribute('y') || 40 });
       if (!cl.name || _classNames.has(cl.name.toLowerCase())) continue;
       _classNames.set(cl.name.toLowerCase(), cl.name);
       prog.classes.push(cl);
@@ -1469,6 +1486,7 @@ function parseFprg(text) {
         f.visibility = VISIBILITY[vis] ? vis : 'public';
         f.static = boolAttr(el.getAttribute('flowlab-static'), false);
         f.ctor = boolAttr(el.getAttribute('flowlab-ctor'), false);
+        f.abstract = !f.ctor && !f.static && boolAttr(el.getAttribute('flowlab-abstract'), false);
       }
       // estensione FlowLab: più valori restituiti, "nome:Tipo;nome:Tipo"
       const multi = el.getAttribute('flowlab-returns');
@@ -1619,7 +1637,7 @@ function serializeFprg(prog) {
   if (oo) {
     L.push('    <flowlab-classes>');
     for (const c of prog.classes) {
-      const head = `        <class name="${xmlEsc(c.name)}" parent="${xmlEsc(c.parent || '')}" x="${Math.round(c.x || 0)}" y="${Math.round(c.y || 0)}"`;
+      const head = `        <class name="${xmlEsc(c.name)}" parent="${xmlEsc(c.parent || '')}"${c.abstract ? ' abstract="True"' : ''} x="${Math.round(c.x || 0)}" y="${Math.round(c.y || 0)}"`;
       if (!c.attributes.length) { L.push(head + '/>'); continue; }
       L.push(head + '>');
       for (const a of c.attributes) L.push(`            <attribute name="${xmlEsc(a.name)}" type="${xmlEsc(a.type)}" array="${TF(a.array)}" size="${xmlEsc(a.array ? fgExpr(a.size) : '')}" visibility="${a.visibility}" static="${TF(a.static)}" init="${xmlEsc(fgExpr(a.init || ''))}"/>`);
@@ -1630,7 +1648,7 @@ function serializeFprg(prog) {
   for (const f of prog.functions) {
     const rs = rets(f);
     let extra = rs.length > 1 ? ` flowlab-returns="${xmlEsc(rs.map((r) => r.name + ':' + r.type).join(';'))}"` : '';
-    if (oo) { const c = classOf(prog, f); extra += ` flowlab-class="${xmlEsc(c ? c.name : '')}" flowlab-visibility="${f.visibility || 'public'}" flowlab-static="${TF(!!f.static)}"${f.ctor ? ' flowlab-ctor="True"' : ''}`; }
+    if (oo) { const c = classOf(prog, f); extra += ` flowlab-class="${xmlEsc(c ? c.name : '')}" flowlab-visibility="${f.visibility || 'public'}" flowlab-static="${TF(!!f.static)}"${f.ctor ? ' flowlab-ctor="True"' : ''}${f.abstract ? ' flowlab-abstract="True"' : ''}`; }
     // per le procedure si conserva il nome eventualmente lasciato in "variable" da altri editor
     L.push(`    <function name="${xmlEsc(f.name)}" type="${rs.length ? rs[0].type : 'None'}" variable="${xmlEsc(rs.length ? rs[0].name : (f.variable || ''))}"${extra}>`);
     if (f.params.length) {
@@ -1726,7 +1744,7 @@ function isIncomplete(s) {
   }
 }
 
-const ModelLib = { FPRG_ROOT, KINDS, VISIBILITY, VIS_IT, makeClass, makeAttribute, hasClasses, classById, classByName, classOf, mainClass, membersOf, chainOf, isSubclass, defaultClassName, wrapInClass, isTrivialOO, isPlainOO, unwrapClasses, typeList, extendedFeatures, rets, setRets, fgExpr, newId, makeStmt, makeFunction, newProgram, cloneStmt, reId, walk, findStmt, parseFprg, serializeFprg, isIncomplete, normType };
+const ModelLib = { FPRG_ROOT, KINDS, VISIBILITY, VIS_IT, makeClass, makeAttribute, hasClasses, classById, classByName, classOf, mainClass, membersOf, chainOf, isSubclass, defaultClassName, wrapInClass, isTrivialOO, isPlainOO, missingAbstract, unwrapClasses, typeList, extendedFeatures, rets, setRets, fgExpr, newId, makeStmt, makeFunction, newProgram, cloneStmt, reId, walk, findStmt, parseFprg, serializeFprg, isIncomplete, normType };
 if (typeof module !== 'undefined') module.exports = ModelLib;
 
 /* ==========================================================================
@@ -2061,6 +2079,7 @@ class Interpreter {
     const pre = yield* this.prepArgs(argNodes);
     const f = this.pick(cands, pre, name, node);
     this.checkRetUse(f, opts, node);
+    if (f.abstract) throw new _E.FlowError(`${f.name} è un metodo astratto di ${this.classById(f.cls).name}: non ha un corpo da eseguire, lo definiscono le sottoclassi`, { node });
     let self = null;
     if (this.oo) {
       const owner = this.classById(f.cls);
@@ -2096,6 +2115,12 @@ class Interpreter {
   *construct(node) {
     const cls = this.byName.get(node.cls.toLowerCase());
     if (!cls) throw new _E.FlowError(`La classe "${node.cls}" non esiste`, { node });
+    if (cls.abstract) {
+      const subs = this.prog.classes.filter((k) => k !== cls && !k.abstract && this.isA(k, cls)).map((k) => k.name);
+      throw new _E.FlowError(`${cls.name} è una classe astratta: non si possono creare oggetti ${cls.name}${subs.length ? `. Crea un oggetto di una sottoclasse (${subs.join(', ')})` : ''}`, { node });
+    }
+    const missing = _M.missingAbstract(this.prog, cls);
+    if (missing.length) throw new _E.FlowError(`${cls.name} non definisce ${missing.map((m) => m.f.name + '()').join(', ')}, ${missing.length === 1 ? 'metodo astratto' : 'metodi astratti'} di ${[...new Set(missing.map((m) => m.owner.name))].join(', ')}: definisci${missing.length === 1 ? 'lo' : 'li'} in ${cls.name} oppure rendi astratta ${cls.name}`, { node });
     const n = (this.classCount.get(cls.id) || 0) + 1;
     this.classCount.set(cls.id, n);
     const obj = { id: n, uid: ++this.objCount, cls, fields: new Map() };
@@ -2729,6 +2754,31 @@ function ucall(entry, sc, self) {
   if (!sc.ooMode || !entry || !entry.owner) return '';
   return entry.f.static ? entry.owner.name + '.' : self + '.';
 }
+/* dichiarazione seguita subito dall'assegnazione della stessa variabile: diventa una
+   dichiarazione con valore iniziale (double a = 0.0;). Restituisce l'espressione o null. */
+function initOf(s, next) {
+  if (!next || next.kind !== 'assign' || s.array) return null;
+  const names = s.name.split(',').map((x) => x.trim()).filter(Boolean);
+  if (names.length !== 1) return null;
+  const tg = targetsOf(next); if (tg.length !== 1) return null;
+  const lv = strip(tryParse(tg[0]));
+  const low = names[0].toLowerCase();
+  if (!lv || lv.k !== 'var' || lv.indices || lv.name.toLowerCase() !== low) return null;
+  const e = tryParse(next.expression); if (!e) return null;
+  let uses = false; // a ← a + 1 non si può unire
+  const visit = (n) => { if (!n || typeof n !== 'object' || uses) return; if (n.k === 'var' && n.name.toLowerCase() === low) uses = true; Object.values(n).forEach(visit); };
+  visit(e);
+  return uses ? null : next.expression;
+}
+/* valore per una variabile reale: un intero scritto (0, -3) diventa 0.0, -3.0 */
+function asReal(src, type, E, sc) {
+  const s = E(src, sc);
+  if (type !== 'Real') return s;
+  const n = strip(tryParse(src));
+  const intLit = (x) => !!x && x.k === 'num' && x.t === 'Integer';
+  return n && (intLit(n) || (n.k === 'un' && n.op === 'neg' && intLit(strip(n.e)))) ? s + '.0' : s;
+}
+
 /* tipo di un riferimento modificabile (variabile, elemento, attributo) */
 function lvTypeOf(v, sc) { const t = tryParse(v); const x = t && strip(t); return x ? _CE.inferType(x, sc) : 'String'; }
 
@@ -2751,7 +2801,7 @@ class Out {
 const TIPO = { Integer: 'intero', Real: 'reale', String: 'stringa', Boolean: 'booleano' };
 LANGS.pseudo = {
   label: 'Pseudocodice', ext: 'txt', comment: '//',
-  keywords: ['ALGORITMO', 'FINE', 'FUNZIONE', 'PROCEDURA', 'VARIABILI', 'SE', 'ALLORA', 'ALTRIMENTI', 'MENTRE', 'ESEGUI', 'PER', 'DA', 'A', 'PASSO', 'RIPETI', 'LEGGI', 'SCRIVI', 'CHIAMA', 'RESTITUISCI', 'AND', 'OR', 'NOT', 'MOD', 'VERO', 'FALSO', 'DICHIARA', 'ARRAY', 'DI', 'INDIETRO', 'APRI', 'CHIUDI', 'IN', 'LETTURA', 'SCRITTURA', 'CLASSE', 'EREDITA', 'ATTRIBUTI', 'METODO', 'STATICO', 'COSTRUTTORE', 'NUOVO', 'QUESTO', 'NULLO', 'SUPER'],
+  keywords: ['ALGORITMO', 'FINE', 'FUNZIONE', 'PROCEDURA', 'VARIABILI', 'SE', 'ALLORA', 'ALTRIMENTI', 'MENTRE', 'ESEGUI', 'PER', 'DA', 'A', 'PASSO', 'RIPETI', 'LEGGI', 'SCRIVI', 'CHIAMA', 'RESTITUISCI', 'AND', 'OR', 'NOT', 'MOD', 'VERO', 'FALSO', 'DICHIARA', 'ARRAY', 'DI', 'INDIETRO', 'APRI', 'CHIUDI', 'IN', 'LETTURA', 'SCRITTURA', 'CLASSE', 'EREDITA', 'ATTRIBUTI', 'METODO', 'STATICO', 'COSTRUTTORE', 'NUOVO', 'QUESTO', 'NULLO', 'SUPER', 'ASTRATTA', 'ASTRATTO'],
   generate(prog) {
     const L = {
       idx: idxComma, str: (s) => '"' + s + '"', T: 'VERO', F: 'FALSO', pi: 'π', not: 'NOT ', notPrec: P.un, or: 'OR', and: 'AND', mod: 'MOD', pow: '^',
@@ -2799,7 +2849,7 @@ LANGS.pseudo = {
       const V = (v) => _CM.VISIBILITY[v || 'public'];
       OO.ordered(prog, true).forEach((c, ci) => {
         if (ci) o.line('');
-        o.line(`CLASSE ${c.name}${c.parent ? ' EREDITA DA ' + c.parent : ''}${c === main ? '   // classe principale: il programma parte da Main' : ''}`);
+        o.line(`${c.abstract ? 'CLASSE ASTRATTA' : 'CLASSE'} ${c.name}${c.parent ? ' EREDITA DA ' + c.parent : ''}${c === main ? '   // classe principale: il programma parte da Main' : ''}`);
         o.in();
         if (c.attributes.length) {
           o.line('ATTRIBUTI'); o.in();
@@ -2813,7 +2863,8 @@ LANGS.pseudo = {
           const sc = buildScope(prog, f);
           const rl = _CM.rets(f);
           o.line('');
-          const kw = f.ctor ? 'COSTRUTTORE' : (f.static ? 'METODO STATICO' : 'METODO');
+          const kw = f.ctor ? 'COSTRUTTORE' : (f.static ? 'METODO STATICO' : f.abstract ? 'METODO ASTRATTO' : 'METODO');
+          if (f.abstract) { o.line(`${kw} ${V(f.visibility)} ${f.name}(${psig(f)})${rl.length ? ' : ' + rl.map((r) => T(r.type)).join(', ') : ''}   // senza corpo: lo definiscono le sottoclassi`); continue; }
           o.line(`${kw} ${V(f.visibility)} ${f.name}(${psig(f)})${rl.length ? ' : ' + rl.map((r) => T(r.type)).join(', ') : ''}`);
           o.in(); block(f.body, sc);
           if (rl.length) o.line(`RESTITUISCI ${rl.map((r) => r.name).join(', ')}`);
@@ -2844,7 +2895,7 @@ LANGS.pseudo = {
 /* =============================== PYTHON ================================== */
 LANGS.python = {
   label: 'Python', ext: 'py', comment: '#',
-  keywords: ['def', 'return', 'if', 'elif', 'else', 'while', 'for', 'in', 'range', 'and', 'or', 'not', 'True', 'False', 'import', 'break', 'print', 'input', 'int', 'float', 'str', 'len', 'None', 'pass', 'global', 'open', 'with', 'as', 'class', 'self', 'super', 'is', 'elif', 'staticmethod', 'isinstance', 'raise', 'type', 'args'],
+  keywords: ['def', 'return', 'if', 'elif', 'else', 'while', 'for', 'in', 'range', 'and', 'or', 'not', 'True', 'False', 'import', 'break', 'print', 'input', 'int', 'float', 'str', 'len', 'None', 'pass', 'global', 'open', 'with', 'as', 'class', 'self', 'super', 'is', 'elif', 'staticmethod', 'isinstance', 'raise', 'type', 'args', 'abstractmethod', 'from'],
   generate(prog) {
     const used = new Set();
     const L = {
@@ -2900,10 +2951,13 @@ LANGS.python = {
     const body = new Out();
     const block = (stmts, sc, o) => {
       const start = o.lines.length;
-      for (const s of stmts) {
+      for (let si = 0; si < stmts.length; si++) {
+        const s = stmts[si];
         switch (s.kind) {
           case 'const': o.line(`${vname(s.name.trim(), sc)} = ${E(s.expression, sc)}  # costante`); break;
-          case 'declare':
+          case 'declare': {
+            const init = initOf(s, stmts[si + 1]);
+            if (init != null) { o.line(`${s.name.trim()} = ${asReal(init, s.type, E, sc)}`); si++; break; }
             for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) {
               if (!s.array) { o.line(`${nm} = ${DEFT(s.type)}`); continue; }
               const D = dimsOf(s, E, sc);
@@ -2912,7 +2966,8 @@ LANGS.python = {
               o.line(`${nm} = ${init}`);
             }
             break;
-          case 'assign': o.line(`${targetsOf(s).map((x) => E(x, sc)).join(', ')} = ${E(s.expression, sc)}`); break;
+          }
+          case 'assign': { const tg = targetsOf(s); o.line(`${tg.map((x) => E(x, sc)).join(', ')} = ${tg.length === 1 ? asReal(s.expression, lvType(s.variable, sc), E, sc) : E(s.expression, sc)}`); break; }
           case 'input': o.line(`${E(s.variable, sc)} = ${CAST[lvType(s.variable, sc)]}`); break;
           case 'output': o.line(s.newline ? `print(${E(s.expression, sc)})` : `print(${E(s.expression, sc)}, end="")`); break;
           case 'if': {
@@ -2975,6 +3030,7 @@ LANGS.python = {
       if (prog.attrs.name) hd.push(`# ${prog.attrs.name}`);
       if (used.has('math')) hd.push('import math');
       if (used.has('random')) hd.push('import random');
+      if (used.has('abc')) hd.push('from abc import ABC, abstractmethod');
       if (hd.length) hd.push('');
       if (used.has('eof')) hd.push('def fine_file():', '    pos = file_lettura.tell()', '    riga = file_lettura.readline()', '    file_lettura.seek(pos)', '    return riga == ""', '', '');
       return hd.join('\n') + (hd.length ? '\n' : '');
@@ -2987,7 +3043,11 @@ LANGS.python = {
       const pyType = { Integer: (x) => `type(${x}) is int`, Real: (x) => `isinstance(${x}, (int, float))`, String: (x) => `isinstance(${x}, str)`, Boolean: (x) => `isinstance(${x}, bool)` };
       const test = { len: (n) => `len(args) == ${n}`, type: (p, i) => (p.array ? `isinstance(args[${i}], list)` : (pyType[p.type] || ((x) => `isinstance(${x}, ${p.type})`))(`args[${i}]`)) };
       for (const c of OO.ordered(prog, false)) {
-        o.line(`class ${c.name}${c.parent ? `(${c.parent})` : ''}:`); o.in();
+        // classe astratta: deriva da ABC (se la madre non lo è già)
+        const par = _CM.classByName(prog, c.parent);
+        const bases = [...(c.parent ? [c.parent] : []), ...(c.abstract && !(par && _CM.chainOf(prog, par).some((k) => k.abstract)) ? ['ABC'] : [])];
+        if (c.abstract) used.add('abc');
+        o.line(`class ${c.name}${bases.length ? `(${bases.join(', ')})` : ''}:`); o.in();
         const start = o.lines.length;
         for (const a of c.attributes.filter((x) => x.static)) o.line(`${a.name} = ${attrInit(a, OO.classScope(prog, c, true))}  # statico, ${OO.tag(a.visibility)}`);
         const inst = c.attributes.filter((x) => !x.static);
@@ -3002,6 +3062,7 @@ LANGS.python = {
           if (out.lines[out.lines.length - 1].trim() === 'pass' && out.lines.length > 1 && /self\.|super\(\)/.test(out.lines[out.lines.length - 2])) out.lines.pop();
         };
         const methodBody = (f, out) => {
+          if (f.abstract) { out.line(`raise NotImplementedError("${f.name}() è astratto: lo definiscono le sottoclassi")`); return; }
           const before = out.lines.length;
           block(f.body, buildScope(prog, f), out);
           const rl = _CM.rets(f);
@@ -3022,6 +3083,13 @@ LANGS.python = {
           const name = isCtor ? '__init__' : (OO.isMain(prog, f0) ? 'main' : f0.name);
           const note = (f) => ((f.visibility || 'public') !== 'public' ? '  # ' + OO.tag(f.visibility) : '');
           if (isStatic) o.line('@staticmethod');
+          if (group.length === 1 && f0.abstract) {
+            used.add('abc');
+            o.line('@abstractmethod');
+            o.line(`def ${name}(${['self', ...f0.params.map((x) => x.name)].join(', ')}):${note(f0)}`);
+            o.in(); o.line('pass'); o.out();
+            return;
+          }
           if (group.length === 1) {
             o.line(`def ${name}(${[...(isStatic ? [] : ['self']), ...f0.params.map((x) => x.name)].join(', ')}):${note(f0)}`);
             o.in(); (isCtor ? ctorBody : methodBody)(f0, o); o.out();
@@ -3114,16 +3182,20 @@ function cFamily(cfg) {
       const blk = (o, stmts, sc) => { o.in(); block(o, stmts, sc); o.out(); };
       const unsupported = (o, what) => o.line(`// [${what}: non disponibile in ${cfg.label}]`);
       function block(o, stmts, sc) {
-        for (const s of stmts) {
+        for (let si = 0; si < stmts.length; si++) {
+          const s = stmts[si];
           switch (s.kind) {
             case 'const': o.line(cfg.constDecl(s.name.trim(), s.type, E(s.expression, sc), isLiteralExpr(s.expression))); break;
-            case 'declare':
+            case 'declare': {
+              const init = initOf(s, stmts[si + 1]);
+              if (init != null && cfg.declareInit) { o.line(cfg.declareInit(s.name.trim(), s.type, asReal(init, s.type, E, sc))); si++; break; }
               for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declare(nm, s.type, s.array, s.array ? dimsOf(s, E, sc) : null, used));
               break;
+            }
             case 'assign': {
               const tg = targetsOf(s);
               if (tg.length > 1) cfg.multiAssign(o, tg.map((x) => E(x, sc)), E(s.expression, sc), calleeOf(s, sc), sc, used);
-              else o.line(`${E(s.variable, sc)} = ${E(s.expression, sc)};`);
+              else o.line(`${E(s.variable, sc)} = ${asReal(s.expression, lvInfo(s.variable, sc).type, E, sc)};`);
               break;
             }
             case 'input': cfg.input(o, E(s.variable, sc), lvInfo(s.variable, sc).type, used); break;
@@ -3219,6 +3291,7 @@ LANGS.cpp = cFamily({
     return `${c.ty} ${n}(${c.args});`;
   },
   constDecl: (n, t, e) => `const ${tCpp(t)} ${n} = ${e};`,
+  declareInit: (n, t, e) => `${tCpp(t)} ${n} = ${e};`,
   nul: 'nullptr', self: 'this', arrow: '->', staticSep: (c, m) => `${c}::${m}`,
   superMethod: (m, a, par) => `${par ? par.name : 'Base'}::${m}(${a})`,
   input: (o, v, t) => { if (t === 'String') o.line(`getline(cin >> ws, ${v});`); else o.line(`cin >> ${v};`); },
@@ -3241,7 +3314,7 @@ LANGS.cpp = cFamily({
       const sc = g.buildScope(f);
       bodyOut.line(''); bodyOut.line(sig(f) + ' {'); bodyOut.in(); g.block(bodyOut, f.body, sc);
       const rl = _CM.rets(f);
-      if (rl.length) { bodyOut.line(''); bodyOut.line(rl.length > 1 ? `return make_tuple(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
+      if (rl.length) { bodyOut.line(rl.length > 1 ? `return make_tuple(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
       bodyOut.out(); bodyOut.line('}');
     }
     const mainOut = new g.Out();
@@ -3286,14 +3359,16 @@ LANGS.cpp = cFamily({
       }
       for (const f of OO.methods(prog, c)) {
         const nm = OO.isMain(prog, f) ? 'Main' : f.name;
-        vis(f.visibility).push(`${f.static ? 'static ' : (poly ? 'virtual ' : '')}${retT(f)} ${nm}(${params(f)});`);
+        // metodo astratto: virtuale puro, senza definizione
+        vis(f.visibility).push(`${f.static ? 'static ' : (poly || f.abstract ? 'virtual ' : '')}${retT(f)} ${nm}(${params(f)})${f.abstract ? ' = 0' : ''};`);
       }
       decls.line('');
-      decls.line(`class ${c.name}${c.parent ? ' : public ' + c.parent : ''} {`);
+      decls.line(`class ${c.name}${c.parent ? ' : public ' + c.parent : ''} {${c.abstract ? ' // classe astratta' : ''}`);
       for (const v of ['public', 'protected', 'private']) if (sec[v].length) { decls.line(v + ':'); decls.in(); sec[v].forEach((l) => decls.line(l)); decls.out(); }
       decls.line('};');
       // definizioni di costruttori e metodi
       for (const f of [...OO.ctors(prog, c), ...OO.methods(prog, c)]) {
+        if (f.abstract) continue;
         const sc = g.buildScope(f);
         defs.line('');
         if (f.ctor) {
@@ -3305,7 +3380,7 @@ LANGS.cpp = cFamily({
         defs.line(`${retT(f)} ${c.name}::${OO.isMain(prog, f) ? 'Main' : f.name}(${params(f)}) {`);
         defs.in(); g.block(defs, f.body, sc);
         const rl = _CM.rets(f);
-        if (rl.length) { defs.line(''); defs.line(rl.length > 1 ? `return make_tuple(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
+        if (rl.length) { defs.line(rl.length > 1 ? `return make_tuple(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
         defs.out(); defs.line('}');
       }
     }
@@ -3340,7 +3415,7 @@ let J_PFX = ''; // dalle altre classi lo Scanner e i file stanno nella classe pr
 const DEF_C = { Integer: '0', Real: '0.0', String: '""', Boolean: 'false' };
 LANGS.java = cFamily({
   label: 'Java', ext: 'java', intDiv: true, powFn: 'Math.pow', intCast: '(int) ', concatPrefix: '""',
-  keywords: ['public', 'static', 'void', 'class', 'int', 'double', 'String', 'boolean', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'new', 'import', 'Scanner', 'System', 'Math', 'private', 'protected', 'extends', 'this', 'super', 'null', 'final', 'record', 'throws'],
+  keywords: ['public', 'static', 'void', 'class', 'int', 'double', 'String', 'boolean', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'new', 'import', 'Scanner', 'System', 'Math', 'private', 'protected', 'extends', 'this', 'super', 'null', 'final', 'record', 'throws', 'abstract'],
   pi: 'Math.PI',
   strLit: (s) => escStr(s, '"'),
   toStr: (x, t, e) => (e.p <= P.add ? `(${e.s})` : e.s),
@@ -3376,6 +3451,7 @@ LANGS.java = cFamily({
   },
   declare: (n, t, arr, D) => (arr ? `${tJava(t)}${'[]'.repeat(D.length)} ${n} = new ${tJava(t)}${D.map((d) => `[${d}]`).join('')};` : `${tJava(t)} ${n} = ${DEF_C[t] || 'null'};`),
   constDecl: (n, t, e) => `final ${tJava(t)} ${n} = ${e};`,
+  declareInit: (n, t, e) => `${tJava(t)} ${n} = ${e};`,
   input: (o, v, t) => { const i = J_PFX + 'input'; o.line(`${v} = ${t === 'Integer' ? `Integer.parseInt(${i}.nextLine().trim())` : t === 'Real' ? `Double.parseDouble(${i}.nextLine().trim())` : t === 'Boolean' ? `Boolean.parseBoolean(${i}.nextLine().trim())` : `${i}.nextLine()`};`); },
   nul: 'null', self: 'this',
   output: (e, nl) => `System.out.${nl ? 'println' : 'print'}(${e})`,
@@ -3409,7 +3485,7 @@ LANGS.java = cFamily({
       inner.line('');
       inner.line(`public static ${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${f.params.map((p) => `${tJava(p.type)}${p.array ? '[]'.repeat(p.dims || 1) : ''} ${p.name}`).join(', ')})${g.used.has('files') ? ' throws Exception' : ''} {`);
       inner.in(); g.block(inner, f.body, sc);
-      if (rl.length) { inner.line(''); inner.line(rl.length > 1 ? `return new ${recName(f)}(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
+      if (rl.length) { inner.line(rl.length > 1 ? `return new ${recName(f)}(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
       inner.out(); inner.line('}');
     }
     if (records.length) o.line('// Richiede Java 16 o successivo: le funzioni con più valori restituiscono un record');
@@ -3453,11 +3529,12 @@ LANGS.java = cFamily({
         const sc = g.buildScope(f);
         const rl = _CM.rets(f);
         if (o.lines.length) o.line('');
+        if (f.abstract) { o.line(`${V(f.visibility)}abstract ${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${params(f)});`); continue; }
         if (f.ctor) o.line(`${V(f.visibility)}${c.name}(${params(f)})${thr} {`);
         else if (OO.isMain(prog, f)) o.line(`public static void main(String[] args)${thr} {`);
         else o.line(`${V(f.visibility)}${f.static ? 'static ' : ''}${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${params(f)})${thr} {`);
         o.in(); g.block(o, f.body, sc);
-        if (rl.length) { o.line(''); o.line(rl.length > 1 ? `return new ${recName(f)}(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
+        if (rl.length) { o.line(rl.length > 1 ? `return new ${recName(f)}(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
         o.out(); o.line('}');
       }
       parts.push({ c, lines: o.lines });
@@ -3468,7 +3545,7 @@ LANGS.java = cFamily({
     o.line('import java.util.*;');
     for (const { c, lines } of parts) {
       o.line('');
-      o.line(`${c === main ? 'public ' : ''}class ${c.name}${c.parent ? ' extends ' + c.parent : ''} {`);
+      o.line(`${c === main ? 'public ' : ''}${c.abstract ? 'abstract ' : ''}class ${c.name}${c.parent ? ' extends ' + c.parent : ''} {`);
       o.lines.push(...lines);
       o.line('}');
     }
@@ -3480,7 +3557,7 @@ const tCs = (t) => T_CPP[t] || t;
 let CS_PFX = '';
 LANGS.csharp = cFamily({
   label: 'C#', ext: 'cs', intDiv: true, powFn: 'Math.Pow', intCast: '(int) ',
-  keywords: ['using', 'class', 'static', 'void', 'int', 'double', 'string', 'bool', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'new', 'Console', 'Math', 'System', 'public', 'private', 'protected', 'this', 'base', 'null', 'virtual', 'override', 'const'],
+  keywords: ['using', 'class', 'static', 'void', 'int', 'double', 'string', 'bool', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'new', 'Console', 'Math', 'System', 'public', 'private', 'protected', 'this', 'base', 'null', 'virtual', 'override', 'const', 'abstract'],
   pi: 'Math.PI',
   strLit: (s) => escStr(s, '"'),
   concatPrefix: '""',
@@ -3513,6 +3590,7 @@ LANGS.csharp = cFamily({
   declare: (n, t, arr, D) => (arr ? `${tCs(t)}[${','.repeat(D.length - 1)}] ${n} = new ${tCs(t)}[${D.join(', ')}];` : `${tCs(t)} ${n} = ${DEF_C[t] || 'null'};`),
   // in C# const vuole un valore noto in compilazione; altrimenti una variabile normale
   constDecl: (n, t, e, lit) => (lit ? `const ${tCs(t)} ${n} = ${e};` : `${tCs(t)} ${n} = ${e}; // costante`),
+  declareInit: (n, t, e) => `${tCs(t)} ${n} = ${e};`,
   nul: 'null', self: 'this', superMethod: (m, a) => `base.${m}(${a})`,
   input: (o, v, t) => o.line(`${v} = ${t === 'Integer' ? 'int.Parse(Console.ReadLine())' : t === 'Real' ? 'double.Parse(Console.ReadLine())' : t === 'Boolean' ? 'bool.Parse(Console.ReadLine())' : 'Console.ReadLine()'};`),
   output: (e, nl) => `Console.${nl ? 'WriteLine' : 'Write'}(${e})`,
@@ -3537,7 +3615,7 @@ LANGS.csharp = cFamily({
       const rt = rl.length > 1 ? `(${rl.map((r) => tCs(r.type)).join(', ')})` : tCs(f.type);
       inner.line(`static ${rt} ${f.name}(${f.params.map((p) => `${tCs(p.type)}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''} ${p.name}`).join(', ')}) {`);
       inner.in(); g.block(inner, f.body, sc);
-      if (rl.length) { inner.line(''); inner.line(rl.length > 1 ? `return (${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
+      if (rl.length) { inner.line(rl.length > 1 ? `return (${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
       inner.out(); inner.line('}');
     }
     o.line('using System;'); o.line('');
@@ -3570,6 +3648,7 @@ LANGS.csharp = cFamily({
         const rl = _CM.rets(f);
         if (o.lines.length) o.line('');
         let body = f.body;
+        if (f.abstract) { o.line(`${V(f.visibility)}abstract ${rl.length > 1 ? `(${rl.map((r) => tCs(r.type)).join(', ')})` : tCs(f.type)} ${f.name}(${params(f)});`); continue; }
         if (f.ctor) {
           const sp = OO.splitSuper(f); body = sp.rest;
           o.line(`${V(f.visibility)}${c.name}(${params(f)})${sp.args ? ` : base(${sp.args.map((x) => g.pr(x, sc).s).join(', ')})` : ''} {`);
@@ -3581,7 +3660,7 @@ LANGS.csharp = cFamily({
           o.line(`${V(f.visibility)}${vo}${rt} ${f.name}(${params(f)}) {`);
         }
         o.in(); g.block(o, body, sc);
-        if (rl.length) { o.line(''); o.line(rl.length > 1 ? `return (${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
+        if (rl.length) { o.line(rl.length > 1 ? `return (${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
         o.out(); o.line('}');
       }
       parts.push({ c, lines: o.lines });
@@ -3591,7 +3670,7 @@ LANGS.csharp = cFamily({
     o.line('using System;');
     for (const { c, lines } of parts) {
       o.line('');
-      o.line(`class ${c.name}${c.parent ? ' : ' + c.parent : ''} {`);
+      o.line(`${c.abstract ? 'abstract ' : ''}class ${c.name}${c.parent ? ' : ' + c.parent : ''} {`);
       if (c === main) {
         if (g.used.has('rnd')) o.line('    public static Random rnd = new Random();');
         if (g.used.has('files')) { o.line('    public static System.IO.StreamReader fileLettura;'); o.line('    public static System.IO.StreamWriter fileScrittura;'); }
@@ -3630,6 +3709,7 @@ LANGS.javascript = cFamily({
   },
   declare: (n, t, arr, D, used) => { if (!arr) return `let ${n};`; if (D.length === 1) return `let ${n} = new Array(${D[0]});`; used.add('creaArray'); return `let ${n} = creaArray([${D.join(', ')}]);`; },
   constDecl: (n, t, e) => `const ${n} = ${e};`,
+  declareInit: (n, t, e) => `let ${n} = ${e};`,
   nul: 'null', self: 'this', qualifyCalls: true,
   field: (h) => (h.attr.static ? `${h.owner.name}.${h.attr.name}` : `this.${h.attr.name}`),
   input: (o, v, t) => o.line(`${v} = ${t === 'Integer' ? 'parseInt(prompt())' : t === 'Real' ? 'parseFloat(prompt())' : t === 'Boolean' ? 'prompt() === "true"' : 'prompt()'};`),
@@ -3649,7 +3729,7 @@ LANGS.javascript = cFamily({
       o.line(`function ${f.name}(${f.params.map((p) => p.name).join(', ')}) {`);
       o.in(); g.block(o, f.body, sc);
       const rl = _CM.rets(f);
-      if (rl.length) { o.line(''); o.line(rl.length > 1 ? `return [${rl.map((r) => r.name).join(', ')}];` : `return ${rl[0].name};`); }
+      if (rl.length) { o.line(rl.length > 1 ? `return [${rl.map((r) => r.name).join(', ')}];` : `return ${rl[0].name};`); }
       o.out(); o.line('}');
     }
     o.line(''); o.line('// Main');
@@ -3682,7 +3762,7 @@ LANGS.javascript = cFamily({
     let multiDim = false;
     for (const c of OO.ordered(prog, false)) {
       o.line('');
-      o.line(`class ${c.name}${c.parent ? ' extends ' + c.parent : ''} {`); o.in();
+      o.line(`class ${c.name}${c.parent ? ' extends ' + c.parent : ''} {${c.abstract ? ' // classe astratta: non si creano oggetti' : ''}`); o.in();
       const start = o.lines.length;
       for (const a of c.attributes) {
         const sc = OO.classScope(prog, c, a.static);
@@ -3693,12 +3773,12 @@ LANGS.javascript = cFamily({
       }
       // corpo di un costruttore: in una sottoclasse super(...) va chiamato prima di usare this
       const ctorBody = (f) => { const sc = g.buildScope(f); const sp = OO.splitSuper(f); if (c.parent && !sp.args) o.line('super();'); g.block(o, f.body, sc); };
-      const methodBody = (f) => { g.block(o, f.body, g.buildScope(f)); const rl = _CM.rets(f); if (rl.length) o.line(rl.length > 1 ? `return [${rl.map((r) => r.name).join(', ')}];` : `return ${rl[0].name};`); };
+      const methodBody = (f) => { if (f.abstract) { o.line(`throw new Error("${f.name}() è astratto: lo definiscono le sottoclassi");`); return; } g.block(o, f.body, g.buildScope(f)); const rl = _CM.rets(f); if (rl.length) o.line(rl.length > 1 ? `return [${rl.map((r) => r.name).join(', ')}];` : `return ${rl[0].name};`); };
       const emit = (group, isCtor) => {
         if (o.lines.length > start) o.line('');
         const f0 = group[0];
         const head = isCtor ? 'constructor' : `${f0.static ? 'static ' : ''}${OO.isMain(prog, f0) ? 'main' : f0.name}`;
-        const note = (f0.visibility || 'public') !== 'public' ? ' // ' + OO.tag(f0.visibility) : '';
+        const note = ((f0.visibility || 'public') !== 'public' ? ' // ' + OO.tag(f0.visibility) : '') + (group.length === 1 && f0.abstract ? ' // astratto' : '');
         if (group.length === 1) { o.line(`${head}(${f0.params.map((p) => p.name).join(', ')}) {${note}`); o.in(); (isCtor ? ctorBody : methodBody)(f0); o.out(); o.line('}'); return; }
         o.line(`${head}(...args) { // ${group.length} versioni${note}`); o.in();
         group.forEach((f, k) => {
@@ -4158,13 +4238,15 @@ const UmlLib = (() => {
       const members = ModelLib.membersOf(prog, c);
       const methods = [...members.filter((f) => f.ctor), ...members.filter((f) => !f.ctor)];
       const attrs = c.attributes.map((a, i) => ({ text: attrText(a), i, st: !!a.static }));
-      const meths = methods.map((f) => ({ text: methodText(prog, f), f, st: !!f.static, ctor: !!f.ctor, main: f === prog.functions[0] }));
+      const meths = methods.map((f) => ({ text: methodText(prog, f), f, st: !!f.static, ctor: !!f.ctor, abs: !!f.abstract, main: f === prog.functions[0] }));
+      // classe concreta che non definisce metodi astratti ereditati
+      const missing = c.abstract ? [] : ModelLib.missingAbstract(prog, c);
       let w = Math.max(MINW, tw(c.name, FN) + PADX * 2 + 24, ...attrs.map((r) => tw(r.text, FM) + PADX * 2), ...meths.map((r) => tw(r.text, FM) + PADX * 2));
       w = Math.ceil(Math.min(MAXW, w));
-      const head = HEAD + (c === main ? STEREO : 0);
+      const head = HEAD + (c === main || c.abstract ? STEREO : 0);
       const ah = Math.max(1, attrs.length) * ROW + CPAD * 2 - (attrs.length ? 0 : ROW - 10);
       const mh = Math.max(1, meths.length) * ROW + CPAD * 2 - (meths.length ? 0 : ROW - 10);
-      boxes.set(c.id, { c, x: c.x || 0, y: c.y || 0, w, h: head + ah + mh, head, ah, mh, attrs, meths, main: c === main });
+      boxes.set(c.id, { c, x: c.x || 0, y: c.y || 0, w, h: head + ah + mh, head, ah, mh, attrs, meths, main: c === main, missing });
     }
     return boxes;
   }
@@ -4231,13 +4313,15 @@ const UmlLib = (() => {
     for (const b of boxes.values()) {
       const { c, x, y, w } = b;
       const isSel = sel && sel.cls === c.id;
-      let g = `<g class="ubox${isSel && sel.kind === 'class' ? ' sel' : ''}${isSel ? ' cur' : ''}${b.main ? ' main' : ''}" data-cls="${c.id}">`;
-      g += `<title>${esc(c.name)}${c.parent ? ' — eredita da ' + esc(c.parent) : ''}: doppio clic sul nome per modificarla, clic destro per aggiungere membri</title>`;
+      const warn = b.missing.length ? `${c.name} non definisce ${b.missing.map((m) => m.f.name + '()').join(', ')} (${b.missing.length === 1 ? 'astratto' : 'astratti'} in ${[...new Set(b.missing.map((m) => m.owner.name))].join(', ')}): aggiungi ${b.missing.length === 1 ? 'il metodo' : 'i metodi'} oppure rendi astratta la classe` : '';
+      let g = `<g class="ubox${isSel && sel.kind === 'class' ? ' sel' : ''}${isSel ? ' cur' : ''}${b.main ? ' main' : ''}${c.abstract ? ' abstract' : ''}${warn ? ' warn' : ''}" data-cls="${c.id}">`;
+      g += `<title>${c.abstract ? 'Classe astratta ' : ''}${esc(c.name)}${c.parent ? ' — eredita da ' + esc(c.parent) : ''}${warn ? ' — ⚠ ' + esc(warn) : ''}: doppio clic sul nome per modificarla, clic destro per aggiungere membri</title>`;
       g += `<rect class="ubg" x="${x}" y="${y}" width="${w}" height="${b.h}" rx="6"/>`;
       g += `<path class="uheadbg" d="M${x} ${y + b.head}V${y + 6}Q${x} ${y} ${x + 6} ${y}H${x + w - 6}Q${x + w} ${y} ${x + w} ${y + 6}V${y + b.head}Z"/>`;
       g += `<rect class="uhit head" data-part="head" x="${x}" y="${y}" width="${w}" height="${b.head}"/>`;
-      if (b.main) g += `<text class="ustereo" x="${x + w / 2}" y="${y + 15}">«principale»</text>`;
+      if (b.main || c.abstract) g += `<text class="ustereo" x="${x + w / 2}" y="${y + 15}">${b.main ? '«principale»' : '«abstract»'}</text>`;
       g += `<text class="uname" x="${x + w / 2}" y="${y + b.head - 13}">${esc(c.name)}</text>`;
+      if (warn) g += `<g class="uwarn"><circle cx="${x + 15}" cy="${y + b.head / 2}" r="8"/><text x="${x + 15}" y="${y + b.head / 2 + 4}">!</text></g>`;
       // attributi
       let yy = y + b.head;
       g += `<path class="usep" d="M${x} ${yy}H${x + w}"/>`;
@@ -4253,8 +4337,8 @@ const UmlLib = (() => {
       b.meths.forEach((r, k) => {
         const ry = yy + CPAD + k * ROW;
         const on = isSel && sel.kind === 'method' && sel.fid === r.f.id;
-        const tip = r.ctor ? 'costruttore' : r.main ? 'punto di partenza del programma' : r.st ? 'metodo statico' : 'metodo';
-        g += `<g class="urow method${on ? ' sel' : ''}${r.ctor ? ' ctor' : ''}${r.main ? ' mainm' : ''}" data-kind="method" data-fid="${r.f.id}"><rect class="uhit" x="${x + 2}" y="${ry}" width="${w - 4}" height="${ROW}" rx="3"/><text class="umem" x="${x + PADX}" y="${ry + ROW / 2 + 4.5}"${r.st ? ' text-decoration="underline"' : ''}>${esc(RenderLib.fitText(r.text, w - PADX * 2, FM))}</text><title>${esc(r.text)} (${tip}) — doppio clic per aprire il diagramma di flusso</title></g>`;
+        const tip = r.ctor ? 'costruttore' : r.main ? 'punto di partenza del programma' : r.st ? 'metodo statico' : r.abs ? 'metodo astratto, senza corpo: lo definiscono le sottoclassi' : 'metodo';
+        g += `<g class="urow method${on ? ' sel' : ''}${r.ctor ? ' ctor' : ''}${r.abs ? ' abs' : ''}${r.main ? ' mainm' : ''}" data-kind="method" data-fid="${r.f.id}"><rect class="uhit" x="${x + 2}" y="${ry}" width="${w - 4}" height="${ROW}" rx="3"/><text class="umem" x="${x + PADX}" y="${ry + ROW / 2 + 4.5}"${r.st ? ' text-decoration="underline"' : ''}>${esc(RenderLib.fitText(r.text, w - PADX * 2, FM))}</text><title>${esc(r.text)} (${tip})${r.abs ? '' : ' — doppio clic per aprire il diagramma di flusso'}</title></g>`;
       });
       g += addBtn(x + w - 13, yy, 'method', 'Aggiungi un metodo o un costruttore');
       g += '</g>';
@@ -4320,11 +4404,11 @@ const Examples = (() => {
     const main = ModelLib.wrapInClass(p);
     Object.assign(main, mainPos || {});
     for (const [cn, c] of Object.entries(classes)) {
-      p.classes.push(ModelLib.makeClass(cn, { parent: c.parent || '', x: c.x, y: c.y, attributes: (c.attrs || []).map(([n, t, vis, o]) => ModelLib.makeAttribute(Object.assign({ name: n, type: t, visibility: vis || 'private' }, o || {}))) }));
+      p.classes.push(ModelLib.makeClass(cn, { parent: c.parent || '', abstract: !!c.abstract, x: c.x, y: c.y, attributes: (c.attrs || []).map(([n, t, vis, o]) => ModelLib.makeAttribute(Object.assign({ name: n, type: t, visibility: vis || 'private' }, o || {}))) }));
     }
     for (const m of methods) {
       const c = p.classes.find((k) => k.name === m.cls) || main;
-      const f = ModelLib.makeFunction(m.ctor ? c.name : m.name, { params: (m.params || []).map(([n, t, a]) => ({ name: n, type: t, array: !!a })), body: m.body || [], cls: c.id, visibility: m.vis || 'public', static: !!m.static, ctor: !!m.ctor });
+      const f = ModelLib.makeFunction(m.ctor ? c.name : m.name, { params: (m.params || []).map(([n, t, a]) => ({ name: n, type: t, array: !!a })), body: m.body || [], cls: c.id, visibility: m.vis || 'public', static: !!m.static, ctor: !!m.ctor, abstract: !!m.abstract });
       if (m.rets) ModelLib.setRets(f, m.rets.map(([n, t]) => ({ name: n, type: t })));
       p.functions.push(f);
     }
@@ -4487,8 +4571,8 @@ const Examples = (() => {
       ], { x: 40, y: 60 }),
     },
     {
-      id: 'forme', title: 'Forme geometriche (ereditarietà e polimorfismo)', tags: 'Oggetti · super · override',
-      make: () => ooProg('Forme geometriche', 'Rettangolo, Quadrato e Cerchio ereditano da Forma e ridefiniscono area e perimetro. Il Disegno contiene un array di forme: ogni forma usa la propria versione dei metodi.', [
+      id: 'forme', title: 'Forme geometriche (ereditarietà e polimorfismo)', tags: 'Oggetti · astratta · super',
+      make: () => ooProg('Forme geometriche', 'Forma è una classe astratta: area e perimetro non hanno un corpo e li definiscono Rettangolo, Quadrato e Cerchio. Il Disegno contiene un array di forme: ogni forma usa la propria versione dei metodi.', [
         X.decl('d', 'Disegno'),
         X.set('d', 'new Disegno()'),
         X.call('d.aggiungi(new Rettangolo(3, 2))'),
@@ -4497,15 +4581,15 @@ const Examples = (() => {
         X.call('d.stampa()'),
         X.out('"Area totale: " & ToFixed(d.areaTotale(), 2)'),
       ], {
-        Forma: { x: 330, y: 40, attrs: [['nome', 'String', 'protected']] },
+        Forma: { abstract: true, x: 330, y: 40, attrs: [['nome', 'String', 'protected']] },
         Rettangolo: { parent: 'Forma', x: 140, y: 300, attrs: [['base', 'Real'], ['altezza', 'Real']] },
         Cerchio: { parent: 'Forma', x: 540, y: 300, attrs: [['raggio', 'Real']] },
         Quadrato: { parent: 'Rettangolo', x: 140, y: 560 },
         Disegno: { x: 780, y: 40, attrs: [['forme', 'Forma', 'private', { array: true, size: '10' }], ['quante', 'Integer', 'private', { init: '0' }]] },
       }, [
         { cls: 'Forma', ctor: true, params: [['n', 'String']], body: [X.set('nome', 'n')] },
-        { cls: 'Forma', name: 'area', rets: [['a', 'Real']], body: [X.decl('a', 'Real'), X.set('a', '0')] },
-        { cls: 'Forma', name: 'perimetro', rets: [['p', 'Real']], body: [X.decl('p', 'Real'), X.set('p', '0')] },
+        { cls: 'Forma', name: 'area', abstract: true, rets: [['a', 'Real']] },
+        { cls: 'Forma', name: 'perimetro', abstract: true, rets: [['p', 'Real']] },
         { cls: 'Forma', name: 'descrivi', rets: [['testo', 'String']], body: [X.decl('testo', 'String'), X.set('testo', 'nome & ": area " & ToFixed(area(), 2) & ", perimetro " & ToFixed(perimetro(), 2)')] },
         { cls: 'Rettangolo', ctor: true, params: [['b', 'Real'], ['h', 'Real']], body: [X.call('super("rettangolo")'), X.set('base', 'b'), X.set('altezza', 'h')] },
         { cls: 'Rettangolo', name: 'area', rets: [['a', 'Real']], body: [X.decl('a', 'Real'), X.set('a', 'base * altezza')] },
@@ -4518,6 +4602,29 @@ const Examples = (() => {
         { cls: 'Disegno', name: 'areaTotale', rets: [['t', 'Real']], body: [X.decl('t', 'Real'), X.decl('i', 'Integer'), X.set('t', '0'), X.for('i', '0', 'quante - 1', [X.set('t', 't + forme[i].area()')])] },
         { cls: 'Disegno', name: 'stampa', body: [X.decl('i', 'Integer'), X.for('i', '0', 'quante - 1', [X.out('forme[i].descrivi()')])] },
       ], { x: 780, y: 330 }),
+    },
+    {
+      id: 'animali', title: 'Animali (classi e metodi astratti)', tags: 'Oggetti · astratta · override',
+      make: () => ooProg('Animali', 'Animale è astratta: ogni animale fa un verso, ma solo Cane e Gatto sanno quale. presentati() è scritto una volta sola in Animale e usa il verso giusto per ogni oggetto.', [
+        X.com('Prova ad aggiungere il blocco  a ← new Animale("x") : Animale è astratta e il programma si ferma con un errore.'),
+        X.decl('a, b', 'Animale'),
+        X.set('a', 'new Cane("Fido")'),
+        X.set('b', 'new Gatto("Micia")'),
+        X.out('a.presentati()'),
+        X.out('b.presentati()'),
+      ], {
+        Animale: { abstract: true, x: 340, y: 40, attrs: [['nome', 'String', 'protected']] },
+        Cane: { parent: 'Animale', x: 220, y: 290 },
+        Gatto: { parent: 'Animale', x: 470, y: 290 },
+      }, [
+        { cls: 'Animale', ctor: true, params: [['n', 'String']], body: [X.set('nome', 'n')] },
+        { cls: 'Animale', name: 'verso', abstract: true, rets: [['v', 'String']] },
+        { cls: 'Animale', name: 'presentati', rets: [['testo', 'String']], body: [X.decl('testo', 'String'), X.set('testo', '"Sono " & nome & " e faccio " & verso()')] },
+        { cls: 'Cane', ctor: true, params: [['n', 'String']], body: [X.call('super(n)')] },
+        { cls: 'Cane', name: 'verso', rets: [['v', 'String']], body: [X.decl('v', 'String'), X.set('v', '"Bau"')] },
+        { cls: 'Gatto', ctor: true, params: [['n', 'String']], body: [X.call('super(n)')] },
+        { cls: 'Gatto', name: 'verso', rets: [['v', 'String']], body: [X.decl('v', 'String'), X.set('v', '"Miao"')] },
+      ], { x: 40, y: 60 }),
     },
     {
       id: 'lista', title: 'Lista collegata (oggetti che puntano ad altri oggetti)', tags: 'Oggetti · null · associazione',
@@ -5201,6 +5308,22 @@ const ArrayView = (() => {
     bar.hidden = !isOO() || st.uml;
     if (!bar.hidden) { const f = func(); const c = M.classOf(st.prog, f); $('#crumbWhere').textContent = `${c ? c.name : ''} › ${f === st.prog.functions[0] ? 'Main (inizio del programma)' : f.ctor ? 'costruttore' : f.name + '()'}`; }
   }
+  /* metodo astratto: niente diagramma di flusso, solo le versioni delle sottoclassi */
+  function abstractCard(f) {
+    st.ins = []; st.edges = [];
+    const c = M.classOf(st.prog, f);
+    const sig = (g) => g.params.map((p) => p.type.toLowerCase() + (p.array ? '[' + (p.dims || 1) : '')).join(',');
+    const impls = st.prog.functions.filter((g) => g !== f && !g.ctor && !g.abstract && g.name.toLowerCase() === f.name.toLowerCase() && sig(g) === sig(f) && M.isSubclass(st.prog, M.classOf(st.prog, g), c));
+    const card = h('div', { class: 'abscard', role: 'note' },
+      h('div', { class: 'tag' }, 'metodo astratto'),
+      h('h3', null, UmlLib.methodText(st.prog, f)),
+      h('p', null, `In ${c.name} questo metodo non ha un corpo: ogni sottoclasse concreta lo deve definire. Quando il programma lo chiama, viene eseguita la versione della classe dell'oggetto.`),
+      impls.length ? h('p', { class: 'muted small' }, 'Definito in:') : h('p', { class: 'muted small' }, 'Nessuna sottoclasse lo definisce ancora: aggiungi il metodo con lo stesso nome e gli stessi parametri in una sottoclasse.'),
+      h('div', { class: 'impls' },
+        ...impls.map((g) => h('button', { class: 'btn small', type: 'button', onclick: () => showFunc(st.prog.functions.indexOf(g)) }, `${M.classOf(st.prog, g).name}.${g.name}()`)),
+        h('button', { class: 'btn small', type: 'button', onclick: () => { if (!isRunning()) editFunction(st.prog.functions.indexOf(f)); } }, 'Modifica il metodo…')));
+    const holder = $('#chart'); holder.innerHTML = ''; holder.append(card);
+  }
   function showUml() { st.uml = true; st.sel = null; render(); $('#canvasWrap').scrollTo(0, 0); }
 
   /* --------------------------- Disegno ----------------------------------- */
@@ -5213,6 +5336,8 @@ const ArrayView = (() => {
       st.ins = []; st.edges = [];
       holder.innerHTML = out.svg;
       applyZoom();
+    } else if (isOO() && func().abstract) {
+      abstractCard(func());
     } else {
       const f = func();
       const c = isOO() ? M.classOf(st.prog, f) : null;
@@ -5267,7 +5392,7 @@ const ArrayView = (() => {
         const ms = M.membersOf(st.prog, c);
         for (const f of [...ms.filter((x) => x.ctor), ...ms.filter((x) => !x.ctor)]) {
           const i = st.prog.functions.indexOf(f);
-          og.append(h('option', { value: i, selected: !st.uml && i === st.fi }, i === 0 ? 'Inizio (principale)' : f.ctor ? `new ${c.name}(${f.params.map((p) => p.name).join(', ')}) · costruttore` : `${f.name}(${f.params.map((p) => p.name).join(', ')})`));
+          og.append(h('option', { value: i, selected: !st.uml && i === st.fi }, i === 0 ? 'Inizio (principale)' : f.ctor ? `new ${c.name}(${f.params.map((p) => p.name).join(', ')}) · costruttore` : `${f.name}(${f.params.map((p) => p.name).join(', ')})${f.abstract ? ' · astratto' : ''}`));
         }
         sel.append(og);
       }
@@ -5386,7 +5511,7 @@ const ArrayView = (() => {
     else toast('Blocco copiato: fai clic su una freccia e scegli «Incolla qui»');
   }
   function paste(target) {
-    if (!st.clip) return;
+    if (!st.clip || (!target && (isUml() || func().abstract))) return;
     const c = M.cloneStmt(st.clip);
     if (!target) {
       const f = st.sel && M.findStmt(st.prog, st.sel);
@@ -5640,11 +5765,18 @@ const ArrayView = (() => {
     if (ctor) nameW._input.disabled = true;
     const rets = ctor ? [] : M.rets(f).map((r) => ({ ...r }));
     body.append(nameW);
-    let visW = null, statW = null;
+    let visW = null, statW = null, absW = null;
     if (oo) {
       visW = field({ key: 'fvis', label: 'Accesso', type: 'seg', options: VIS_OPTS }, isNew ? 'public' : (f.visibility || 'public'));
       body.append(visW);
       if (!ctor) { statW = field({ key: 'fstatic', label: 'Statico: si chiama con ' + cls.name + '.nome(...) senza creare un oggetto', type: 'check' }, isNew ? cls === M.mainClass(st.prog) : !!f.static); body.append(statW); }
+      if (!ctor && cls !== M.mainClass(st.prog)) {
+        // astratto: senza corpo, lo definiscono le sottoclassi (la classe diventa astratta)
+        absW = field({ key: 'fabs', label: 'Astratto: senza corpo, lo definiscono le sottoclassi', type: 'check' }, !isNew && !!f.abstract);
+        body.append(absW);
+        const syncAbs = () => { const a = absW._get(); statW._input.disabled = a; if (a) statW._input.checked = false; };
+        absW._input.addEventListener('change', syncAbs); syncAbs();
+      }
     }
     const plist = h('div', { class: 'params' });
     const drawParams = () => {
@@ -5686,7 +5818,9 @@ const ArrayView = (() => {
         const name = ctor ? cls.name : nameW._get().trim();
         if (name.toLowerCase() === 'main') return 'Il nome Main è riservato al programma principale (Inizio)';
         if (E.BUILTINS[name.toLowerCase()]) return `${name} è già una funzione integrata`;
-        const isStatic = !ctor && !!(statW && statW._get());
+        const isAbs = !!(absW && absW._get());
+        const isStatic = !ctor && !isAbs && !!(statW && statW._get());
+        if (isAbs && visW && visW._get() === 'private') return 'Un metodo astratto non può essere privato: le sottoclassi devono poterlo ridefinire';
         if (oo) {
           const sigOf = (list) => list.map((p) => p.type.toLowerCase() + (p.array ? '[' + (p.dims || 1) : '')).join(',');
           if (!ctor && name.toLowerCase() === cls.name.toLowerCase()) return `${name} è il nome della classe: per un costruttore usa «Nuovo costruttore»`;
@@ -5717,7 +5851,8 @@ const ArrayView = (() => {
         mutate(() => {
           const target = isNew ? M.makeFunction(name, { params }) : f;
           Object.assign(target, { name, params });
-          if (oo) Object.assign(target, { cls: cls.id, visibility: visW ? visW._get() : 'public', static: isStatic || target === st.prog.functions[0], ctor });
+          if (oo) Object.assign(target, { cls: cls.id, visibility: visW ? visW._get() : 'public', static: isStatic || target === st.prog.functions[0], ctor, abstract: isAbs });
+          if (isAbs && !cls.abstract) { cls.abstract = true; setTimeout(() => toast(`${cls.name} è diventata una classe astratta: contiene un metodo astratto`), 0); }
           M.setRets(target, rets);
           // dichiara le variabili restituite che non sono ancora dichiarate (raggruppate per tipo)
           const known = new Set(params.map((p) => p.name));
@@ -5795,7 +5930,9 @@ const ArrayView = (() => {
     const nameW = field({ key: 'cname', label: 'Nome della classe', type: 'ident', required: true, placeholder: 'es. Punto', hint: 'Per convenzione inizia con la lettera maiuscola' }, c ? c.name : '');
     const banned = c ? [c, ...descendants(c)] : [];
     const parW = field({ key: 'cpar', label: 'Eredita da (classe madre)', type: 'select', options: [['', '— nessuna —'], ...st.prog.classes.filter((k) => !banned.includes(k)).map((k) => [k.name, k.name])] }, c ? (c.parent || '') : '');
-    const body = h('div', { class: 'fields' }, h('p', { class: 'help' }, 'Una classe descrive un tipo di oggetti: i loro attributi (i dati) e i metodi (le operazioni). Con l\'ereditarietà la classe riceve attributi e metodi della classe madre e può ridefinire i metodi.'), nameW, parW);
+    const isMainCls = c && c === M.mainClass(st.prog);
+    const absW = isMainCls ? null : field({ key: 'cabs', label: 'Astratta: non si creano oggetti di questa classe, solo delle sue sottoclassi', type: 'check' }, c ? !!c.abstract : false);
+    const body = h('div', { class: 'fields' }, h('p', { class: 'help' }, 'Una classe descrive un tipo di oggetti: i loro attributi (i dati) e i metodi (le operazioni). Con l\'ereditarietà la classe riceve attributi e metodi della classe madre e può ridefinire i metodi.'), nameW, parW, absW);
     openModal({
       title: isNew ? 'Nuova classe' : 'Modifica classe ' + c.name, body, okText: isNew ? 'Crea' : 'Salva',
       onOk: () => {
@@ -5804,6 +5941,8 @@ const ArrayView = (() => {
         if (E.BUILTINS[name.toLowerCase()]) return `${name} è il nome di una funzione integrata`;
         if (st.prog.classes.some((k) => k !== c && k.name.toLowerCase() === name.toLowerCase())) return `Esiste già una classe chiamata ${name}`;
         const parent = parW._get();
+        const abs = !!(absW && absW._get());
+        if (c && !abs) { const am = M.membersOf(st.prog, c).filter((f) => f.abstract); if (am.length) return `${c.name} ha metodi astratti (${am.map((f) => f.name + '()').join(', ')}): per renderla concreta togli prima «astratto» da quei metodi`; }
         // gli attributi non possono avere lo stesso nome di quelli della nuova classe madre
         if (parent) {
           const up = new Set(); M.chainOf(st.prog, M.classByName(st.prog, parent)).forEach((k) => k.attributes.forEach((a) => up.add(a.name.toLowerCase())));
@@ -5811,10 +5950,10 @@ const ArrayView = (() => {
         }
         mutate(() => {
           if (isNew) {
-            const nc = M.makeClass(name, Object.assign({ parent }, UmlLib.freeSpot(st.prog, pos)));
+            const nc = M.makeClass(name, Object.assign({ parent, abstract: abs }, UmlLib.freeSpot(st.prog, pos)));
             st.prog.classes.push(nc);
             st.usel = { cls: nc.id, kind: 'class' };
-          } else { renameClass(c, name); c.parent = parent; }
+          } else { renameClass(c, name); c.parent = parent; c.abstract = abs; }
         });
         return true;
       },
@@ -6936,7 +7075,7 @@ const ArrayView = (() => {
       ['p ← new Punto(1, 2)', 'Crea un oggetto: esegue il costruttore con quei parametri'], ['p.x   p.sposta(3, 4)', 'Attributo e metodo di un oggetto'],
       ['this.x', 'Attributo dell\'oggetto su cui si sta lavorando (in un metodo basta x)'], ['Punto.contatore   Punto.crea()', 'Attributo o metodo statico: si usa con il nome della classe'],
       ['super(nome)', 'Blocco Chiamata, primo blocco del costruttore: esegue il costruttore della classe madre'], ['super.descrivi()', 'Esegue la versione del metodo della classe madre'],
-      ['null   p = null', 'Nessun oggetto: si può assegnare e confrontare'], ['+  -  #', 'Accesso pubblico, privato, protetto (controllato durante l\'esecuzione)'],
+      ['null   p = null', 'Nessun oggetto: si può assegnare e confrontare'], ['«abstract»', 'Classe astratta: non si creano oggetti. Un metodo astratto non ha corpo e lo definiscono le sottoclassi'], ['+  -  #', 'Accesso pubblico, privato, protetto (controllato durante l\'esecuzione)'],
     ].map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
     const keys = [['F5  ·  Ctrl+Invio', 'Esegui / continua'], ['F10', 'Passo successivo (entra nelle funzioni chiamate)'], ['F8', 'Passo sopra (esegue la chiamata senza entrarci)'], ['Esc', 'Chiudi finestre e menu'], ['Invio  ·  doppio clic', 'Modifica il blocco selezionato'], ['Canc', 'Elimina il blocco selezionato'], ['Ctrl+C  X  V  D', 'Copia, taglia, incolla, duplica'], ['Ctrl+Z  ·  Ctrl+Y', 'Annulla, ripeti'], ['Ctrl+rotella', 'Zoom']]
       .map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
