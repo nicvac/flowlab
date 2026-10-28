@@ -1097,6 +1097,7 @@
     run.mode = mode;
     run.steps = 0; run.curId = null; run.errId = null; run.pending = undefined; run.mainFrame = null; run.viewFrame = null; run.prevVals = new Map();
     run.trail = null; clearTrail();
+    ArrayView.markStale();
     conClear(); flushStreams();
     conWrite(`▶ ${st.prog.attrs.name || 'Programma'}`, true, 'sys');
     // esegue una copia, così le modifiche al diagramma non toccano l'esecuzione
@@ -1400,7 +1401,9 @@
     if (!frame.vars.size && !frame.self && !statics.length) { box.append(h('p', { class: 'empty' }, 'Nessuna variabile dichiarata finora in ' + fname(frame.func) + '.')); return; }
     const tbl = h('table', { class: 'vars' }, h('thead', null, h('tr', null, h('th', null, 'Nome'), h('th', null, 'Tipo'), h('th', null, 'Valore'))));
     const tb = h('tbody');
-    const fmt = (v) => (v === undefined ? h('span', { class: 'undef' }, 'nessun valore') : v.t === 'Object' ? h('span', { class: 'v-Object' }, E.literalOf(v)) : h('span', { class: 'v-' + v.t }, E.literalOf(v)));
+    const fmt = (v) => (v === undefined ? h('span', { class: 'undef' }, 'nessun valore')
+      : v.t === 'Object' && v.v ? h('button', { type: 'button', class: 'ov-link obj', title: 'Apri l\'oggetto in una finestra', onclick: () => ArrayView.openObject(v.v) }, E.literalOf(v))
+      : h('span', { class: 'v-' + v.t }, E.literalOf(v)));
     const prev = run.prevVals; const next = new Map();
     const fkey = fname(frame.func);
     /* freccina che apre o chiude le righe sotto (lo stato resta tra un passo e l'altro) */

@@ -562,6 +562,18 @@ table.vars tr.statrow td { font-family: var(--font-ui); font-weight: 700; font-s
 .ptag.vis { font-family: var(--font-mono); font-size: 11px; text-transform: none; }
 body.umlmode #chart { justify-content: flex-start; }
 
+/* ---------- Ispettore degli oggetti ---------- */
+.ovwin { min-width: 260px; min-height: 130px; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.ov-body { overflow: auto; min-height: 0; background: var(--panel); }
+.ov-table td:first-child { white-space: nowrap; }
+.ov-vis { display: inline-block; width: 14px; color: var(--muted); font-weight: 400; }
+.ov-table tr.ov-group td { font: 700 11px var(--font-ui); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); background: var(--panel); padding-top: 8px; }
+button.ov-link { all: unset; cursor: pointer; font: inherit; color: var(--accent); text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; border-radius: 3px; }
+button.ov-link.obj { color: var(--s-call); font-weight: 600; }
+button.ov-link:hover, button.ov-link:focus-visible { text-decoration-style: solid; background: var(--accent-soft); }
+.av-c.obj { cursor: pointer; color: var(--s-call); font-weight: 600; }
+.av-c.obj:hover { background: var(--accent-soft) !important; text-decoration: underline; }
+
 </style>
 </head>
 <body>
@@ -1732,7 +1744,8 @@ class Interpreter {
     for (const f of prog.functions) this.funcs.set(f.name, f);
     // programmazione a oggetti: classi, metodi e costruttori per classe
     this.oo = _M.hasClasses(prog);
-    this.objCount = 0;
+    this.objCount = 0; // numero unico di ogni oggetto (uso interno)
+    this.classCount = new Map(); // numerazione mostrata: progressiva per classe, Cerchio#1, Cerchio#2…
     this.statics = new Map(); // id classe -> Map(nome minuscolo -> cella)
     this.byName = new Map();
     this.methods = new Map();
@@ -2076,7 +2089,9 @@ class Interpreter {
   *construct(node) {
     const cls = this.byName.get(node.cls.toLowerCase());
     if (!cls) throw new _E.FlowError(`La classe "${node.cls}" non esiste`, { node });
-    const obj = { id: ++this.objCount, cls, fields: new Map() };
+    const n = (this.classCount.get(cls.id) || 0) + 1;
+    this.classCount.set(cls.id, n);
+    const obj = { id: n, uid: ++this.objCount, cls, fields: new Map() };
     for (const c of this.chain(cls).reverse()) {
       const attrs = c.attributes.filter((a) => !a.static);
       if (!attrs.length) continue;
@@ -4569,6 +4584,37 @@ const ArrayView = (() => {
   function configure(o) { opts = Object.assign(opts, o); }
 
   const lit = (v) => (v === undefined ? null : E.literalOf(v));
+  const objWins = new Map(); // finestre di ispezione degli oggetti
+  const allCount = () => viewers.size + objWins.size;
+  const ICON_X = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  /* finestra mobile: posizione iniziale sull'area del diagramma, trascinamento dalla barra, primo piano */
+  function floatWin(win, head, W, H) {
+    opts.host().append(win);
+    const n = allCount();
+    const col = document.querySelector('.canvas-col');
+    const right = col ? col.getBoundingClientRect().right : window.innerWidth;
+    Object.assign(win.style, { width: W + 'px', height: H + 'px', left: Math.max(10, right - W - 24 - n * 28) + 'px', top: (90 + n * 28) + 'px' });
+    const raise = () => { win.style.zIndex = opts.nextZ(); document.querySelectorAll('.fwin').forEach((x) => x.classList.toggle('active', x === win)); };
+    const clamp = () => {
+      const VW = window.innerWidth, VH = window.innerHeight;
+      if (win.offsetWidth > VW) win.style.width = VW + 'px';
+      if (win.offsetHeight > VH) win.style.height = VH + 'px';
+      win.style.left = Math.max(0, Math.min(win.offsetLeft, VW - win.offsetWidth)) + 'px';
+      win.style.top = Math.max(0, Math.min(win.offsetTop, VH - win.offsetHeight)) + 'px';
+    };
+    raise();
+    win.addEventListener('pointerdown', raise, true);
+    head.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target.closest('button')) return;
+      e.preventDefault(); head.setPointerCapture(e.pointerId);
+      const sx = e.clientX, sy = e.clientY, ox = win.offsetLeft, oy = win.offsetTop;
+      const mv = (ev) => { win.style.left = ox + ev.clientX - sx + 'px'; win.style.top = oy + ev.clientY - sy + 'px'; clamp(); };
+      const up = () => { head.removeEventListener('pointermove', mv); head.removeEventListener('pointerup', up); };
+      head.addEventListener('pointermove', mv); head.addEventListener('pointerup', up);
+    });
+    clamp();
+    return { raise, clamp };
+  }
   const dimsOf = (cell) => cell.dims || [cell.items.length];
 
   /* ------------------------------------------------------------------ */
@@ -4585,7 +4631,7 @@ const ArrayView = (() => {
 
     /* ---- finestra ---- */
     build() {
-      const close = h('button', { class: 'iconbtn', type: 'button', title: 'Chiudi', 'aria-label': 'Chiudi la finestra dell\'array', html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>', onclick: () => this.close() });
+      const close = h('button', { class: 'iconbtn', type: 'button', title: 'Chiudi', 'aria-label': 'Chiudi la finestra dell\'array', html: ICON_X, onclick: () => this.close() });
       this.titleEl = h('span', { class: 'fwin-title' });
       this.stateEl = h('span', { class: 'av-state' });
       this.head = h('div', { class: 'fwin-head' }, this.titleEl, this.stateEl, h('span', { class: 'grow' }), close);
@@ -4601,25 +4647,16 @@ const ArrayView = (() => {
       this.stage = h('div', { class: 'av-stage' }, this.pageEl);
       this.foot = h('div', { class: 'av-foot' }, ' ');
       this.win = h('div', { class: 'fwin avwin', role: 'dialog' }, this.head, h('div', { class: 'av-main' }, this.bar, this.stage, this.foot));
-      const host = opts.host();
-      host.append(this.win);
-      const W = Math.min(520, window.innerWidth - 40), H = Math.min(380, window.innerHeight - 120);
-      const n = viewers.size;
       // si apre sull'area del diagramma, accanto al pannello, senza coprire la scheda Variabili
-      const col = document.querySelector('.canvas-col');
-      const right = col ? col.getBoundingClientRect().right : window.innerWidth;
-      Object.assign(this.win.style, { width: W + 'px', height: H + 'px', left: Math.max(10, right - W - 24 - n * 28) + 'px', top: (90 + n * 28) + 'px' });
-      this.raise();
-      this.win.addEventListener('pointerdown', () => this.raise(), true);
-      this.head.addEventListener('pointerdown', (e) => {
-        if (e.button !== 0 || e.target.closest('button')) return;
-        e.preventDefault(); this.head.setPointerCapture(e.pointerId);
-        const sx = e.clientX, sy = e.clientY, ox = this.win.offsetLeft, oy = this.win.offsetTop;
-        const mv = (ev) => { this.win.style.left = ox + ev.clientX - sx + 'px'; this.win.style.top = oy + ev.clientY - sy + 'px'; this.clamp(); };
-        const up = () => { this.head.removeEventListener('pointermove', mv); this.head.removeEventListener('pointerup', up); };
-        this.head.addEventListener('pointermove', mv); this.head.addEventListener('pointerup', up);
-      });
+      const fw = floatWin(this.win, this.head, Math.min(520, window.innerWidth - 40), Math.min(380, window.innerHeight - 120));
+      this.raise = fw.raise; this.clamp = fw.clamp;
       this.body.addEventListener('scroll', () => this.schedule());
+      // clic su una cella che contiene un oggetto: si apre la finestra dell'oggetto
+      this.body.addEventListener('click', (e) => {
+        const t = e.target.closest('.av-c.obj'); if (!t) return;
+        const v = this.cell.items[+t.dataset.off];
+        if (v && v.t === 'Object' && v.v) openObject(v.v);
+      });
       this.body.addEventListener('pointermove', (e) => this.hover(e));
       this.body.addEventListener('pointerleave', () => { this.foot.textContent = ' '; });
       this.win.addEventListener('keydown', (e) => {
@@ -4629,17 +4666,6 @@ const ArrayView = (() => {
       });
       if (window.ResizeObserver) new ResizeObserver(() => { this.clamp(); this.schedule(); }).observe(this.win);
       this.clamp();
-    }
-    raise() {
-      this.win.style.zIndex = opts.nextZ();
-      document.querySelectorAll('.fwin').forEach((x) => x.classList.toggle('active', x === this.win));
-    }
-    clamp() {
-      const W = window.innerWidth, H = window.innerHeight, w = this.win;
-      if (w.offsetWidth > W) w.style.width = W + 'px';
-      if (w.offsetHeight > H) w.style.height = H + 'px';
-      w.style.left = Math.max(0, Math.min(w.offsetLeft, W - w.offsetWidth)) + 'px';
-      w.style.top = Math.max(0, Math.min(w.offsetTop, H - w.offsetHeight)) + 'px';
     }
     close() { this.win.remove(); viewers.delete(this.key); }
 
@@ -4821,8 +4847,9 @@ const ArrayView = (() => {
           const off = this.offset(r, c);
           const v = items[off];
           const s = lit(v);
-          let cls = 'av-c' + ((r + c) % 2 ? ' odd' : '') + (s === null ? ' undef' : ' t-' + v.t) + (this.changed.has(off) ? ' chg' : '') + (off === this.focus ? ' focus' : '');
-          html += `<div class="${cls}" style="left:${c * cw}px;top:${r * CH}px;width:${cw}px" data-off="${off}">${s === null ? '·' : esc(s)}</div>`;
+          const isObj = s !== null && v.t === 'Object' && v.v;
+          let cls = 'av-c' + ((r + c) % 2 ? ' odd' : '') + (s === null ? ' undef' : ' t-' + v.t) + (isObj ? ' obj' : '') + (this.changed.has(off) ? ' chg' : '') + (off === this.focus ? ' focus' : '');
+          html += `<div class="${cls}" style="left:${c * cw}px;top:${r * CH}px;width:${cw}px" data-off="${off}"${isObj ? ' role="button" title="Apri l\'oggetto"' : ''}>${s === null ? '·' : esc(s)}</div>`;
         }
       }
       this.cells.innerHTML = html;
@@ -4846,8 +4873,75 @@ const ArrayView = (() => {
       const t = e.target.closest('.av-c');
       if (!t) return;
       const off = +t.dataset.off; const v = this.cell.items[off];
-      this.foot.textContent = `${this.name}[${this.indices(off).join(', ')}] = ${v === undefined ? 'nessun valore' : E.literalOf(v)}`;
+      this.foot.textContent = `${this.name}[${this.indices(off).join(', ')}] = ${v === undefined ? 'nessun valore' : E.literalOf(v)}${v && v.t === 'Object' && v.v ? ' · clic per aprire l\'oggetto' : ''}`;
     }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Ispettore di un oggetto: i suoi attributi, raggruppati per la classe che li dichiara.
+     Gli oggetti contenuti si aprono a loro volta, gli array nel visualizzatore. */
+  class ObjWin {
+    constructor(obj) {
+      this.obj = obj; this.key = 'obj:' + obj.uid; this.snap = null; this.stale = false;
+      const close = h('button', { class: 'iconbtn', type: 'button', title: 'Chiudi', 'aria-label': 'Chiudi la finestra dell\'oggetto', html: ICON_X, onclick: () => this.close() });
+      this.titleEl = h('span', { class: 'fwin-title' });
+      this.stateEl = h('span', { class: 'av-state' });
+      this.head = h('div', { class: 'fwin-head' }, this.titleEl, this.stateEl, h('span', { class: 'grow' }), close);
+      this.body = h('div', { class: 'ov-body' });
+      this.win = h('div', { class: 'fwin ovwin', role: 'dialog' }, this.head, this.body);
+      const fw = floatWin(this.win, this.head, Math.min(400, window.innerWidth - 40), Math.min(Math.max(170, 96 + obj.fields.size * 31 + new Set([...obj.fields.values()].map((c) => c.owner)).size * 26), 460));
+      this.raise = fw.raise;
+      this.update();
+    }
+    close() { this.win.remove(); objWins.delete(this.key); }
+    update() {
+      const o = this.obj;
+      this.titleEl.textContent = `${o.cls.name}#${o.id}`;
+      this.win.setAttribute('aria-label', `Oggetto ${o.cls.name}#${o.id}`);
+      this.stateEl.textContent = this.stale ? 'esecuzione precedente' : (o.cls.parent ? `${o.cls.name} eredita da ${o.cls.parent}` : '');
+      const cur = new Map();
+      const tb = h('tbody');
+      const owners = new Set([...o.fields.values()].map((c) => c.owner));
+      let lastOwner = null;
+      for (const [k, c] of o.fields) {
+        if (owners.size > 1 && c.owner !== lastOwner) {
+          lastOwner = c.owner;
+          tb.append(h('tr', { class: 'ov-group' }, h('td', { colspan: 3 }, c.owner === o.cls ? `di ${c.owner.name}` : `ereditati da ${c.owner.name}`)));
+        }
+        const sv = c.array ? String(c.writes || 0) : (c.value === undefined ? '∅' : E.literalOf(c.value));
+        cur.set(k, sv);
+        const chg = this.snap && this.snap.get(k) !== sv;
+        let val;
+        if (c.array) {
+          const label = `${o.cls.name}#${o.id}.${c.name}`;
+          val = h('button', { type: 'button', class: 'ov-link', title: 'Apri i valori dell\'array', onclick: () => open('@' + this.key, c, { label, fixed: true }) }, `${E.typeName(c.type)}[${(c.dims || [c.items.length]).join(' × ')}]`);
+        } else if (c.value && c.value.t === 'Object' && c.value.v) {
+          const target = c.value.v;
+          val = h('button', { type: 'button', class: 'ov-link obj', title: 'Apri l\'oggetto', onclick: () => openObject(target) }, E.literalOf(c.value));
+        } else val = c.value === undefined ? h('span', { class: 'undef' }, 'nessun valore') : h('span', { class: 'v-' + c.value.t }, E.literalOf(c.value));
+        const vis = { public: '+', private: '-', protected: '#' }[c.visibility || 'public'];
+        tb.append(h('tr', { class: chg ? 'changed' : '' },
+          h('td', null, h('span', { class: 'ov-vis', title: { '+': 'pubblico', '-': 'privato', '#': 'protetto' }[vis] }, vis), c.name),
+          h('td', null, E.typeName(c.type)), h('td', null, val)));
+      }
+      if (!o.fields.size) tb.append(h('tr', null, h('td', { colspan: 3, class: 'muted' }, 'Questo oggetto non ha attributi.')));
+      this.snap = cur;
+      this.body.innerHTML = '';
+      this.body.append(h('table', { class: 'vars ov-table' }, h('thead', null, h('tr', null, h('th', null, 'Attributo'), h('th', null, 'Tipo'), h('th', null, 'Valore'))), tb));
+    }
+  }
+  function openObject(obj) {
+    const key = 'obj:' + obj.uid;
+    const w = objWins.get(key);
+    if (w) { w.raise(); w.update(); return w; }
+    const nw = new ObjWin(obj);
+    objWins.set(key, nw);
+    return nw;
+  }
+  /* un nuovo avvio: le finestre degli oggetti e degli array contenuti si riferiscono all'esecuzione precedente */
+  function markStale() {
+    for (const w of objWins.values()) { w.stale = true; w.update(); }
+    for (const v of viewers.values()) if (v.fixed) { v.live = false; v.update(); }
   }
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -4862,6 +4956,7 @@ const ArrayView = (() => {
   }
   /* resolve(funcName, varName) → cella attuale o null */
   function refresh(resolve) {
+    for (const w of objWins.values()) w.update();
     for (const v of viewers.values()) {
       if (v.fixed) { v.update(); continue; }
       const c = resolve(v.funcName, v.name);
@@ -4870,7 +4965,7 @@ const ArrayView = (() => {
       else v.update();
     }
   }
-  return { configure, open, refresh, get count() { return viewers.size; } };
+  return { configure, open, openObject, markStale, refresh, get count() { return allCount(); } };
 })();
 
 /* ==========================================================================
@@ -5972,6 +6067,7 @@ const ArrayView = (() => {
     run.mode = mode;
     run.steps = 0; run.curId = null; run.errId = null; run.pending = undefined; run.mainFrame = null; run.viewFrame = null; run.prevVals = new Map();
     run.trail = null; clearTrail();
+    ArrayView.markStale();
     conClear(); flushStreams();
     conWrite(`▶ ${st.prog.attrs.name || 'Programma'}`, true, 'sys');
     // esegue una copia, così le modifiche al diagramma non toccano l'esecuzione
@@ -6275,7 +6371,9 @@ const ArrayView = (() => {
     if (!frame.vars.size && !frame.self && !statics.length) { box.append(h('p', { class: 'empty' }, 'Nessuna variabile dichiarata finora in ' + fname(frame.func) + '.')); return; }
     const tbl = h('table', { class: 'vars' }, h('thead', null, h('tr', null, h('th', null, 'Nome'), h('th', null, 'Tipo'), h('th', null, 'Valore'))));
     const tb = h('tbody');
-    const fmt = (v) => (v === undefined ? h('span', { class: 'undef' }, 'nessun valore') : v.t === 'Object' ? h('span', { class: 'v-Object' }, E.literalOf(v)) : h('span', { class: 'v-' + v.t }, E.literalOf(v)));
+    const fmt = (v) => (v === undefined ? h('span', { class: 'undef' }, 'nessun valore')
+      : v.t === 'Object' && v.v ? h('button', { type: 'button', class: 'ov-link obj', title: 'Apri l\'oggetto in una finestra', onclick: () => ArrayView.openObject(v.v) }, E.literalOf(v))
+      : h('span', { class: 'v-' + v.t }, E.literalOf(v)));
     const prev = run.prevVals; const next = new Map();
     const fkey = fname(frame.func);
     /* freccina che apre o chiude le righe sotto (lo stato resta tra un passo e l'altro) */

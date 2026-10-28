@@ -552,3 +552,15 @@ table.vars .caret-sp { display: inline-block; width: 18px; margin: 0 2px 0 -6px;
 table.vars tr.statrow td { font-family: var(--font-ui); font-weight: 700; font-size: 12px; color: var(--muted); background: var(--panel); }
 .ptag.vis { font-family: var(--font-mono); font-size: 11px; text-transform: none; }
 body.umlmode #chart { justify-content: flex-start; }
+
+/* ---------- Ispettore degli oggetti ---------- */
+.ovwin { min-width: 260px; min-height: 130px; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.ov-body { overflow: auto; min-height: 0; background: var(--panel); }
+.ov-table td:first-child { white-space: nowrap; }
+.ov-vis { display: inline-block; width: 14px; color: var(--muted); font-weight: 400; }
+.ov-table tr.ov-group td { font: 700 11px var(--font-ui); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); background: var(--panel); padding-top: 8px; }
+button.ov-link { all: unset; cursor: pointer; font: inherit; color: var(--accent); text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; border-radius: 3px; }
+button.ov-link.obj { color: var(--s-call); font-weight: 600; }
+button.ov-link:hover, button.ov-link:focus-visible { text-decoration-style: solid; background: var(--accent-soft); }
+.av-c.obj { cursor: pointer; color: var(--s-call); font-weight: 600; }
+.av-c.obj:hover { background: var(--accent-soft) !important; text-decoration: underline; }

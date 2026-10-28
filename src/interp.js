@@ -20,7 +20,8 @@ class Interpreter {
     for (const f of prog.functions) this.funcs.set(f.name, f);
     // programmazione a oggetti: classi, metodi e costruttori per classe
     this.oo = _M.hasClasses(prog);
-    this.objCount = 0;
+    this.objCount = 0; // numero unico di ogni oggetto (uso interno)
+    this.classCount = new Map(); // numerazione mostrata: progressiva per classe, Cerchio#1, Cerchio#2…
     this.statics = new Map(); // id classe -> Map(nome minuscolo -> cella)
     this.byName = new Map();
     this.methods = new Map();
@@ -364,7 +365,9 @@ class Interpreter {
   *construct(node) {
     const cls = this.byName.get(node.cls.toLowerCase());
     if (!cls) throw new _E.FlowError(`La classe "${node.cls}" non esiste`, { node });
-    const obj = { id: ++this.objCount, cls, fields: new Map() };
+    const n = (this.classCount.get(cls.id) || 0) + 1;
+    this.classCount.set(cls.id, n);
+    const obj = { id: n, uid: ++this.objCount, cls, fields: new Map() };
     for (const c of this.chain(cls).reverse()) {
       const attrs = c.attributes.filter((a) => !a.static);
       if (!attrs.length) continue;
