@@ -1163,6 +1163,36 @@
     if (ev) { showCurrent(); setStatus('paused', 'Passo a passo: premi Passo per continuare'); }
   }
 
+  /* Passo sopra: esegue fino al prossimo blocco della stessa chiamata (o di quella che l'ha chiamata),
+     senza fermarsi dentro le funzioni e i metodi chiamati dal blocco corrente */
+  function onOverBtn() {
+    if (run.state === 'input') return;
+    if (run.state === 'running') { onStepBtn(); return; }
+    if (run.state !== 'paused') { run.errId = null; startRun('step'); return; }
+    run.overDepth = run.curFrame ? run.curFrame.depth : 0;
+    run.mode = 'over'; run.state = 'running';
+    pumpOver();
+  }
+  function pumpOver() {
+    run.timer = null;
+    if (run.state !== 'running') return;
+    const t0 = performance.now();
+    while (run.state === 'running') {
+      const ev = advance();
+      if (!ev) return; // fine, errore, input o punto di interruzione
+      if (ev.frame.depth <= run.overDepth) {
+        run.state = 'paused'; run.mode = 'step';
+        showCurrent(); setStatus('paused', 'Passo a passo: premi Passo per continuare');
+        return;
+      }
+      if (performance.now() - t0 > 16) {
+        setStatus('running', 'Esecuzione della chiamata…');
+        run.timer = setTimeout(pumpOver, 0);
+        return;
+      }
+    }
+  }
+
   function showCurrent() {
     const fid = run.curFrame && run.curFrame.func.id;
     if (fid) {
@@ -1283,6 +1313,7 @@
     $('#conForm').classList.remove('waiting');
     run.pending = text;
     if (run.mode === 'run') { run.state = 'running'; setStatus('running', 'In esecuzione…'); pump(); }
+    else if (run.mode === 'over') { run.state = 'running'; pumpOver(); }
     else { run.state = 'paused'; stepOnce(); }
   }
 
@@ -1841,7 +1872,7 @@
       ['super(nome)', 'Blocco Chiamata, primo blocco del costruttore: esegue il costruttore della classe madre'], ['super.descrivi()', 'Esegue la versione del metodo della classe madre'],
       ['null   p = null', 'Nessun oggetto: si può assegnare e confrontare'], ['+  -  #', 'Accesso pubblico, privato, protetto (controllato durante l\'esecuzione)'],
     ].map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
-    const keys = [['F5  ·  Ctrl+Invio', 'Esegui / continua'], ['F10', 'Passo successivo'], ['Esc', 'Chiudi finestre e menu'], ['Invio  ·  doppio clic', 'Modifica il blocco selezionato'], ['Canc', 'Elimina il blocco selezionato'], ['Ctrl+C  X  V  D', 'Copia, taglia, incolla, duplica'], ['Ctrl+Z  ·  Ctrl+Y', 'Annulla, ripeti'], ['Ctrl+rotella', 'Zoom']]
+    const keys = [['F5  ·  Ctrl+Invio', 'Esegui / continua'], ['F10', 'Passo successivo (entra nelle funzioni chiamate)'], ['F8', 'Passo sopra (esegue la chiamata senza entrarci)'], ['Esc', 'Chiudi finestre e menu'], ['Invio  ·  doppio clic', 'Modifica il blocco selezionato'], ['Canc', 'Elimina il blocco selezionato'], ['Ctrl+C  X  V  D', 'Copia, taglia, incolla, duplica'], ['Ctrl+Z  ·  Ctrl+Y', 'Annulla, ripeti'], ['Ctrl+rotella', 'Zoom']]
       .map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
     const body = h('div', { class: 'help-body' },
       h('p', null, 'Fai clic su una freccia del diagramma per aggiungere un blocco. Trascina un blocco su un\'altra freccia per spostarlo. I file .fprg si aprono e si salvano con lo stesso formato XML usato dagli editor di diagrammi di flusso più diffusi a scuola.'),
@@ -1867,6 +1898,7 @@
       if (modalStack.length) return;
       if (e.key === 'F5' || (ctrl && e.key === 'Enter')) { e.preventDefault(); onRunBtn(); return; }
       if (e.key === 'F10') { e.preventDefault(); onStepBtn(); return; }
+      if (e.key === 'F8') { e.preventDefault(); onOverBtn(); return; }
       if (ctrl && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(); return; }
       if (ctrl && e.key.toLowerCase() === 'o') { e.preventDefault(); openFile(); return; }
       if (typing) return;
@@ -1913,6 +1945,7 @@
     $('#backUml').addEventListener('click', showUml);
     $('#runBtn').addEventListener('click', onRunBtn);
     $('#stepBtn').addEventListener('click', onStepBtn);
+    $('#overBtn').addEventListener('click', onOverBtn);
     $('#pauseBtn').addEventListener('click', onPauseBtn);
     $('#stopBtn').addEventListener('click', stopRun);
     const sp = $('#speed');

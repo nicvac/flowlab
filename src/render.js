@@ -27,18 +27,19 @@ function fit(t, max, font) {
 }
 
 /* Spezza il testo in righe che stanno in maxW pixel (rispetta gli a capo) */
-function wrapLines(text, maxW) {
+function wrapLines(text, maxW, font) {
+  const F = font || CFONT;
   const out = [];
   for (const para of String(text).split('\n')) {
     const words = para.split(/(\s+)/);
     let cur = '';
     for (const w of words) {
-      if (textW(cur + w, CFONT) <= maxW) { cur += w; continue; }
+      if (textW(cur + w, F) <= maxW) { cur += w; continue; }
       if (cur.trim()) out.push(cur.trimEnd());
       cur = w.trimStart();
-      while (textW(cur, CFONT) > maxW) { // parola più lunga della riga
+      while (textW(cur, F) > maxW) { // parola più lunga della riga
         let n = cur.length;
-        while (n > 1 && textW(cur.slice(0, n), CFONT) > maxW) n--;
+        while (n > 1 && textW(cur.slice(0, n), F) > maxW) n--;
         out.push(cur.slice(0, n)); cur = cur.slice(n);
       }
     }
@@ -54,6 +55,7 @@ function dedupe(pts) {
   return out;
 }
 const cat2 = (a, b) => a.concat(b);
+const TOG = 24, LINE_H = 17;
 
 const KIND_IT = {
   declare: 'Dichiara', const: 'Costante', assign: 'Assegna', input: 'Input', output: 'Output', if: 'Se', while: 'Mentre', for: 'Per', do: 'Fai-mentre',
@@ -140,14 +142,48 @@ class Renderer {
   }
   label(x, y, t, anchor) { this.lbl.push(`<text class="blabel" x="${x}" y="${y}" text-anchor="${anchor || 'middle'}">${t}</text>`); }
 
-  shape(id, kind, cat, shp, cx, y, w, h, text, title, extra, badge) {
-    const tw = w - (shp === 'diamond' ? 36 : shp === 'hex' ? 30 : shp === 'para' ? 24 : 18) - (badge ? 18 : 0);
-    const t = fit(text, tw);
-    let s = `<g class="shape c-${cat}${extra || ''}" data-id="${id}"${kind ? ` data-kind="${kind}"` : ''}><title>${esc(title || text)}</title>${shapePath(shp, cx, y, w, h)}`;
-    s += `<text x="${cx}" y="${y + h / 2}" dy="0.35em">${esc(t)}</text>`;
+  /* mb: misure del blocco (measure); se il testo è troncato compare il pulsante + per espanderlo */
+  shape(id, kind, cat, shp, cx, y, w, h, text, title, extra, badge, mb) {
+    const tog = mb && mb.expandable;
+    const side = tog && shp !== 'diamond' ? TOG : 0; // spazio a destra per il pulsante
+    const tw = w - (shp === 'diamond' ? 36 : shp === 'hex' ? 30 : shp === 'para' ? 24 : 18) - (badge ? 18 : 0) - side;
+    let s = `<g class="shape c-${cat}${extra || ''}${mb && mb.open ? ' open' : ''}" data-id="${id}"${kind ? ` data-kind="${kind}"` : ''}><title>${esc(title || text)}</title>${shapePath(shp, cx, y, w, h)}`;
+    const tx = cx - side / 2 - (badge && side ? 9 : 0);
+    if (mb && mb.open) {
+      const n = mb.lines.length;
+      mb.lines.forEach((l, i) => { s += `<text x="${tx}" y="${y + h / 2 + (i - (n - 1) / 2) * LINE_H}" dy="0.35em">${esc(l)}</text>`; });
+    } else s += `<text x="${tx}" y="${y + h / 2}" dy="0.35em">${esc(fit(text, tw))}</text>`;
     if (badge) s += `<text class="badge" x="${cx + w / 2 - 13}" y="${y + 11}" dy="0.35em">${badge}</text>`;
+    if (tog) {
+      const open = mb.open;
+      // altre forme: a destra, prima dell'eventuale lettera I/O
+      // rombo: appena fuori dal lato in alto a destra, così non copre il testo
+      const a2 = w / 2, b2 = h / 2, ln = Math.hypot(a2, b2);
+      const px = shp === 'diamond' ? cx + a2 / 2 + (11 * b2) / ln : cx + w / 2 - 19 - (shp === 'hex' || shp === 'para' ? 9 : 0) - (badge ? 16 : 0);
+      const py = shp === 'diamond' ? y + b2 / 2 - (11 * a2) / ln : (open ? y + 15 : y + h / 2);
+      s += `<g class="ctoggle" data-toggle="${id}" role="button" aria-label="${open ? 'Riduci il blocco' : 'Mostra tutto il testo del blocco'}"><title>${open ? 'Riduci il blocco' : 'Mostra tutto il testo'}</title><circle cx="${px}" cy="${py}" r="8"/><path d="M${px - 3.5} ${py}H${px + 3.5}${open ? '' : `M${px} ${py - 3.5}V${py + 3.5}`}"/></g>`;
+    }
     s += '</g>';
     this.sh.push(s);
+  }
+
+  /* larghezza e altezza di un blocco: se il testo non sta nella larghezza massima
+     il blocco diventa espandibile; aperto, il testo va su più righe */
+  measure(s, cap, shp, baseH) {
+    const badgeW = cap.badge && !cap.incomplete ? 18 : 0;
+    const expandable = !cap.incomplete && textW(cap.text) > R_.MAXW;
+    const open = expandable && !!this.expanded && this.expanded.has(s.id);
+    if (!open) return { w: this.boxW(cap.text, shp) + badgeW + (expandable && shp !== 'diamond' ? TOG : 0), h: baseH, expandable, open };
+    const lines = wrapLines(cap.text, shp === 'diamond' ? 240 : R_.MAXW, R_.font);
+    const lw = Math.max(...lines.map((l) => textW(l)));
+    const half = (lines.length * LINE_H) / 2 + 4;
+    if (shp === 'diamond') {
+      // nel rombo la riga più alta sta a metà altezza del semiasse: larghezza doppia del testo
+      const b = Math.max(baseH / 2, half * 2);
+      return { w: Math.ceil(Math.max(R_.MINW, 2 * (lw + 22))), h: Math.ceil(2 * b), expandable, open, lines };
+    }
+    const padX = shp === 'hex' ? 44 : shp === 'para' ? 40 : R_.PADX * 2;
+    return { w: Math.ceil(lw + padX + badgeW + TOG), h: Math.max(baseH, Math.ceil(lines.length * LINE_H + 18 + (shp === 'doc' ? 6 : 0))), expandable, open, lines };
   }
 
   /* ---- impaginazione ---- */
@@ -183,9 +219,11 @@ class Renderer {
     const shp = SHAPE_OF[s.kind];
     const cat = cap.incomplete ? 'inc' : CAT_OF[s.kind];
     const title = cap.incomplete ? `${KIND_IT[s.kind]} — incompleto: doppio clic per completarlo` : `${KIND_IT[s.kind]}: ${cap.text}`;
-    const H = R_.H, DH = R_.DH;
+    const H = R_.H;
+    let DH = R_.DH;
     if (s.kind === 'if') {
-      const dw = this.boxW(cap.text, 'diamond');
+      const mb = this.measure(s, cap, 'diamond', DH);
+      const dw = mb.w; DH = mb.h;
       const T = this.seq(s.then, false), E = this.seq(s.else, false);
       const offR = Math.max(dw / 2 + R_.BRANCH, T.L + 26);
       const offL = Math.max(dw / 2 + R_.BRANCH, E.R + 26);
@@ -196,7 +234,7 @@ class Renderer {
         draw: (cx, y, head) => {
           const m = y + DH / 2, j = y + h, J = s.id + ':join';
           this.edge(head.node, s.id, head.pts, head.tag);
-          this.shape(s.id, s.kind, cat, 'diamond', cx, y, dw, DH, cap.text, title);
+          this.shape(s.id, s.kind, cat, 'diamond', cx, y, dw, DH, cap.text, title, '', null, mb);
           this.line([[cx + dw / 2, m], [cx + offR, m]]);
           this.line([[cx - dw / 2, m], [cx - offL, m]]);
           this.label(cx + dw / 2 + 6, m - 6, 'Vero', 'start');
@@ -213,8 +251,8 @@ class Renderer {
       };
     }
     if (s.kind === 'while' || s.kind === 'for') {
-      const dw = this.boxW(cap.text, s.kind === 'for' ? 'hex' : 'diamond');
-      const dh = s.kind === 'for' ? H + 4 : DH;
+      const mb = this.measure(s, cap, s.kind === 'for' ? 'hex' : 'diamond', s.kind === 'for' ? H + 4 : DH);
+      const dw = mb.w, dh = mb.h;
       const B = this.seq(s.body, false);
       const lo = Math.max(dw / 2, B.L) + 20, ro = Math.max(dw / 2, B.R) + 20;
       const h = dh + B.h + 28;
@@ -223,7 +261,7 @@ class Renderer {
         draw: (cx, y, head) => {
           const m = y + dh / 2, by = y + dh + B.h;
           this.edge(head.node, s.id, head.pts, head.tag);
-          this.shape(s.id, s.kind, cat, s.kind === 'for' ? 'hex' : 'diamond', cx, y, dw, dh, cap.text, title);
+          this.shape(s.id, s.kind, cat, s.kind === 'for' ? 'hex' : 'diamond', cx, y, dw, dh, cap.text, title, '', null, mb);
           const tB = B.draw(cx, y + dh, { node: s.id, pts: [[cx, y + dh]], tag: 'T' });
           this.label(cx + 6, y + dh + 13, s.kind === 'for' ? 'Ripeti' : 'Vero', 'start');
           // il ritorno si innesta a metà della freccia che entra nella condizione
@@ -238,7 +276,8 @@ class Renderer {
       };
     }
     if (s.kind === 'do') {
-      const dw = this.boxW(cap.text, 'diamond');
+      const mb = this.measure(s, cap, 'diamond', DH);
+      const dw = mb.w; DH = mb.h;
       const B = this.seq(s.body, true);
       const lo = Math.max(dw / 2, B.L) + 20;
       const h = 6 + B.h + DH;
@@ -251,7 +290,7 @@ class Renderer {
           this.edge(head.node, J, cat2(head.pts, [[cx, top]]), head.tag);
           const tB = B.draw(cx, top, { node: J, pts: [[cx, top]] });
           this.edge(tB.node, s.id, tB.pts, tB.tag);
-          this.shape(s.id, s.kind, cat, 'diamond', cx, dy, dw, DH, cap.text, title);
+          this.shape(s.id, s.kind, cat, 'diamond', cx, dy, dw, DH, cap.text, title, '', null, mb);
           this.line([[cx - dw / 2, m], [cx - lo, m], [cx - lo, top], [cx - 4, top]], true, 'back');
           this.label(cx - dw / 2 - 6, m - 6, 'Vero', 'end');
           this.label(cx + 6, dy + DH + 13, 'Falso', 'start');
@@ -261,13 +300,13 @@ class Renderer {
       };
     }
     if (s.kind === 'comment' && !cap.incomplete) return this.comment(s, title);
-    const w = this.boxW(cap.text, shp) + (cap.badge ? 18 : 0);
-    const h = H;
+    const mb = this.measure(s, cap, shp, H);
+    const w = mb.w, h = mb.h;
     return {
       L: w / 2 + 6, R: w / 2 + 6, h,
       draw: (cx, y, head) => {
         this.edge(head.node, s.id, head.pts, head.tag);
-        this.shape(s.id, s.kind, cat, shp, cx, y, w, h, cap.text, title, s.kind === 'comment' ? ' comment' : '', cap.incomplete ? null : cap.badge);
+        this.shape(s.id, s.kind, cat, shp, cx, y, w, h, cap.text, title, s.kind === 'comment' ? ' comment' : '', cap.incomplete ? null : cap.badge, mb);
         return { node: s.id, pts: [[cx, y + h]] };
       },
     };
