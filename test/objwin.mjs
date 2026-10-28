@@ -29,9 +29,22 @@ await page.locator('.avwin .av-c.obj', { hasText: 'Cerchio' }).click(); await wa
 console.log('finestre:', await page.locator('.ovwin .fwin-title').allTextContents());
 const c = page.locator('.ovwin', { has: page.locator('.fwin-title', { hasText: 'Cerchio#1' }) });
 console.log('Cerchio#1:', await c.locator('.av-state').textContent(), '·', (await c.locator('tbody tr').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ')).join(' | '));
+await wait(100);
+console.log('connettori:', await page.evaluate(() => [...document.querySelectorAll('svg.wlinks .wlink')].map((g) => g.getAttribute('class')).join(' | ')));
 await page.screenshot({ path: 'test/objwin.png' });
+// spostando la finestra il connettore la segue
+const hd = page.locator('.ovwin .fwin-head', { hasText: 'Cerchio#1' }); const hb = await hd.boundingBox();
+const d0 = await page.evaluate(() => document.querySelector('svg.wlinks .wlink.on .wl-line').getAttribute('d'));
+await page.mouse.move(hb.x + 60, hb.y + 10); await page.mouse.down(); await page.mouse.move(hb.x - 260, hb.y + 300, { steps: 5 }); await page.mouse.up(); await wait(100);
+const d1 = await page.evaluate(() => document.querySelector('svg.wlinks .wlink.on .wl-line').getAttribute('d'));
+console.log('il connettore segue la finestra:', d0 !== d1);
+await page.screenshot({ path: 'test/objwin2.png' });
+// chiudendo la finestra il connettore sparisce
+const n0 = await page.locator('svg.wlinks .wlink').count();
+await page.locator('.ovwin', { has: page.locator('.fwin-title', { hasText: 'Cerchio#1' }) }).locator('.fwin-head .iconbtn').click(); await wait(100);
+console.log('connettori prima e dopo la chiusura:', n0, '→', await page.locator('svg.wlinks .wlink').count());
 // nuovo avvio: le finestre indicano l'esecuzione precedente
 await page.click('#runBtn'); await wait(300);
-console.log('dopo un nuovo avvio:', await c.locator('.av-state').textContent());
+console.log('dopo un nuovo avvio:', await page.locator('.ovwin .av-state').first().textContent());
 console.log('ERR', errs);
 await browser.close();

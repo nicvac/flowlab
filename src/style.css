@@ -564,3 +564,17 @@ button.ov-link.obj { color: var(--s-call); font-weight: 600; }
 button.ov-link:hover, button.ov-link:focus-visible { text-decoration-style: solid; background: var(--accent-soft); }
 .av-c.obj { cursor: pointer; color: var(--s-call); font-weight: 600; }
 .av-c.obj:hover { background: var(--accent-soft) !important; text-decoration: underline; }
+
+/* ---------- Connettori tra elemento cliccato e finestra ---------- */
+svg.wlinks { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 100000; pointer-events: none; overflow: visible; }
+.wlink { --wl: var(--s-call); opacity: 0.55; transition: opacity .15s; }
+.wlink.arr { --wl: var(--accent); }
+.wlink.on { opacity: 1; }
+.wl-line { fill: none; stroke: var(--wl); stroke-width: 2; stroke-linecap: round; }
+.wlink.out .wl-line { stroke-dasharray: 5 5; }
+.wl-src { fill: none; stroke: var(--wl); stroke-width: 2; }
+.wl-dot { fill: var(--wl); }
+.wl-end { fill: var(--paper); stroke: var(--wl); stroke-width: 2; }
+@media print { svg.wlinks { display: none; } }
+.wl-line { paint-order: stroke; }
+.wlink .wl-halo { fill: none; stroke: var(--paper); stroke-width: 6; stroke-linecap: round; opacity: .85; }

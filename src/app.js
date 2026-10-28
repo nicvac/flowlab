@@ -1401,8 +1401,10 @@
     if (!frame.vars.size && !frame.self && !statics.length) { box.append(h('p', { class: 'empty' }, 'Nessuna variabile dichiarata finora in ' + fname(frame.func) + '.')); return; }
     const tbl = h('table', { class: 'vars' }, h('thead', null, h('tr', null, h('th', null, 'Nome'), h('th', null, 'Tipo'), h('th', null, 'Valore'))));
     const tb = h('tbody');
-    const fmt = (v) => (v === undefined ? h('span', { class: 'undef' }, 'nessun valore')
-      : v.t === 'Object' && v.v ? h('button', { type: 'button', class: 'ov-link obj', title: 'Apri l\'oggetto in una finestra', onclick: () => ArrayView.openObject(v.v) }, E.literalOf(v))
+    // src: chiave della riga, per collegare la finestra all'elemento cliccato
+    const srcSel = (k) => `#varsBody [data-src="${CSS.escape(k)}"]`;
+    const fmt = (v, k) => (v === undefined ? h('span', { class: 'undef' }, 'nessun valore')
+      : v.t === 'Object' && v.v ? h('button', { type: 'button', class: 'ov-link obj', 'data-src': k || null, title: 'Apri l\'oggetto in una finestra', onclick: () => ArrayView.openObject(v.v, k ? ArrayView.domSrc(srcSel(k)) : null) }, E.literalOf(v))
       : h('span', { class: 'v-' + v.t }, E.literalOf(v)));
     const prev = run.prevVals; const next = new Map();
     const fkey = fname(frame.func);
@@ -1426,8 +1428,9 @@
         const n = c.items.length, dims = c.dims || [n];
         const sv = String(c.writes || 0); next.set(key, sv);
         const changed = prev.has(key) && prev.get(key) !== sv;
-        const openArr = () => (depth ? ArrayView.open('@' + path, c, { label, fixed: true }) : ArrayView.open(frame.func.id, c));
-        const icon = h('button', { class: 'iconbtn avopen', type: 'button', title: 'Visualizza i valori', 'aria-label': `Visualizza i valori di ${label}`, html: GRID_ICON, onclick: openArr });
+        const src = ArrayView.domSrc(srcSel(key));
+        const openArr = () => (depth ? ArrayView.open('@' + path, c, { label, fixed: true, src }) : ArrayView.open(frame.func.id, c, { src }));
+        const icon = h('button', { class: 'iconbtn avopen', type: 'button', 'data-src': key, title: 'Visualizza i valori', 'aria-label': `Visualizza i valori di ${label}`, html: GRID_ICON, onclick: openArr });
         const okey = fkey + '::' + path.toLowerCase();
         const detail = h('tr', { class: 'detail' + (st.varsOpen.has(okey) ? ' open' : '') + (changed ? ' changed' : '') }, h('td', { colspan: 3 },
           h('div', { class: 'det-wrap' }, h('div', { class: 'det-inner', ...(ind(depth + 1) || {}) },
@@ -1446,7 +1449,7 @@
         const loop = seen.has(obj);
         const rows = [];
         const car = loop ? null : makeCaret(okey, label, () => renderVars());
-        tb.append(h('tr', { class: 'objrow' + (changed ? ' changed' : '') }, h('td', ind(depth), car ? car.el : h('span', { class: 'caret-sp' }), label, ...tags), h('td', null, E.typeName(c.type)), h('td', null, fmt(v), loop ? h('span', { class: 'muted small' }, ' ↺ già sopra') : null)));
+        tb.append(h('tr', { class: 'objrow' + (changed ? ' changed' : '') }, h('td', ind(depth), car ? car.el : h('span', { class: 'caret-sp' }), label, ...tags), h('td', null, E.typeName(c.type)), h('td', null, fmt(v, key), loop ? h('span', { class: 'muted small' }, ' ↺ già sopra') : null)));
         if (car && car.isOpen && depth < 6) {
           const s2 = new Set(seen); s2.add(obj);
           for (const fc of obj.fields.values()) addCell(fc, fc.name, depth + 1, path + '.' + fc.name, s2);
