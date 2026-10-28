@@ -31,6 +31,23 @@ const Examples = (() => {
     return p;
   };
   const fn = (name, type, variable, params, body) => ModelLib.makeFunction(name, { type, variable, params: params.map(([n, t, a]) => ({ name: n, type: t, array: !!a })), body });
+  /* programma a oggetti: classi = { Nome: { parent, x, y, attrs: [[nome, tipo, accesso, opzioni]] } },
+     metodi = [{ cls, name | ctor, vis, static, params, rets, body }] */
+  const ooProg = (name, about, mainBody, classes, methods, mainPos) => {
+    const p = prog(name, about, mainBody);
+    const main = ModelLib.wrapInClass(p);
+    Object.assign(main, mainPos || {});
+    for (const [cn, c] of Object.entries(classes)) {
+      p.classes.push(ModelLib.makeClass(cn, { parent: c.parent || '', x: c.x, y: c.y, attributes: (c.attrs || []).map(([n, t, vis, o]) => ModelLib.makeAttribute(Object.assign({ name: n, type: t, visibility: vis || 'private' }, o || {}))) }));
+    }
+    for (const m of methods) {
+      const c = p.classes.find((k) => k.name === m.cls) || main;
+      const f = ModelLib.makeFunction(m.ctor ? c.name : m.name, { params: (m.params || []).map(([n, t, a]) => ({ name: n, type: t, array: !!a })), body: m.body || [], cls: c.id, visibility: m.vis || 'public', static: !!m.static, ctor: !!m.ctor });
+      if (m.rets) ModelLib.setRets(f, m.rets.map(([n, t]) => ({ name: n, type: t })));
+      p.functions.push(f);
+    }
+    return p;
+  };
 
   const list = [
     {
@@ -163,6 +180,80 @@ const Examples = (() => {
           X.for('i', '0', 'Size(m) - 1', [X.set('s', 's + m[i, i]')]),
         ]),
       ]).also((p) => { p.functions[1].params[0].dims = 2; }),
+    },
+    {
+      id: 'conto', title: 'Conto in banca (classi e incapsulamento)', tags: 'Oggetti · privato · costruttori',
+      make: () => ooProg('Conto in banca', 'Una classe con attributi privati, due costruttori e un attributo statico che conta i conti aperti.', [
+        X.com('Prova ad aggiungere il blocco  a.saldo ← 1000000 : saldo è privato e il programma si ferma con un errore.'),
+        X.decl('a, b', 'ContoBancario'),
+        X.set('a', 'new ContoBancario("Anna", 100)'),
+        X.set('b', 'new ContoBancario("Bruno")'),
+        X.call('a.deposita(50)'),
+        X.if('a.preleva(30)', [X.out('"Anna ha prelevato 30 €"')]),
+        X.if('not b.preleva(10)', [X.out('"Bruno non ha abbastanza soldi per prelevare 10 €"')]),
+        X.out('a.descrivi()'), X.out('b.descrivi()'),
+        X.out('"Conti aperti: " & ContoBancario.contiAperti'),
+      ], {
+        ContoBancario: { x: 360, y: 40, attrs: [['titolare', 'String'], ['saldo', 'Real'], ['contiAperti', 'Integer', 'public', { static: true, init: '0' }]] },
+      }, [
+        { cls: 'ContoBancario', ctor: true, params: [['nome', 'String']], body: [X.set('titolare', 'nome'), X.set('saldo', '0'), X.set('contiAperti', 'contiAperti + 1')] },
+        { cls: 'ContoBancario', ctor: true, params: [['nome', 'String'], ['iniziale', 'Real']], body: [X.set('titolare', 'nome'), X.set('saldo', 'iniziale'), X.set('contiAperti', 'contiAperti + 1')] },
+        { cls: 'ContoBancario', name: 'deposita', params: [['importo', 'Real']], body: [X.if('importo > 0', [X.set('saldo', 'saldo + importo')], [X.out('"Importo non valido"')])] },
+        { cls: 'ContoBancario', name: 'preleva', params: [['importo', 'Real']], rets: [['riuscito', 'Boolean']], body: [X.decl('riuscito', 'Boolean'), X.if('importo > 0 and importo <= saldo', [X.set('saldo', 'saldo - importo'), X.set('riuscito', 'true')], [X.set('riuscito', 'false')])] },
+        { cls: 'ContoBancario', name: 'getSaldo', rets: [['s', 'Real']], body: [X.decl('s', 'Real'), X.set('s', 'saldo')] },
+        { cls: 'ContoBancario', name: 'descrivi', rets: [['testo', 'String']], body: [X.decl('testo', 'String'), X.set('testo', 'titolare & ": " & ToFixed(saldo, 2) & " €"')] },
+      ], { x: 40, y: 60 }),
+    },
+    {
+      id: 'forme', title: 'Forme geometriche (ereditarietà e polimorfismo)', tags: 'Oggetti · super · override',
+      make: () => ooProg('Forme geometriche', 'Rettangolo, Quadrato e Cerchio ereditano da Forma e ridefiniscono area e perimetro. Il Disegno contiene un array di forme: ogni forma usa la propria versione dei metodi.', [
+        X.decl('d', 'Disegno'),
+        X.set('d', 'new Disegno()'),
+        X.call('d.aggiungi(new Rettangolo(3, 2))'),
+        X.call('d.aggiungi(new Quadrato(4))'),
+        X.call('d.aggiungi(new Cerchio(1.5))'),
+        X.call('d.stampa()'),
+        X.out('"Area totale: " & ToFixed(d.areaTotale(), 2)'),
+      ], {
+        Forma: { x: 330, y: 40, attrs: [['nome', 'String', 'protected']] },
+        Rettangolo: { parent: 'Forma', x: 140, y: 300, attrs: [['base', 'Real'], ['altezza', 'Real']] },
+        Cerchio: { parent: 'Forma', x: 540, y: 300, attrs: [['raggio', 'Real']] },
+        Quadrato: { parent: 'Rettangolo', x: 140, y: 560 },
+        Disegno: { x: 780, y: 40, attrs: [['forme', 'Forma', 'private', { array: true, size: '10' }], ['quante', 'Integer', 'private', { init: '0' }]] },
+      }, [
+        { cls: 'Forma', ctor: true, params: [['n', 'String']], body: [X.set('nome', 'n')] },
+        { cls: 'Forma', name: 'area', rets: [['a', 'Real']], body: [X.decl('a', 'Real'), X.set('a', '0')] },
+        { cls: 'Forma', name: 'perimetro', rets: [['p', 'Real']], body: [X.decl('p', 'Real'), X.set('p', '0')] },
+        { cls: 'Forma', name: 'descrivi', rets: [['testo', 'String']], body: [X.decl('testo', 'String'), X.set('testo', 'nome & ": area " & ToFixed(area(), 2) & ", perimetro " & ToFixed(perimetro(), 2)')] },
+        { cls: 'Rettangolo', ctor: true, params: [['b', 'Real'], ['h', 'Real']], body: [X.call('super("rettangolo")'), X.set('base', 'b'), X.set('altezza', 'h')] },
+        { cls: 'Rettangolo', name: 'area', rets: [['a', 'Real']], body: [X.decl('a', 'Real'), X.set('a', 'base * altezza')] },
+        { cls: 'Rettangolo', name: 'perimetro', rets: [['p', 'Real']], body: [X.decl('p', 'Real'), X.set('p', '2 * (base + altezza)')] },
+        { cls: 'Quadrato', ctor: true, params: [['lato', 'Real']], body: [X.call('super(lato, lato)'), X.set('nome', '"quadrato"')] },
+        { cls: 'Cerchio', ctor: true, params: [['r', 'Real']], body: [X.call('super("cerchio")'), X.set('raggio', 'r')] },
+        { cls: 'Cerchio', name: 'area', rets: [['a', 'Real']], body: [X.decl('a', 'Real'), X.set('a', 'Pi * raggio ^ 2')] },
+        { cls: 'Cerchio', name: 'perimetro', rets: [['p', 'Real']], body: [X.decl('p', 'Real'), X.set('p', '2 * Pi * raggio')] },
+        { cls: 'Disegno', name: 'aggiungi', params: [['f', 'Forma']], body: [X.if('quante < Size(forme)', [X.set('forme[quante]', 'f'), X.set('quante', 'quante + 1')], [X.out('"Il disegno è pieno"')])] },
+        { cls: 'Disegno', name: 'areaTotale', rets: [['t', 'Real']], body: [X.decl('t', 'Real'), X.decl('i', 'Integer'), X.set('t', '0'), X.for('i', '0', 'quante - 1', [X.set('t', 't + forme[i].area()')])] },
+        { cls: 'Disegno', name: 'stampa', body: [X.decl('i', 'Integer'), X.for('i', '0', 'quante - 1', [X.out('forme[i].descrivi()')])] },
+      ], { x: 780, y: 330 }),
+    },
+    {
+      id: 'lista', title: 'Lista collegata (oggetti che puntano ad altri oggetti)', tags: 'Oggetti · null · associazione',
+      make: () => ooProg('Lista collegata', 'Ogni Nodo contiene un valore e il riferimento al nodo successivo (null alla fine). Apri la scheda Variabili ed esegui con Passo per seguire i riferimenti.', [
+        X.decl('lista', 'Lista'), X.decl('i', 'Integer'),
+        X.set('lista', 'new Lista()'),
+        X.for('i', '1', '5', [X.call('lista.aggiungiInTesta(i * i)')]),
+        X.call('lista.stampa()'),
+        X.out('"Contiene 9? " & lista.contiene(9) & " · contiene 10? " & lista.contiene(10)'),
+      ], {
+        Nodo: { x: 420, y: 300, attrs: [['valore', 'Integer', 'public'], ['prossimo', 'Nodo', 'public']] },
+        Lista: { x: 420, y: 40, attrs: [['testa', 'Nodo'], ['lunghezza', 'Integer', 'private', { init: '0' }]] },
+      }, [
+        { cls: 'Nodo', ctor: true, params: [['v', 'Integer'], ['dopo', 'Nodo']], body: [X.set('valore', 'v'), X.set('prossimo', 'dopo')] },
+        { cls: 'Lista', name: 'aggiungiInTesta', params: [['v', 'Integer']], body: [X.set('testa', 'new Nodo(v, testa)'), X.set('lunghezza', 'lunghezza + 1')] },
+        { cls: 'Lista', name: 'contiene', params: [['v', 'Integer']], rets: [['trovato', 'Boolean']], body: [X.decl('trovato', 'Boolean'), X.decl('n', 'Nodo'), X.set('trovato', 'false'), X.set('n', 'testa'), X.while('n != null and not trovato', [X.if('n.valore = v', [X.set('trovato', 'true')]), X.set('n', 'n.prossimo')])] },
+        { cls: 'Lista', name: 'stampa', body: [X.decl('n', 'Nodo'), X.set('n', 'testa'), X.out('"Lista (" & lunghezza & " elementi): "', false), X.while('n != null', [X.out('n.valore & " "', false), X.set('n', 'n.prossimo')]), X.out('""')] },
+      ], { x: 40, y: 60 }),
     },
     {
       id: 'file', title: 'Scrivere e leggere un file', tags: 'File',

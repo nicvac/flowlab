@@ -10,8 +10,12 @@
     <button class="tb icon" id="undoBtn" type="button" title="Annulla (Ctrl+Z)" aria-label="Annulla"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
     <button class="tb icon" id="redoBtn" type="button" title="Ripeti (Ctrl+Y)" aria-label="Ripeti"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
     <span class="sep" aria-hidden="true"></span>
+    <div class="viewsw" role="radiogroup" aria-label="Vista del programma">
+      <button type="button" class="vbtn" id="viewFn" role="radio" aria-checked="true" aria-label="Vista funzioni" title="Vista funzioni: il programma è un insieme di funzioni"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h-1.5A3.5 3.5 0 0 0 10 7.5V20M6.5 11H14"/><path d="M15.5 13.5l5 5M20.5 13.5l-5 5"/></svg><span class="lbl">Funzioni</span></button>
+      <button type="button" class="vbtn" id="viewOo" role="radio" aria-checked="false" aria-label="Vista oggetti" title="Vista oggetti: diagramma delle classi UML"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="3" width="9" height="11" rx="1.2"/><path d="M2.5 7h9M2.5 10.5h9"/><rect x="13.5" y="10" width="8" height="11" rx="1.2"/><path d="M13.5 14h8M7 14v3.5h6.5"/></svg><span class="lbl">Oggetti</span></button>
+    </div>
     <div class="funcbox">
-      <label for="funcSel">Funzione</label>
+      <label for="funcSel" id="funcLbl">Funzione</label>
       <select id="funcSel" class="fsel"></select>
       <button class="iconbtn" id="funcAdd" type="button" title="Nuova funzione" aria-label="Nuova funzione"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
       <button class="iconbtn" id="funcEdit" type="button" title="Modifica funzione o proprietà del programma" aria-label="Modifica funzione"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button>
@@ -24,7 +28,7 @@
     <button class="tb icon" id="stopBtn" type="button" title="Ferma" aria-label="Ferma" disabled><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button>
     <label class="speed" for="speed"><span class="lbl">Velocità</span> <input id="speed" type="range" min="0" max="3" step="1" value="2"><output id="speedVal">Media</output></label>
     <span class="grow"></span>
-    <button class="tb" id="exBtn" type="button" aria-haspopup="menu"><svg viewBox="0 0 24 24"><path d="M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z"/></svg><span class="lbl">Esempi</span></button>
+    <button class="tb" id="exBtn" type="button" aria-haspopup="menu" title="Programmi di esempio"><svg viewBox="0 0 24 24"><path d="M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z"/></svg><span class="lbl">Esempi</span></button>
     <button class="tb icon" id="helpBtn" type="button" title="Guida rapida" aria-label="Guida rapida"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.6V14M12 17.5v.01"/></svg></button>
     <button class="tb icon" id="themeBtn" type="button" title="Tema chiaro/scuro" aria-label="Cambia tema"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor"/></svg></button>
   </header>
@@ -32,6 +36,7 @@
   <main class="work">
     <section class="canvas-col" aria-label="Diagramma di flusso">
       <div id="canvasWrap"><div id="chart"></div></div>
+      <div id="crumbBar" hidden><button type="button" id="backUml" title="Torna al diagramma delle classi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>Diagramma delle classi</button><span id="crumbWhere"></span></div>
       <div class="zoombar" role="group" aria-label="Zoom">
         <button type="button" id="zoomOut" aria-label="Riduci">−</button>
         <button type="button" id="zoomVal" title="Torna al 100%">100%</button>

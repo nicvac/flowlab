@@ -444,9 +444,22 @@ table.ref td:first-child { white-space: nowrap; width: 1%; padding-right: 18px; 
 body.filedrag #canvasWrap { outline: 3px dashed var(--accent); outline-offset: -10px; }
 
 /* ---------- Schermi stretti ---------- */
+@media (max-width: 1700px) {
+  .funcbox label, .speed .lbl, #exBtn .lbl { display: none; }
+  select.fsel { max-width: 170px; }
+}
 @media (max-width: 1480px) {
   .funcbox label, .speed .lbl { display: none; }
   .bar { gap: 4px; }
+  select.fsel { max-width: 150px; }
+  #exBtn .lbl { display: none; }
+}
+@media (max-width: 1400px) {
+  #stepBtn .lbl { display: none; }
+}
+@media (max-width: 1500px) {
+  .viewsw .lbl { display: none; }
+  .viewsw .vbtn { padding: 0 7px; }
 }
 @media (max-width: 1120px) {
   #stepBtn .lbl, #exBtn .lbl, #fileBtn .lbl { display: none; }
@@ -482,3 +495,60 @@ body.filedrag #canvasWrap { outline: 3px dashed var(--accent); outline-offset: -
   #chart { padding: 0; }
   .chart .ins { display: none; }
 }
+
+/* ---------- Vista Funzioni / Oggetti ---------- */
+.viewsw { display: inline-flex; padding: 2px; gap: 2px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
+.viewsw .vbtn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; font-weight: 700; font-size: 13px; }
+.viewsw .vbtn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.viewsw .vbtn:hover { color: var(--ink); background: var(--line-soft); }
+.viewsw .vbtn[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
+#crumbBar { position: absolute; left: 12px; top: 10px; z-index: 3; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); padding: 3px 10px 3px 3px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 2px 8px rgba(0,0,0,.08); font-size: 13px; }
+#crumbBar[hidden] { display: none; }
+#crumbBar button { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 9px 0 5px; border: 0; border-radius: 6px; background: var(--accent-soft); color: var(--ink); font-weight: 700; cursor: pointer; white-space: nowrap; }
+#crumbBar button:hover { background: var(--accent); color: var(--accent-ink); }
+#crumbBar button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#crumbWhere { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.oo:not(.umlmode) #canvasWrap { padding-top: 34px; }
+
+/* ---------- Diagramma delle classi ---------- */
+svg.uml { display: block; }
+svg.uml text { pointer-events: none; }
+.uml .ubox { cursor: grab; }
+body.udragging, body.udragging .uml .ubox { cursor: grabbing; }
+.uml .ubg { fill: var(--paper); stroke: var(--s-call); stroke-width: 1.6; filter: drop-shadow(0 1px 2px rgba(20, 40, 60, 0.12)); }
+.uml .uheadbg { fill: var(--f-call); }
+.uml .ubox.main .uheadbg { fill: var(--f-term); }
+.uml .ubox.main .ubg { stroke: var(--s-term); }
+.uml .usep { stroke: var(--s-call); stroke-width: 1.2; }
+.uml .ubox.main .usep { stroke: var(--s-term); }
+.uml .uhit { fill: transparent; }
+.uml .uname { font: 700 14px var(--font-ui); fill: var(--sh-text); text-anchor: middle; }
+.uml .ustereo { font: italic 400 11.5px var(--font-ui); fill: var(--muted); text-anchor: middle; }
+.uml .umem { font: 400 12.5px var(--font-mono); fill: var(--sh-text); }
+.uml .urow { cursor: pointer; }
+.uml .urow:hover .uhit { fill: var(--line-soft); }
+.uml .urow.method:hover .uhit { fill: var(--accent-soft); }
+.uml .urow.ctor .umem { font-style: italic; }
+.uml .urow.mainm .umem { font-weight: 600; }
+.uml .urow.sel .uhit { fill: var(--accent-soft); stroke: var(--sel); stroke-width: 1.4; }
+.uml .ubox:hover .ubg { stroke-width: 2.2; }
+.uml .ubox.sel .ubg { stroke: var(--sel); stroke-width: 3; }
+.uml .uadd { cursor: pointer; opacity: 0; transition: opacity .12s; }
+.uml .ubox:hover .uadd, .uml .ubox.cur .uadd, .uml .uadd:focus { opacity: 1; }
+.uml .uadd circle { fill: var(--paper); stroke: var(--s-call); stroke-width: 1.3; }
+.uml .uadd path { stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; fill: none; }
+.uml .uadd:hover circle { fill: var(--accent); stroke: var(--accent); }
+.uml .uadd:hover path { stroke: var(--accent-ink); }
+.uml .urel { fill: none; stroke: var(--flow); stroke-width: 1.6; }
+.uml .urel.assoc { stroke-dasharray: none; }
+.uml .minh { fill: var(--paper); stroke: var(--flow); stroke-width: 1.6; stroke-linejoin: round; }
+.uml .mopen { fill: none; stroke: var(--flow); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.uml .ulab { font: 600 11.5px var(--font-mono); fill: var(--muted); paint-order: stroke; stroke: var(--paper); stroke-width: 4px; stroke-linejoin: round; }
+@media (prefers-reduced-motion: reduce) { .uml .uadd { opacity: 1; } }
+
+/* ---------- Oggetti nella scheda Variabili ---------- */
+table.vars .caret-sp { display: inline-block; width: 18px; margin: 0 2px 0 -6px; }
+.v-Object { color: var(--s-call); font-weight: 600; }
+table.vars tr.statrow td { font-family: var(--font-ui); font-weight: 700; font-size: 12px; color: var(--muted); background: var(--panel); }
+.ptag.vis { font-family: var(--font-mono); font-size: 11px; text-transform: none; }
+body.umlmode #chart { justify-content: flex-start; }

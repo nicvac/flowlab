@@ -30,6 +30,8 @@
     prog: null, fi: 0, sel: null, clip: null, undo: [], redo: [], dirty: false,
     zoom: store.get('zoom', 1), speed: store.get('speed', 2), lang: store.get('lang', 'python'), tab: store.get('tab', 'console'),
     fileName: null, ins: [], expanded: new Set(), varsOpen: new Set(), vfs: new Map(Object.entries(store.get('vfs', {}))),
+    // vista Funzioni o Oggetti; nella vista Oggetti il foglio mostra il diagramma delle classi (uml) o un metodo
+    view: store.get('view', 'functions') === 'objects' ? 'objects' : 'functions', uml: true, usel: null,
   };
   const SPEEDS = [{ ms: 0, label: 'Istantanea' }, { ms: 40, label: 'Veloce' }, { ms: 280, label: 'Media' }, { ms: 750, label: 'Lenta' }];
   const renderer = new RenderLib.Renderer();
@@ -42,7 +44,16 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = 'toast'; }, 3200);
   }
   const func = () => st.prog.functions[st.fi];
-  const fname = (f) => (f && f.name.toLowerCase() === 'main' ? 'Inizio' : f ? f.name : '');
+  const isOO = () => st.view === 'objects';
+  const isUml = () => isOO() && st.uml;
+  /* nome mostrato: Inizio per Main, Classe.metodo e new Classe nella vista Oggetti */
+  const fname = (f) => {
+    if (!f) return '';
+    if (f.name.toLowerCase() === 'main' && !f.ctor) return 'Inizio';
+    const c = f.cls && M.classOf(st.prog, f);
+    if (!c) return f.name;
+    return f.ctor ? 'new ' + c.name : c.name + '.' + f.name;
+  };
   const isRunning = () => ['running', 'paused', 'input'].includes(run.state);
 
   function snapshot() { return JSON.stringify({ prog: st.prog, fi: st.fi }); }
@@ -59,6 +70,7 @@
     const s = JSON.parse(json);
     st.prog = s.prog; st.fi = Math.min(s.fi, st.prog.functions.length - 1);
     st.sel = null;
+    if (st.usel && !M.classById(st.prog, st.usel.cls)) st.usel = null;
     render();
   }
   function undo() { if (isRunning() || !st.undo.length) return; st.redo.push(snapshot()); restore(st.undo.pop()); st.dirty = true; }
@@ -68,21 +80,91 @@
     const out = [];
     for (const p of f.params) out.push(p.name);
     M.walk(f.body, (s) => { if (s.kind === 'declare' || s.kind === 'const') s.name.split(',').map((x) => x.trim()).filter(Boolean).forEach((n) => out.push(n)); });
+    // nella vista Oggetti anche gli attributi della classe (e di quelle madri, se non privati)
+    const c = isOO() && M.classOf(st.prog, f);
+    if (c) {
+      M.chainOf(st.prog, c).forEach((k, i) => k.attributes.forEach((a) => { if ((i === 0 || a.visibility !== 'private') && (a.static || !f.static)) out.push(a.name); }));
+      if (!f.static) out.push('this');
+    }
     return [...new Set(out)];
   }
+  /* tipi per dichiarazioni, parametri e attributi: i quattro di base e le classi */
+  function typeOpts() {
+    const base = E.TYPES.map((t) => [t, TYPE_IT[t]]);
+    return M.hasClasses(st.prog) ? base.concat(st.prog.classes.map((c) => [c.name, c.name + ' (classe)'])) : base;
+  }
+
+  /* ----------------------------- Viste ----------------------------------- */
+  /* il programma deve corrispondere alla vista: classe predefinita nella vista Oggetti */
+  function ensureView() {
+    if (isOO() && !M.hasClasses(st.prog)) M.wrapInClass(st.prog);
+    if (!isOO() && M.hasClasses(st.prog)) {
+      if (M.isTrivialOO(st.prog)) M.unwrapClasses(st.prog);
+      else { st.view = 'objects'; store.set('view', 'objects'); }
+    }
+  }
+  function infoBox(title, text) { openModal({ title, body: h('p', { class: 'confirm' }, text), okText: 'Ho capito', noCancel: true }); }
+  function setView(v) {
+    if (v === st.view) { if (v === 'objects' && !st.uml) showUml(); return; }
+    if (isRunning()) { toast('Ferma il programma per cambiare vista', 'warn'); return; }
+    if (v === 'functions' && M.hasClasses(st.prog)) {
+      const cs = st.prog.classes;
+      if (cs.length > 1) {
+        infoBox('Vista funzioni non disponibile', `Non puoi aprire la vista funzioni perché c'è più di una classe (${cs.map((c) => c.name).join(', ')}). La vista funzioni è disponibile solo finché il programma ha una sola classe.`);
+        return;
+      }
+      if (!M.isTrivialOO(st.prog)) {
+        const c = cs[0], ms = M.membersOf(st.prog, c), why = [];
+        if (c.attributes.length) why.push('attributi');
+        if (ms.some((f) => f.ctor)) why.push('costruttori');
+        if (ms.some((f) => !f.ctor && !f.static)) why.push('metodi non statici');
+        if (ms.some((f) => (f.visibility || 'public') !== 'public')) why.push('metodi privati o protetti');
+        infoBox('Vista funzioni non disponibile', `La classe ${c.name} ha ${why.join(', ')}: nella vista funzioni ci sono solo funzioni. Per tornare alla vista funzioni la classe deve contenere solo metodi statici e pubblici.`);
+        return;
+      }
+      M.unwrapClasses(st.prog);
+    }
+    st.view = v; store.set('view', v);
+    st.sel = null; st.usel = null;
+    st.uml = v === 'objects';
+    if (v === 'objects') ensureView();
+    render();
+    $('#canvasWrap').scrollTo(0, 0);
+  }
+  function renderViewSwitch() {
+    $('#viewFn').setAttribute('aria-checked', String(!isOO()));
+    $('#viewOo').setAttribute('aria-checked', String(isOO()));
+    document.body.classList.toggle('oo', isOO());
+    document.body.classList.toggle('umlmode', isUml());
+    $('.hint-add').textContent = isUml() ? 'Doppio clic su un metodo per disegnarlo · clic destro su una classe per aggiungere membri · trascina le classi per spostarle' : 'Clic su una freccia per aggiungere un blocco · doppio clic per modificarlo · trascina per spostarlo';
+    const bar = $('#crumbBar');
+    bar.hidden = !isOO() || st.uml;
+    if (!bar.hidden) { const f = func(); const c = M.classOf(st.prog, f); $('#crumbWhere').textContent = `${c ? c.name : ''} › ${f === st.prog.functions[0] ? 'Main (inizio del programma)' : f.ctor ? 'costruttore' : f.name + '()'}`; }
+  }
+  function showUml() { st.uml = true; st.sel = null; render(); $('#canvasWrap').scrollTo(0, 0); }
 
   /* --------------------------- Disegno ----------------------------------- */
   let codeTimer = null;
   function render() {
-    const f = func();
-    const out = renderer.func(f, st.expanded);
-    st.ins = out.ins;
-    st.edges = out.edges;
+    ensureView();
     const holder = $('#chart');
-    holder.innerHTML = out.svg;
-    applyZoom();
-    decorate();
+    if (isUml()) {
+      const out = UmlLib.render(st.prog, st.usel);
+      st.ins = []; st.edges = [];
+      holder.innerHTML = out.svg;
+      applyZoom();
+    } else {
+      const f = func();
+      const c = isOO() ? M.classOf(st.prog, f) : null;
+      const out = renderer.func(f, st.expanded, isOO() ? { owner: c ? c.name : '', isMain: st.fi === 0 } : undefined);
+      st.ins = out.ins;
+      st.edges = out.edges;
+      holder.innerHTML = out.svg;
+      applyZoom();
+      decorate();
+    }
     renderFuncSelect();
+    renderViewSwitch();
     $('#undoBtn').disabled = !st.undo.length;
     $('#redoBtn').disabled = !st.redo.length;
     $('#progName').textContent = st.prog.attrs.name || 'Programma senza nome';
@@ -115,10 +197,35 @@
   function renderFuncSelect() {
     const sel = $('#funcSel');
     sel.innerHTML = '';
+    const add = $('#funcAdd'), edit = $('#funcEdit'), del = $('#funcDel');
+    if (isOO()) {
+      // diagramma delle classi e, per ogni classe, costruttori e metodi
+      $('#funcLbl').textContent = 'Diagramma';
+      sel.append(h('option', { value: 'uml', selected: st.uml }, '▦ Classi (UML)'));
+      for (const c of st.prog.classes) {
+        const og = h('optgroup', { label: 'Classe ' + c.name });
+        const ms = M.membersOf(st.prog, c);
+        for (const f of [...ms.filter((x) => x.ctor), ...ms.filter((x) => !x.ctor)]) {
+          const i = st.prog.functions.indexOf(f);
+          og.append(h('option', { value: i, selected: !st.uml && i === st.fi }, i === 0 ? 'Inizio (principale)' : f.ctor ? `new ${c.name}(${f.params.map((p) => p.name).join(', ')}) · costruttore` : `${f.name}(${f.params.map((p) => p.name).join(', ')})`));
+        }
+        sel.append(og);
+      }
+      const cur = !st.uml && M.classOf(st.prog, func());
+      add.title = st.uml ? 'Nuova classe' : `Nuovo metodo nella classe ${cur ? cur.name : ''}`;
+      edit.title = st.uml ? 'Modifica l\'elemento selezionato nel diagramma' : 'Modifica il metodo';
+      del.title = st.uml ? 'Elimina l\'elemento selezionato nel diagramma' : 'Elimina il metodo';
+      del.disabled = st.uml ? !st.usel : st.fi === 0;
+      edit.disabled = st.uml && !st.usel;
+      return;
+    }
+    $('#funcLbl').textContent = 'Funzione';
+    add.title = 'Nuova funzione'; edit.title = 'Modifica funzione o proprietà del programma'; del.title = 'Elimina funzione';
+    edit.disabled = false;
     st.prog.functions.forEach((f, i) => sel.append(h('option', { value: i, selected: i === st.fi }, i === 0 ? 'Inizio (principale)' : `${f.name}(${f.params.map((p) => p.name).join(', ')})`)));
-    $('#funcDel').disabled = st.fi === 0;
+    del.disabled = st.fi === 0;
   }
-  function showFunc(i) { if (i === st.fi) return; st.fi = i; st.sel = null; render(); $('#canvasWrap').scrollTo(0, 0); }
+  function showFunc(i) { if (i === st.fi && !st.uml) return; st.fi = i; st.uml = false; st.sel = null; render(); $('#canvasWrap').scrollTo(0, 0); }
 
   function autosave() {
     try { store.set('autosave', { xml: M.serializeFprg(st.prog), fi: st.fi, fileName: st.fileName }); } catch (e) { /* ignora */ }
@@ -398,7 +505,7 @@
       { key: 'end', label: 'Valore finale', type: 'expr', required: true, inline: true },
       { key: 'direction', label: 'Direzione', type: 'seg', options: [['inc', 'Crescente'], ['dec', 'Decrescente']] },
       { key: 'step', label: 'Passo', type: 'expr', required: true, inline: true }] },
-    call: { title: 'Chiamata', help: 'Esegue una funzione definita nel programma.', fields: [
+    call: { title: 'Chiamata', help: 'Esegue una funzione definita nel programma. Con gli oggetti: p.sposta(1, 2), oppure super(...) all\'inizio di un costruttore.', fields: [
       { key: 'expression', label: 'Chiamata', type: 'expr', required: true, placeholder: 'es. Stampa(v)' }] },
     comment: { title: 'Commento', help: 'Una nota per chi legge: non viene eseguita.', fields: [
       { key: 'text', label: 'Testo', type: 'textarea' }] },
@@ -417,7 +524,9 @@
   };
 
   function stmtDialog(s, isNew, done) {
-    const form = STMT_FORMS[s.kind];
+    let form = STMT_FORMS[s.kind];
+    // nella vista Oggetti si possono dichiarare variabili di tipo classe
+    if (s.kind === 'declare' && M.hasClasses(st.prog)) form = { ...form, fields: form.fields.map((f) => (f.key === 'type' ? { ...f, type: 'select', options: typeOpts() } : f)) };
     const vars = declaredNames(func());
     const body = h('div', { class: 'fields' });
     if (form.help) body.append(h('p', { class: 'help' }, form.help));
@@ -456,21 +565,34 @@
   }
 
   /* Funzioni */
-  function editFunction(index) {
+  /* opts (vista Oggetti, nuovo metodo): { cls, ctor } */
+  function editFunction(index, opts) {
     const isNew = index == null;
     const f = isNew ? M.makeFunction('') : st.prog.functions[index];
+    const oo = isOO() && M.hasClasses(st.prog);
+    const cls = oo ? (isNew ? opts.cls : M.classOf(st.prog, f)) : null;
+    const ctor = oo && (isNew ? !!(opts && opts.ctor) : !!f.ctor);
     const params = f.params.map((p) => ({ ...p }));
     const body = h('div', { class: 'fields' });
-    const nameW = field({ key: 'fname', label: 'Nome della funzione', type: 'ident', required: true, placeholder: 'es. Massimo' }, f.name);
-    const rets = M.rets(f).map((r) => ({ ...r }));
+    const what = ctor ? 'costruttore' : oo ? 'metodo' : 'funzione';
+    if (ctor) body.append(h('p', { class: 'help' }, `Il costruttore prepara un nuovo oggetto ${cls.name}: si esegue con new ${cls.name}(...). Si possono avere più costruttori con parametri diversi.${cls.parent ? ` Il primo blocco può essere la Chiamata super(...) al costruttore di ${cls.parent}.` : ''}`));
+    const nameW = field({ key: 'fname', label: ctor ? 'Nome (è quello della classe)' : oo ? 'Nome del metodo' : 'Nome della funzione', type: 'ident', required: true, placeholder: 'es. Massimo' }, ctor ? cls.name : f.name);
+    if (ctor) nameW._input.disabled = true;
+    const rets = ctor ? [] : M.rets(f).map((r) => ({ ...r }));
     body.append(nameW);
+    let visW = null, statW = null;
+    if (oo) {
+      visW = field({ key: 'fvis', label: 'Accesso', type: 'seg', options: VIS_OPTS }, isNew ? 'public' : (f.visibility || 'public'));
+      body.append(visW);
+      if (!ctor) { statW = field({ key: 'fstatic', label: 'Statico: si chiama con ' + cls.name + '.nome(...) senza creare un oggetto', type: 'check' }, isNew ? cls === M.mainClass(st.prog) : !!f.static); body.append(statW); }
+    }
     const plist = h('div', { class: 'params' });
     const drawParams = () => {
       plist.innerHTML = '';
       if (!params.length) plist.append(h('p', { class: 'muted small' }, 'Nessun parametro.'));
       params.forEach((p, i) => {
         const nm = h('input', { type: 'text', class: 'mono', value: p.name, 'aria-label': 'Nome parametro ' + (i + 1), placeholder: 'nome', oninput: (e) => { p.name = e.target.value.trim(); } });
-        const tp = h('select', { 'aria-label': 'Tipo parametro ' + (i + 1), onchange: (e) => { p.type = e.target.value; } }, TYPE_OPTS.map(([v, l]) => h('option', { value: v, selected: v === p.type }, l)));
+        const tp = h('select', { 'aria-label': 'Tipo parametro ' + (i + 1), onchange: (e) => { p.type = e.target.value; } }, typeOpts().map(([v, l]) => h('option', { value: v, selected: v === p.type }, l)));
         const shape = p.array ? (p.dims || 1) : 0;
         const arr = h('select', { 'aria-label': 'Forma del parametro ' + (i + 1), title: 'Valore singolo o array', onchange: (e) => { const d = +e.target.value; p.array = d > 0; p.dims = Math.max(1, d); } }, [[0, 'valore'], [1, 'array [ ]'], [2, 'matrice [ , ]'], [3, '3 dimensioni'], [4, '4 dimensioni'], [5, '5 dimensioni']].map(([v, l]) => h('option', { value: v, selected: v === shape }, l)));
         plist.append(h('div', { class: 'prow' }, nm, tp, arr,
@@ -488,23 +610,37 @@
       if (!rets.length) rlist.append(h('p', { class: 'muted small' }, 'Nessun valore: è una procedura.'));
       rets.forEach((r, i) => {
         const nm = h('input', { type: 'text', class: 'mono', value: r.name, 'aria-label': 'Variabile restituita ' + (i + 1), placeholder: 'variabile', oninput: (e) => { r.name = e.target.value.trim(); } });
-        const tp = h('select', { 'aria-label': 'Tipo del valore restituito ' + (i + 1), onchange: (e) => { r.type = e.target.value; } }, TYPE_OPTS.map(([v, l]) => h('option', { value: v, selected: v === r.type }, l)));
+        const tp = h('select', { 'aria-label': 'Tipo del valore restituito ' + (i + 1), onchange: (e) => { r.type = e.target.value; } }, typeOpts().map(([v, l]) => h('option', { value: v, selected: v === r.type }, l)));
         rlist.append(h('div', { class: 'prow rrow' }, nm, tp,
           h('button', { class: 'iconbtn', type: 'button', title: 'Sposta su', 'aria-label': 'Sposta su', disabled: i === 0, onclick: () => { rets.splice(i - 1, 0, rets.splice(i, 1)[0]); drawRets(); } }, '↑'),
           h('button', { class: 'iconbtn', type: 'button', title: 'Rimuovi', 'aria-label': 'Rimuovi valore restituito', onclick: () => { rets.splice(i, 1); drawRets(); } }, '✕')));
       });
     };
     drawRets();
-    body.append(h('div', { class: 'flabel' }, 'Valori restituiti'), h('p', { class: 'muted small', style: 'margin:0' }, 'Le variabili vanno dichiarate nel corpo della funzione: quelle nuove vengono dichiarate in automatico. Con più valori la chiamata si scrive a, b ← Funzione(...)'), rlist,
+    if (!ctor) body.append(h('div', { class: 'flabel' }, 'Valori restituiti'), h('p', { class: 'muted small', style: 'margin:0' }, `Le variabili vanno dichiarate nel corpo ${oo ? 'del metodo' : 'della funzione'}: quelle nuove vengono dichiarate in automatico. Con più valori la chiamata si scrive a, b ← ${oo ? 'obj.metodo' : 'Funzione'}(...)`), rlist,
       h('button', { class: 'btn small', type: 'button', onclick: () => { rets.push({ name: '', type: 'Integer' }); drawRets(); rlist.querySelector('.prow:last-child input').focus(); } }, '+ Aggiungi valore restituito'));
     openModal({
-      title: isNew ? 'Nuova funzione' : 'Modifica funzione', body, okText: isNew ? 'Crea' : 'Salva', wide: true,
+      title: isNew ? (ctor ? `Nuovo costruttore di ${cls.name}` : oo ? `Nuovo metodo in ${cls.name}` : 'Nuova funzione') : `Modifica ${what}`, body, okText: isNew ? 'Crea' : 'Salva', wide: true,
       onOk: () => {
         const e1 = nameW._check(); if (e1) return e1;
-        const name = nameW._get().trim();
+        const name = ctor ? cls.name : nameW._get().trim();
         if (name.toLowerCase() === 'main') return 'Il nome Main è riservato al programma principale (Inizio)';
         if (E.BUILTINS[name.toLowerCase()]) return `${name} è già una funzione integrata`;
-        if (st.prog.functions.some((g, i) => i !== index && g.name.toLowerCase() === name.toLowerCase())) return `Esiste già una funzione chiamata ${name}`;
+        const isStatic = !ctor && !!(statW && statW._get());
+        if (oo) {
+          const sigOf = (list) => list.map((p) => p.type.toLowerCase() + (p.array ? '[' + (p.dims || 1) : '')).join(',');
+          if (!ctor && name.toLowerCase() === cls.name.toLowerCase()) return `${name} è il nome della classe: per un costruttore usa «Nuovo costruttore»`;
+          const clash = M.membersOf(st.prog, cls).find((g) => g !== f && !!g.ctor === ctor && g.name.toLowerCase() === name.toLowerCase() && sigOf(g.params) === sigOf(params));
+          if (clash) return ctor ? 'Esiste già un costruttore con gli stessi tipi di parametri' : `Esiste già un metodo ${name} con gli stessi tipi di parametri (si possono avere più versioni solo con parametri diversi)`;
+          if (!ctor) for (const k of M.chainOf(st.prog, cls).slice(1)) {
+            const g = M.membersOf(st.prog, k).find((x) => !x.ctor && x.name.toLowerCase() === name.toLowerCase() && sigOf(x.params) === sigOf(params));
+            if (!g) continue;
+            if (!!g.static !== isStatic) return `${name} esiste già in ${k.name} come metodo ${g.static ? 'statico' : 'non statico'}: deve esserlo anche qui`;
+            const rt = (l) => l.map((r) => r.type).join(',');
+            if (rt(M.rets(g)) !== rt(rets)) return `${name} ridefinisce il metodo di ${k.name}: deve restituire gli stessi tipi (${M.rets(g).map((r) => E.typeName(r.type)).join(', ') || 'nessun valore'})`;
+            break;
+          }
+        } else if (st.prog.functions.some((g, i) => i !== index && g.name.toLowerCase() === name.toLowerCase())) return `Esiste già una funzione chiamata ${name}`;
         const rseen = new Set();
         for (const r of rets) {
           if (!E.validIdent(r.name)) return `Valore restituito "${r.name || '(vuoto)'}": nome di variabile non valido`;
@@ -521,6 +657,7 @@
         mutate(() => {
           const target = isNew ? M.makeFunction(name, { params }) : f;
           Object.assign(target, { name, params });
+          if (oo) Object.assign(target, { cls: cls.id, visibility: visW ? visW._get() : 'public', static: isStatic || target === st.prog.functions[0], ctor });
           M.setRets(target, rets);
           // dichiara le variabili restituite che non sono ancora dichiarate (raggruppate per tipo)
           const known = new Set(params.map((p) => p.name));
@@ -533,16 +670,214 @@
             else decls.push(M.makeStmt('declare', { name: r.name, type: r.type }));
           }
           target.body.unshift(...decls);
-          if (isNew) { st.prog.functions.push(target); st.fi = st.prog.functions.length - 1; }
+          if (isNew) {
+            st.prog.functions.push(target);
+            // dal diagramma delle classi il nuovo metodo resta selezionato; altrimenti si apre
+            if (isUml()) st.usel = { cls: cls.id, kind: 'method', fid: target.id };
+            else st.fi = st.prog.functions.length - 1;
+          }
         });
         return true;
       },
     });
   }
-  function deleteFunction() {
-    if (st.fi === 0) return;
-    const f = func();
-    confirmBox('Eliminare la funzione?', `La funzione ${f.name} e tutti i suoi blocchi verranno eliminati.`, 'Elimina', () => mutate(() => { st.prog.functions.splice(st.fi, 1); st.fi = 0; }));
+  function deleteFunction(target) {
+    const f = target || func();
+    const i = st.prog.functions.indexOf(f);
+    if (i <= 0) return;
+    const what = f.ctor ? `Il costruttore ${f.name}(…)` : isOO() ? `Il metodo ${fname(f)}` : `La funzione ${f.name}`;
+    confirmBox(f.ctor ? 'Eliminare il costruttore?' : isOO() ? 'Eliminare il metodo?' : 'Eliminare la funzione?', `${what} e tutti i suoi blocchi verranno eliminati.`, 'Elimina', () => mutate(() => {
+      st.prog.functions.splice(i, 1);
+      if (st.fi === i) { st.fi = 0; if (isOO()) st.uml = true; } else if (st.fi > i) st.fi--;
+      if (st.usel && st.usel.fid === f.id) st.usel = { cls: st.usel.cls, kind: 'class' };
+    }));
+  }
+
+  /* ------------------------ Classi (vista Oggetti) ------------------------ */
+  const VIS_OPTS = [['public', '+ pubblico'], ['private', '- privato'], ['protected', '# protetto']];
+  const sigOf = (list) => list.map((p) => p.type.toLowerCase() + (p.array ? '[' + (p.dims || 1) : '')).join(',');
+  const descendants = (c) => st.prog.classes.filter((k) => k !== c && M.isSubclass(st.prog, k, c));
+  /* sostituisce il nome di una classe nelle espressioni: new Vecchio(...) e Vecchio.membro */
+  function renameInExpr(src, old, nu) {
+    let toks;
+    try { toks = E.tokenize(String(src)); } catch (e) { return src; }
+    let out = String(src);
+    const lo = old.toLowerCase();
+    for (let i = toks.length - 1; i >= 0; i--) {
+      const t = toks[i];
+      if (t.k !== 'id' || t.v.toLowerCase() !== lo) continue;
+      const prev = toks[i - 1], next = toks[i + 1];
+      if ((prev && prev.k === 'id' && prev.v.toLowerCase() === 'new') || (next && next.k === 'op' && next.v === '.')) out = out.slice(0, t.pos) + nu + out.slice(t.pos + t.v.length);
+    }
+    return out;
+  }
+  function renameClass(c, nu) {
+    const old = c.name, lo = old.toLowerCase();
+    if (old === nu) return;
+    const T = (t) => (String(t).toLowerCase() === lo ? nu : t);
+    for (const k of st.prog.classes) {
+      if ((k.parent || '').toLowerCase() === lo) k.parent = nu;
+      for (const a of k.attributes) { a.type = T(a.type); a.init = renameInExpr(a.init || '', old, nu); a.size = renameInExpr(a.size || '', old, nu); }
+    }
+    for (const f of st.prog.functions) {
+      if (f.ctor && f.cls === c.id) f.name = nu;
+      f.params.forEach((p) => { p.type = T(p.type); });
+      M.setRets(f, M.rets(f).map((r) => ({ name: r.name, type: T(r.type) })));
+      M.walk(f.body, (x) => {
+        if (x.kind === 'declare' || x.kind === 'const') x.type = T(x.type);
+        for (const k of ['expression', 'variable', 'start', 'end', 'step', 'size']) if (typeof x[k] === 'string') x[k] = renameInExpr(x[k], old, nu);
+      });
+    }
+    c.name = nu;
+  }
+  function classDialog(c, pos) {
+    const isNew = !c;
+    const nameW = field({ key: 'cname', label: 'Nome della classe', type: 'ident', required: true, placeholder: 'es. Punto', hint: 'Per convenzione inizia con la lettera maiuscola' }, c ? c.name : '');
+    const banned = c ? [c, ...descendants(c)] : [];
+    const parW = field({ key: 'cpar', label: 'Eredita da (classe madre)', type: 'select', options: [['', '— nessuna —'], ...st.prog.classes.filter((k) => !banned.includes(k)).map((k) => [k.name, k.name])] }, c ? (c.parent || '') : '');
+    const body = h('div', { class: 'fields' }, h('p', { class: 'help' }, 'Una classe descrive un tipo di oggetti: i loro attributi (i dati) e i metodi (le operazioni). Con l\'ereditarietà la classe riceve attributi e metodi della classe madre e può ridefinire i metodi.'), nameW, parW);
+    openModal({
+      title: isNew ? 'Nuova classe' : 'Modifica classe ' + c.name, body, okText: isNew ? 'Crea' : 'Salva',
+      onOk: () => {
+        const e1 = nameW._check(); if (e1) return e1;
+        const name = nameW._get().trim();
+        if (E.BUILTINS[name.toLowerCase()]) return `${name} è il nome di una funzione integrata`;
+        if (st.prog.classes.some((k) => k !== c && k.name.toLowerCase() === name.toLowerCase())) return `Esiste già una classe chiamata ${name}`;
+        const parent = parW._get();
+        // gli attributi non possono avere lo stesso nome di quelli della nuova classe madre
+        if (parent) {
+          const up = new Set(); M.chainOf(st.prog, M.classByName(st.prog, parent)).forEach((k) => k.attributes.forEach((a) => up.add(a.name.toLowerCase())));
+          for (const k of c ? [c, ...descendants(c)] : []) for (const a of k.attributes) if (up.has(a.name.toLowerCase())) return `L'attributo ${k.name}.${a.name} ha lo stesso nome di un attributo di ${parent} o delle sue classi madri`;
+        }
+        mutate(() => {
+          if (isNew) {
+            const nc = M.makeClass(name, Object.assign({ parent }, UmlLib.freeSpot(st.prog, pos)));
+            st.prog.classes.push(nc);
+            st.usel = { cls: nc.id, kind: 'class' };
+          } else { renameClass(c, name); c.parent = parent; }
+        });
+        return true;
+      },
+    });
+  }
+  function attrDialog(c, index) {
+    const isNew = index == null;
+    const a = isNew ? M.makeAttribute() : c.attributes[index];
+    const nameW = field({ key: 'aname', label: 'Nome dell\'attributo', type: 'ident', required: true, placeholder: 'es. raggio' }, a.name);
+    const typeW = field({ key: 'atype', label: 'Tipo', type: 'select', options: typeOpts() }, a.type);
+    const arrW = field({ key: 'aarr', label: 'Array', type: 'check' }, a.array);
+    const sizeW = field({ key: 'asize', label: 'Numero di elementi', type: 'exprlist', placeholder: 'es. 10   oppure   3, 4' }, a.size);
+    const visW = field({ key: 'avis', label: 'Accesso', type: 'seg', options: VIS_OPTS }, a.visibility);
+    const statW = field({ key: 'astat', label: 'Statico: uno solo per tutta la classe (Classe.nome)', type: 'check' }, a.static);
+    const initW = field({ key: 'ainit', label: 'Valore iniziale (facoltativo)', type: 'expr', placeholder: 'se vuoto: 0, "", false oppure null', hint: 'Ogni nuovo oggetto parte da questo valore; poi il costruttore lo può cambiare' }, a.init || '');
+    const body = h('div', { class: 'fields' }, nameW, typeW, arrW, sizeW, visW, statW, initW);
+    const sync = () => { sizeW.hidden = !arrW._get(); initW.hidden = arrW._get(); };
+    body.addEventListener('change', sync); sync();
+    openModal({
+      title: isNew ? `Nuovo attributo in ${c.name}` : `Modifica attributo ${c.name}.${a.name}`, body, okText: isNew ? 'Aggiungi' : 'Salva',
+      onOk: () => {
+        for (const w of [nameW, initW]) { if (w.hidden) continue; const e = w._check(); if (e) return e; }
+        const name = nameW._get().trim(), lo = name.toLowerCase();
+        const arr = arrW._get();
+        if (arr) { const e = sizeW._check(); if (e) return e; if (!String(sizeW._get()).trim()) return 'Indica il numero di elementi dell\'array'; }
+        for (const k of [...M.chainOf(st.prog, c), ...descendants(c)]) for (const x of k.attributes) if (x !== a && x.name.toLowerCase() === lo) return k === c ? `La classe ha già un attributo ${x.name}` : `${k.name} ha già un attributo ${x.name}: nella stessa gerarchia di classi i nomi devono essere diversi`;
+        mutate(() => {
+          Object.assign(a, { name, type: typeW._get(), array: arr, size: arr ? sizeW._get().trim() : '', visibility: visW._get(), static: statW._get(), init: arr ? '' : initW._get().trim() });
+          if (isNew) c.attributes.push(a);
+          st.usel = { cls: c.id, kind: 'attr', i: c.attributes.indexOf(a) };
+        });
+        return true;
+      },
+    });
+  }
+  function deleteClass(c) {
+    if (c === M.mainClass(st.prog)) { infoBox('Classe principale', `${c.name} è la classe principale: contiene Main, da cui parte il programma, e non si può eliminare.`); return; }
+    const kids = st.prog.classes.filter((k) => (k.parent || '').toLowerCase() === c.name.toLowerCase());
+    if (kids.length) { infoBox('Classe con sottoclassi', `Prima togli l'ereditarietà da ${kids.map((k) => k.name).join(', ')}: ereditano da ${c.name}.`); return; }
+    confirmBox('Eliminare la classe?', `La classe ${c.name}, i suoi attributi e i suoi ${M.membersOf(st.prog, c).length} metodi verranno eliminati. Le variabili e gli attributi di tipo ${c.name} andranno corretti.`, 'Elimina', () => mutate(() => {
+      const cur = func();
+      st.prog.functions = st.prog.functions.filter((f) => f.cls !== c.id);
+      st.prog.classes = st.prog.classes.filter((k) => k !== c);
+      st.fi = Math.max(0, st.prog.functions.indexOf(cur));
+      st.usel = null; st.uml = true;
+    }));
+  }
+  function deleteAttr(c, i) {
+    const a = c.attributes[i]; if (!a) return;
+    mutate(() => { c.attributes.splice(i, 1); st.usel = { cls: c.id, kind: 'class' }; });
+    toast(`Attributo ${a.name} eliminato (Ctrl+Z per annullare)`);
+  }
+  const uselClass = () => st.usel && M.classById(st.prog, st.usel.cls);
+  function openMethod(fid) { const i = st.prog.functions.findIndex((f) => f.id === fid); if (i >= 0) showFunc(i); }
+  function editMethodSig(f) { const i = st.prog.functions.indexOf(f); if (i === 0) editProgram(); else editFunction(i); }
+  function editUmlSel() {
+    const c = uselClass(); if (!c) return;
+    if (st.usel.kind === 'attr') attrDialog(c, st.usel.i);
+    else if (st.usel.kind === 'method') { const f = st.prog.functions.find((x) => x.id === st.usel.fid); if (f) editMethodSig(f); }
+    else classDialog(c);
+  }
+  function deleteUmlSel() {
+    const c = uselClass(); if (!c) return;
+    if (st.usel.kind === 'attr') deleteAttr(c, st.usel.i);
+    else if (st.usel.kind === 'method') { const f = st.prog.functions.find((x) => x.id === st.usel.fid); if (f && f !== st.prog.functions[0]) deleteFunction(f); else if (f) toast('Main è il punto di partenza del programma e non si può eliminare', 'warn'); }
+    else deleteClass(c);
+  }
+  function memberMenu(c, x, y) {
+    const box = h('div', { class: 'ctxmenu' },
+      h('button', { type: 'button', onclick: () => { closePop(); editFunction(null, { cls: c, ctor: false }); } }, h('span', null, 'Nuovo metodo…')),
+      h('button', { type: 'button', onclick: () => { closePop(); editFunction(null, { cls: c, ctor: true }); } }, h('span', null, 'Nuovo costruttore…')));
+    openPop(x, y, box);
+  }
+  function umlMenu(e) {
+    const box = e.target.closest('.ubox'), row = e.target.closest('.urow');
+    const c = box && M.classById(st.prog, box.dataset.cls);
+    const B = (label, fn, cls) => h('button', { type: 'button', class: cls || '', onclick: () => { closePop(); fn(); } }, h('span', null, label));
+    let menuBox;
+    if (!c) {
+      const pt = svgPoint(e);
+      menuBox = h('div', { class: 'ctxmenu' }, B('Nuova classe…', () => classDialog(null, pt)));
+    } else if (row && row.dataset.kind === 'method') {
+      const f = st.prog.functions.find((x) => x.id === row.dataset.fid);
+      menuBox = h('div', { class: 'ctxmenu' },
+        B('Apri il diagramma di flusso', () => openMethod(f.id)),
+        B(f === st.prog.functions[0] ? 'Proprietà del programma…' : f.ctor ? 'Modifica il costruttore…' : 'Modifica la firma del metodo…', () => editMethodSig(f)),
+        f === st.prog.functions[0] ? null : h('hr'),
+        f === st.prog.functions[0] ? null : B(f.ctor ? 'Elimina il costruttore' : 'Elimina il metodo', () => deleteFunction(f), 'danger'));
+    } else if (row && row.dataset.kind === 'attr') {
+      const i = +row.dataset.i;
+      menuBox = h('div', { class: 'ctxmenu' }, B('Modifica l\'attributo…', () => attrDialog(c, i)), h('hr'), B('Elimina l\'attributo', () => deleteAttr(c, i), 'danger'));
+    } else {
+      menuBox = h('div', { class: 'ctxmenu' },
+        B('Nuovo attributo…', () => attrDialog(c, null)),
+        B('Nuovo metodo…', () => editFunction(null, { cls: c, ctor: false })),
+        B('Nuovo costruttore…', () => editFunction(null, { cls: c, ctor: true })),
+        h('hr'),
+        B('Modifica la classe…', () => classDialog(c)),
+        B('Elimina la classe', () => deleteClass(c), 'danger'));
+    }
+    openPop(e.clientX, e.clientY, menuBox);
+  }
+  function svgPoint(e) {
+    const svg = $('#chart svg'); const r = svg.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / st.zoom, y: (e.clientY - r.top) / st.zoom };
+  }
+  /* evidenzia la selezione senza ridisegnare (altrimenti il doppio clic si perde) */
+  function decorateUml() {
+    const u = st.usel;
+    $$('#chart .ubox').forEach((b) => { const on = !!u && u.cls === b.dataset.cls; b.classList.toggle('cur', on); b.classList.toggle('sel', on && u.kind === 'class'); });
+    $$('#chart .urow').forEach((r) => {
+      const b = r.closest('.ubox');
+      const on = !!u && u.cls === b.dataset.cls && u.kind === r.dataset.kind && (u.kind === 'attr' ? String(u.i) === r.dataset.i : u.fid === r.dataset.fid);
+      r.classList.toggle('sel', on);
+    });
+    renderFuncSelect();
+  }
+  /* selezione nel diagramma delle classi */
+  function umlSelectFrom(target) {
+    const box = target.closest('.ubox'), row = target.closest('.urow');
+    if (!box) st.usel = null;
+    else if (row) st.usel = { cls: box.dataset.cls, kind: row.dataset.kind, i: row.dataset.i != null ? +row.dataset.i : undefined, fid: row.dataset.fid };
+    else st.usel = { cls: box.dataset.cls, kind: 'class' };
   }
   function editProgram() {
     const a = st.prog.attrs;
@@ -551,17 +886,33 @@
     const ab = field({ key: 'pabout', label: 'Descrizione', type: 'textarea' }, a.about);
     openModal({ title: 'Proprietà del programma', body: h('div', { class: 'fields' }, n, au, ab), okText: 'Salva', onOk: () => {
       if (isRunning()) return 'Ferma il programma prima di modificarlo';
-      mutate(() => { a.name = n._get().trim(); a.authors = au._get().trim(); a.about = ab._get(); });
+      mutate(() => {
+        // la classe predefinita prende il nome del programma
+        const c = M.hasClasses(st.prog) && st.prog.classes.length === 1 && st.prog.classes[0].name === M.defaultClassName(st.prog) ? st.prog.classes[0] : null;
+        a.name = n._get().trim(); a.authors = au._get().trim(); a.about = ab._get();
+        if (c && !st.prog.classes.some((k) => k !== c && k.name === M.defaultClassName(st.prog))) renameClass(c, M.defaultClassName(st.prog));
+      });
       return true;
     } });
   }
 
   /* ------------------------ Interazione col disegno ---------------------- */
-  let drag = null, suppressClick = false;
+  let drag = null, suppressClick = false, udrag = null;
   function bindChart() {
     const chart = $('#chart');
     chart.addEventListener('click', (e) => {
       if (suppressClick) { suppressClick = false; return; }
+      if (isUml()) {
+        const add = e.target.closest('.uadd');
+        if (add) {
+          const c = M.classById(st.prog, add.closest('.ubox').dataset.cls);
+          if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; }
+          if (add.dataset.add === 'attr') attrDialog(c, null); else memberMenu(c, e.clientX + 6, e.clientY + 6);
+          return;
+        }
+        umlSelectFrom(e.target); decorateUml();
+        return;
+      }
       const tog = e.target.closest('.ctoggle');
       if (tog) { const id = tog.dataset.toggle; st.expanded.has(id) ? st.expanded.delete(id) : st.expanded.add(id); render(); return; }
       const ins = e.target.closest('.ins');
@@ -571,6 +922,16 @@
       decorate();
     });
     chart.addEventListener('dblclick', (e) => {
+      if (isUml()) {
+        if (e.target.closest('.uadd')) return;
+        const row = e.target.closest('.urow'), box = e.target.closest('.ubox');
+        if (row && row.dataset.kind === 'method') { openMethod(row.dataset.fid); return; }
+        if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; }
+        if (row) { attrDialog(M.classById(st.prog, box.dataset.cls), +row.dataset.i); return; }
+        if (box) { classDialog(M.classById(st.prog, box.dataset.cls)); return; }
+        classDialog(null, svgPoint(e));
+        return;
+      }
       if (e.target.closest('.ctoggle')) return;
       const g = e.target.closest('.shape'); if (!g) return;
       const id = g.dataset.id;
@@ -578,17 +939,46 @@
       editStmt(id);
     });
     chart.addEventListener('contextmenu', (e) => {
+      if (isUml()) {
+        e.preventDefault();
+        if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; }
+        umlSelectFrom(e.target); decorateUml(); umlMenu(e);
+        return;
+      }
       const g = e.target.closest('.shape'); if (!g) return;
       e.preventDefault();
       if (!g.dataset.id.includes(':')) { st.sel = g.dataset.id; decorate(); }
       shapeMenu(g.dataset.id, e.clientX, e.clientY);
     });
     chart.addEventListener('pointerdown', (e) => {
+      if (isUml()) {
+        // le classi si spostano trascinandole
+        if (e.button !== 0 || isRunning() || e.target.closest('.uadd')) return;
+        const box = e.target.closest('.ubox'); if (!box) return;
+        const c = M.classById(st.prog, box.dataset.cls);
+        udrag = { c, x: e.clientX, y: e.clientY, ox: c.x, oy: c.y, on: false, raf: 0 };
+        return;
+      }
       if (e.button !== 0 || isRunning() || e.target.closest('.ctoggle')) return;
       const g = e.target.closest('.shape'); if (!g || g.dataset.id.includes(':')) return;
       drag = { id: g.dataset.id, x: e.clientX, y: e.clientY, on: false, ghost: null };
     });
     window.addEventListener('pointermove', (e) => {
+      if (udrag) {
+        const dx = (e.clientX - udrag.x) / st.zoom, dy = (e.clientY - udrag.y) / st.zoom;
+        if (!udrag.on && Math.hypot(dx, dy) > 4) {
+          udrag.on = true;
+          st.undo.push(snapshot()); if (st.undo.length > 150) st.undo.shift(); st.redo = [];
+          document.body.classList.add('udragging');
+          st.usel = { cls: udrag.c.id, kind: 'class' };
+        }
+        if (udrag.on) {
+          udrag.c.x = Math.max(10, Math.round((udrag.ox + dx) / 10) * 10);
+          udrag.c.y = Math.max(10, Math.round((udrag.oy + dy) / 10) * 10);
+          if (!udrag.raf) udrag.raf = requestAnimationFrame(() => { if (udrag) udrag.raf = 0; render(); });
+        }
+        return;
+      }
       if (!drag) return;
       if (!drag.on && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 7) {
         drag.on = true;
@@ -606,6 +996,11 @@
       }
     });
     window.addEventListener('pointerup', (e) => {
+      if (udrag) {
+        const d = udrag; udrag = null;
+        if (d.on) { cancelAnimationFrame(d.raf); document.body.classList.remove('udragging'); st.dirty = true; suppressClick = true; setTimeout(() => { suppressClick = false; }, 50); render(); }
+        return;
+      }
       if (!drag) return;
       const d = drag; drag = null;
       if (!d.on) return;
@@ -772,7 +1167,7 @@
     const fid = run.curFrame && run.curFrame.func.id;
     if (fid) {
       const i = st.prog.functions.findIndex((f) => f.id === fid);
-      if (i >= 0 && i !== st.fi) { st.fi = i; st.sel = null; render(); }
+      if (i >= 0 && (i !== st.fi || st.uml)) { st.fi = i; st.uml = false; st.sel = null; render(); }
     }
     decorate();
     const el = $(`#chart .shape[data-id="${CSS.escape(run.curId || '')}"]`);
@@ -904,7 +1299,7 @@
     run.state = 'done';
     run.errId = e.stmtId || null;
     const fi = e.funcId ? st.prog.functions.findIndex((f) => f.id === e.funcId) : -1;
-    if (fi >= 0 && fi !== st.fi) { st.fi = fi; render(); }
+    if (fi >= 0 && (fi !== st.fi || st.uml)) { st.fi = fi; st.uml = false; render(); }
     if (!run.errId && e.stmtId) run.errId = e.stmtId;
     let where = '';
     if (e.stmtId) {
@@ -952,12 +1347,14 @@
   }
 
   /* ---- Variabili ---- */
+  const CARET = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5L8 6L4.5 9.5"/></svg>';
+  const GRID_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg>';
   function renderVars() {
     const box = $('#varsBody');
     const interp = run.interp;
     const stack = interp && isRunning() ? interp.stack : (run.mainFrame ? [run.mainFrame] : []);
     // le finestre degli array seguono la chiamata più recente della loro funzione
-    if (ArrayView.count) ArrayView.refresh((fn, vn) => { for (let i = stack.length - 1; i >= 0; i--) { const fr = stack[i]; if (fr.func.name === fn) { const c = fr.vars.get(vn.toLowerCase()); if (c && c.array) return c; } } return null; });
+    if (ArrayView.count) ArrayView.refresh((fid, vn) => { for (let i = stack.length - 1; i >= 0; i--) { const fr = stack[i]; if (fr.func.id === fid) { const c = fr.vars.get(vn.toLowerCase()); if (c && c.array) return c; } } return null; });
     box.innerHTML = '';
     if (!stack.length) { box.append(h('p', { class: 'empty' }, 'Le variabili compaiono qui quando esegui il programma. Usa Passo per osservarle cambiare istruzione dopo istruzione.')); return; }
     const frame = run.viewFrame && stack.includes(run.viewFrame) ? run.viewFrame : stack[stack.length - 1];
@@ -968,40 +1365,72 @@
     });
     if (stack.length > 6) crumbs.classList.add('long');
     box.append(crumbs);
-    if (!frame.vars.size) { box.append(h('p', { class: 'empty' }, 'Nessuna variabile dichiarata finora in ' + fname(frame.func) + '.')); return; }
+    const statics = interp && interp.oo ? [...interp.statics].filter(([, m]) => m.size) : [];
+    if (!frame.vars.size && !frame.self && !statics.length) { box.append(h('p', { class: 'empty' }, 'Nessuna variabile dichiarata finora in ' + fname(frame.func) + '.')); return; }
     const tbl = h('table', { class: 'vars' }, h('thead', null, h('tr', null, h('th', null, 'Nome'), h('th', null, 'Tipo'), h('th', null, 'Valore'))));
     const tb = h('tbody');
-    const fmt = (v) => (v === undefined ? h('span', { class: 'undef' }, 'nessun valore') : h('span', { class: 'v-' + v.t }, E.literalOf(v)));
+    const fmt = (v) => (v === undefined ? h('span', { class: 'undef' }, 'nessun valore') : v.t === 'Object' ? h('span', { class: 'v-Object' }, E.literalOf(v)) : h('span', { class: 'v-' + v.t }, E.literalOf(v)));
     const prev = run.prevVals; const next = new Map();
-    for (const c of frame.vars.values()) {
-      const key = frame.depth + ':' + c.name;
+    const fkey = fname(frame.func);
+    /* freccina che apre o chiude le righe sotto (lo stato resta tra un passo e l'altro) */
+    const makeCaret = (okey, label, onToggle) => {
+      const isOpen = st.varsOpen.has(okey);
+      const b = h('button', { class: 'caret' + (isOpen ? ' open' : ''), type: 'button', 'aria-expanded': String(isOpen), 'aria-label': `Mostra o nascondi i dettagli di ${label}`, html: CARET, onclick: () => {
+        const open = !st.varsOpen.has(okey);
+        if (open) st.varsOpen.add(okey); else st.varsOpen.delete(okey);
+        b.classList.toggle('open', open); b.setAttribute('aria-expanded', String(open));
+        onToggle(open);
+      } });
+      return { el: b, isOpen };
+    };
+    const ind = (depth) => (depth ? { style: `padding-left:${8 + depth * 16}px` } : null);
+    /* una riga per variabile o attributo; gli oggetti si aprono per vedere i loro attributi */
+    const addCell = (c, label, depth, path, seen, extra) => {
+      const key = frame.depth + ':' + path;
+      const tags = [c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null, c.constant ? h('span', { class: 'ptag', title: 'costante' }, 'cost') : null, c.field && c.visibility && c.visibility !== 'public' ? h('span', { class: 'ptag vis', title: M.VIS_IT[c.visibility] }, M.VISIBILITY[c.visibility]) : null, extra || null];
       if (c.array) {
-        const n = c.items.length;
-        const dims = c.dims || [n];
-        // il contenuto degli array si guarda nella finestra dedicata
+        const n = c.items.length, dims = c.dims || [n];
         const sv = String(c.writes || 0); next.set(key, sv);
         const changed = prev.has(key) && prev.get(key) !== sv;
-        const openArr = () => ArrayView.open(frame.func.name, c);
-        const icon = h('button', { class: 'iconbtn avopen', type: 'button', title: 'Visualizza i valori', 'aria-label': `Visualizza i valori di ${c.name}`, html: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg>', onclick: openArr });
-        // freccina che apre/chiude la riga con «visualizza i valori» (lo stato resta tra un passo e l'altro)
-        const okey = fname(frame.func) + '::' + c.name.toLowerCase();
-        const isOpen = st.varsOpen.has(okey);
-        const detail = h('tr', { class: 'detail' + (isOpen ? ' open' : '') + (changed ? ' changed' : '') }, h('td', { colspan: 3 },
-          h('div', { class: 'det-wrap' }, h('div', { class: 'det-inner' },
-            h('button', { class: 'avlink', type: 'button', tabindex: isOpen ? '0' : '-1', title: 'Apri una finestra con i valori dell\'array', onclick: openArr }, 'visualizza i valori')))));
-        const caret = h('button', { class: 'caret' + (isOpen ? ' open' : ''), type: 'button', 'aria-expanded': String(isOpen), 'aria-label': `Mostra o nascondi i dettagli di ${c.name}`, html: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5L8 6L4.5 9.5"/></svg>', onclick: () => {
-          const open = !st.varsOpen.has(okey);
-          if (open) st.varsOpen.add(okey); else st.varsOpen.delete(okey);
-          caret.classList.toggle('open', open); caret.setAttribute('aria-expanded', String(open));
-          detail.classList.toggle('open', open); detail.querySelector('.avlink').tabIndex = open ? 0 : -1;
-        } });
-        tb.append(h('tr', { class: 'arr' + (changed ? ' changed' : '') }, h('td', null, caret, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null, icon), h('td', null, `${TYPE_IT[c.type]}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`)));
+        const openArr = () => (depth ? ArrayView.open('@' + path, c, { label, fixed: true }) : ArrayView.open(frame.func.id, c));
+        const icon = h('button', { class: 'iconbtn avopen', type: 'button', title: 'Visualizza i valori', 'aria-label': `Visualizza i valori di ${label}`, html: GRID_ICON, onclick: openArr });
+        const okey = fkey + '::' + path.toLowerCase();
+        const detail = h('tr', { class: 'detail' + (st.varsOpen.has(okey) ? ' open' : '') + (changed ? ' changed' : '') }, h('td', { colspan: 3 },
+          h('div', { class: 'det-wrap' }, h('div', { class: 'det-inner', ...(ind(depth + 1) || {}) },
+            h('button', { class: 'avlink', type: 'button', tabindex: st.varsOpen.has(okey) ? '0' : '-1', title: 'Apri una finestra con i valori dell\'array', onclick: openArr }, 'visualizza i valori')))));
+        const car = makeCaret(okey, label, (open) => { detail.classList.toggle('open', open); detail.querySelector('.avlink').tabIndex = open ? 0 : -1; });
+        tb.append(h('tr', { class: 'arr' + (changed ? ' changed' : '') }, h('td', ind(depth), car.el, label, ...tags, icon), h('td', null, `${E.typeName(c.type)}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`)));
         tb.append(detail);
-      } else {
-        const sv = c.value === undefined ? '∅' : E.literalOf(c.value); next.set(key, sv);
-        const changed = prev.has(key) && prev.get(key) !== sv;
-        tb.append(h('tr', { class: changed ? 'changed' : '' }, h('td', null, c.name, c.param ? h('span', { class: 'ptag', title: 'parametro' }, 'par') : null, c.constant ? h('span', { class: 'ptag', title: 'costante' }, 'cost') : null), h('td', null, TYPE_IT[c.type]), h('td', null, fmt(c.value))));
+        return;
       }
+      const v = c.value;
+      const sv = v === undefined ? '∅' : E.literalOf(v); next.set(key, sv);
+      const changed = prev.has(key) && prev.get(key) !== sv;
+      if (v && v.t === 'Object' && v.v) {
+        const obj = v.v;
+        const okey = fkey + '::' + path.toLowerCase();
+        const loop = seen.has(obj);
+        const rows = [];
+        const car = loop ? null : makeCaret(okey, label, () => renderVars());
+        tb.append(h('tr', { class: 'objrow' + (changed ? ' changed' : '') }, h('td', ind(depth), car ? car.el : h('span', { class: 'caret-sp' }), label, ...tags), h('td', null, E.typeName(c.type)), h('td', null, fmt(v), loop ? h('span', { class: 'muted small' }, ' ↺ già sopra') : null)));
+        if (car && car.isOpen && depth < 6) {
+          const s2 = new Set(seen); s2.add(obj);
+          for (const fc of obj.fields.values()) addCell(fc, fc.name, depth + 1, path + '.' + fc.name, s2);
+          if (!obj.fields.size) tb.append(h('tr', { class: 'objrow' }, h('td', { colspan: 3, class: 'muted small', ...(ind(depth + 1) || {}) }, 'nessun attributo')));
+        }
+        return;
+      }
+      tb.append(h('tr', { class: changed ? 'changed' : '' }, h('td', ind(depth), depth || (v && v.t === 'Object') ? h('span', { class: 'caret-sp' }) : null, label, ...tags), h('td', null, E.typeName(c.type)), h('td', null, fmt(c.value))));
+    };
+    if (frame.self) addCell({ name: 'this', type: frame.self.cls.name, value: E.V.obj(frame.self) }, 'this', 0, 'this', new Set(), h('span', { class: 'ptag', title: 'l\'oggetto su cui lavora il metodo' }, 'oggetto'));
+    for (const c of frame.vars.values()) addCell(c, c.name, 0, c.name, new Set());
+    // attributi statici: uno per classe, condivisi da tutti gli oggetti
+    for (const [cid, m] of statics) {
+      const cls = interp.prog.classes.find((k) => k.id === cid); if (!cls) continue;
+      const okey = 'statici::' + cls.name.toLowerCase();
+      const car = makeCaret(okey, cls.name, () => renderVars());
+      tb.append(h('tr', { class: 'objrow statrow' }, h('td', { colspan: 3 }, car.el, h('span', null, `${cls.name} · attributi statici`))));
+      if (car.isOpen) for (const fc of m.values()) addCell(fc, `${cls.name}.${fc.name}`, 1, `static.${cls.name}.${fc.name}`, new Set());
     }
     for (const [k, v] of next) prev.set(k, v);
     tbl.append(tb); box.append(tbl);
@@ -1299,6 +1728,8 @@
     if (isRunning()) stopRun();
     st.undo = []; st.redo = []; st.prog = prog; st.fi = 0; st.sel = null; st.fileName = name || null; st.dirty = false;
     run.errId = null; run.mainFrame = null;
+    if (M.hasClasses(prog)) { st.view = 'objects'; store.set('view', 'objects'); }
+    st.uml = isOO(); st.usel = null;
     render(); renderVars();
     setTimeout(fitIfLarge, 0);
     if (prog.skipped && prog.skipped.length) toast(`Aperto ${name || 'programma'}: ignorati ${prog.skipped.length} blocchi non supportati (${[...new Set(prog.skipped)].join(', ')})`, 'warn');
@@ -1325,18 +1756,24 @@
     confirmBox('Modifiche non salvate', 'Il programma attuale ha modifiche non salvate. Vuoi continuare e perderle?', 'Continua', action);
   }
   function newProgram() {
-    guardDirty(() => { if (isRunning()) stopRun(); st.prog = M.newProgram(); st.fi = 0; st.sel = null; st.undo = []; st.redo = []; st.fileName = null; st.dirty = false; run.mainFrame = null; render(); renderVars(); });
+    guardDirty(() => { if (isRunning()) stopRun(); st.prog = M.newProgram(); st.fi = 0; st.sel = null; st.uml = isOO(); st.usel = null; st.undo = []; st.redo = []; st.fileName = null; st.dirty = false; run.mainFrame = null; render(); renderVars(); });
   }
   function loadExample(id) {
     const ex = Examples.get(id); if (!ex) return;
-    guardDirty(() => { if (isRunning()) stopRun(); st.prog = ex.make(); st.fi = 0; st.sel = null; st.undo = []; st.redo = []; st.fileName = null; st.dirty = false; run.mainFrame = null; run.errId = null; conClear(); render(); renderVars(); setTimeout(fitIfLarge, 0); });
+    guardDirty(() => {
+      if (isRunning()) stopRun();
+      st.prog = ex.make(); st.fi = 0; st.sel = null; st.usel = null; st.undo = []; st.redo = []; st.fileName = null; st.dirty = false; run.mainFrame = null; run.errId = null;
+      if (M.hasClasses(st.prog)) { st.view = 'objects'; store.set('view', 'objects'); }
+      st.uml = isOO();
+      conClear(); render(); renderVars(); setTimeout(fitIfLarge, 0);
+    });
   }
 
   function exportSvg() {
     const svg = $('#chart svg').cloneNode(true);
     svg.setAttribute('width', svg.dataset.w); svg.setAttribute('height', svg.dataset.h);
     svg.insertBefore(h('style', null, exportCss()), svg.firstChild);
-    $$('.hits, .ctoggle', svg).forEach((x) => x.remove());
+    $$('.hits, .ctoggle, .uadd, .uhit', svg).forEach((x) => x.remove());
     return new XMLSerializer().serializeToString(svg);
   }
   function exportCss() {
@@ -1344,6 +1781,8 @@
     const v = (n) => cs.getPropertyValue(n).trim();
     let css = `text{font:${RenderLib.R_.font};fill:${v('--sh-text')};text-anchor:middle}.cline-t{text-anchor:start}.comment text{font-weight:400;font-style:italic}.badge{font-size:10px}.c-in .badge{fill:${v('--s-in')}}.c-out .badge{fill:${v('--s-out')}}.c-decl .badge{fill:${v('--s-decl')}}.blabel{font-size:11px;font-weight:600;fill:${v('--muted')}}.flow{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ahead{fill:${v('--flow')}}.joint{fill:${v('--flow')}}.shape>path,.shape>rect{stroke-width:1.6}.inner{fill:none!important}.note{stroke-dasharray:4 3}svg{background:${v('--paper')}}`;
     for (const c of ['term', 'decl', 'assign', 'in', 'out', 'cond', 'loop', 'call', 'comment', 'brk', 'file', 'inc']) css += `.c-${c}>path,.c-${c}>rect{fill:${v('--f-' + c)};stroke:${v('--s-' + c)}}`;
+    // diagramma delle classi
+    css += `.ubg{fill:${v('--paper')};stroke:${v('--s-call')};stroke-width:1.6}.uheadbg{fill:${v('--f-call')}}.main .uheadbg{fill:${v('--f-term')}}.main .ubg{stroke:${v('--s-term')}}.usep{stroke:${v('--s-call')};stroke-width:1.2}.uname{font:700 14px "Atkinson Hyperlegible",sans-serif;text-anchor:middle}.ustereo{font:italic 11.5px "Atkinson Hyperlegible",sans-serif;fill:${v('--muted')};text-anchor:middle}.umem{font:400 12.5px "JetBrains Mono",monospace;text-anchor:start}.urel{fill:none;stroke:${v('--flow')};stroke-width:1.6}.minh{fill:${v('--paper')};stroke:${v('--flow')};stroke-width:1.6}.mopen{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ulab{font:600 11.5px "JetBrains Mono",monospace;fill:${v('--muted')};text-anchor:start}`;
     return css;
   }
   function exportPng() {
@@ -1354,7 +1793,7 @@
     img.onload = () => {
       const c = h('canvas', { width: w * k, height: hh * k });
       const x = c.getContext('2d'); x.scale(k, k); x.drawImage(img, 0, 0);
-      c.toBlob((b) => download(safeName(st.prog.attrs.name) + '_' + fname(func()) + '.png', b, 'image/png'));
+      c.toBlob((b) => download(safeName(st.prog.attrs.name) + '_' + (isUml() ? 'classi' : safeName(fname(func()))) + '.png', b, 'image/png'));
     };
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
   }
@@ -1376,7 +1815,7 @@
       { label: 'Salva come .fprg', key: 'Ctrl+S', do: saveFile },
       { label: 'Copia XML negli appunti', do: copyXml },
       '-',
-      { label: 'Esporta diagramma SVG', do: () => download(safeName(st.prog.attrs.name) + '_' + fname(func()) + '.svg', exportSvg(), 'image/svg+xml') },
+      { label: 'Esporta diagramma SVG', do: () => download(safeName(st.prog.attrs.name) + '_' + (isUml() ? 'classi' : safeName(fname(func()))) + '.svg', exportSvg(), 'image/svg+xml') },
       { label: 'Esporta diagramma PNG', do: exportPng },
       { label: 'Scarica codice sorgente', do: () => download(safeName(st.prog.attrs.name) + '.' + CodeGen.LANGS[st.lang].ext, CodeGen.generate(st.prog, st.lang), 'text/plain') },
       '-',
@@ -1396,11 +1835,18 @@
       ['&', 'Unisce testi e numeri: "Totale: " & t'], ['=  ==   !=  <>', 'Uguale, diverso'], ['<  <=  >  >=', 'Confronti'],
       ['and  &&   or  ||   not  !', 'Operatori logici'], ['true  false  Pi', 'Costanti'], ['v[i]', 'Elemento i di un array (da 0)'],
     ].map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
+    const oo = [
+      ['p ← new Punto(1, 2)', 'Crea un oggetto: esegue il costruttore con quei parametri'], ['p.x   p.sposta(3, 4)', 'Attributo e metodo di un oggetto'],
+      ['this.x', 'Attributo dell\'oggetto su cui si sta lavorando (in un metodo basta x)'], ['Punto.contatore   Punto.crea()', 'Attributo o metodo statico: si usa con il nome della classe'],
+      ['super(nome)', 'Blocco Chiamata, primo blocco del costruttore: esegue il costruttore della classe madre'], ['super.descrivi()', 'Esegue la versione del metodo della classe madre'],
+      ['null   p = null', 'Nessun oggetto: si può assegnare e confrontare'], ['+  -  #', 'Accesso pubblico, privato, protetto (controllato durante l\'esecuzione)'],
+    ].map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
     const keys = [['F5  ·  Ctrl+Invio', 'Esegui / continua'], ['F10', 'Passo successivo'], ['Esc', 'Chiudi finestre e menu'], ['Invio  ·  doppio clic', 'Modifica il blocco selezionato'], ['Canc', 'Elimina il blocco selezionato'], ['Ctrl+C  X  V  D', 'Copia, taglia, incolla, duplica'], ['Ctrl+Z  ·  Ctrl+Y', 'Annulla, ripeti'], ['Ctrl+rotella', 'Zoom']]
       .map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
     const body = h('div', { class: 'help-body' },
       h('p', null, 'Fai clic su una freccia del diagramma per aggiungere un blocco. Trascina un blocco su un\'altra freccia per spostarlo. I file .fprg si aprono e si salvano con lo stesso formato XML usato dagli editor di diagrammi di flusso più diffusi a scuola.'),
       h('h3', null, 'Operatori'), h('table', { class: 'ref' }, h('tbody', null, ops)),
+      h('h3', null, 'Classi e oggetti (vista Oggetti)'), h('p', { class: 'muted small' }, 'Nel diagramma delle classi: doppio clic su un metodo per disegnarlo, doppio clic sul nome della classe o su un attributo per modificarlo, clic destro per aggiungere attributi, metodi e costruttori, trascina le classi per spostarle.'), h('table', { class: 'ref' }, h('tbody', null, oo)),
       h('h3', null, 'Funzioni integrate'), h('table', { class: 'ref' }, h('tbody', null, fns)),
       h('h3', null, 'Scorciatoie'), h('table', { class: 'ref' }, h('tbody', null, keys)));
     openModal({ title: 'Guida rapida', wide: true, body, okText: 'Chiudi', noCancel: true });
@@ -1431,6 +1877,11 @@
       if (ctrl && e.key.toLowerCase() === 'x') { if (st.sel) { e.preventDefault(); copySel(true); } return; }
       if (ctrl && e.key.toLowerCase() === 'v') { if (st.clip) { e.preventDefault(); paste(); } return; }
       if (ctrl && e.key.toLowerCase() === 'd') { if (st.sel) { e.preventDefault(); duplicate(); } return; }
+      if (isUml()) {
+        if ((e.key === 'Delete' || e.key === 'Backspace') && st.usel && !isRunning()) { e.preventDefault(); deleteUmlSel(); }
+        else if (e.key === 'Enter' && st.usel) { e.preventDefault(); if (st.usel.kind === 'method') openMethod(st.usel.fid); else if (!isRunning()) editUmlSel(); }
+        return;
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && st.sel) { e.preventDefault(); deleteSel(); return; }
       if (e.key === 'Enter' && st.sel) { e.preventDefault(); editStmt(st.sel); return; }
       if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && st.sel) {
@@ -1452,10 +1903,14 @@
     $('#helpBtn').addEventListener('click', helpDialog);
     $('#progName').addEventListener('click', () => { if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; } editProgram(); });
     $('#fileInput').addEventListener('change', (e) => { readFileObj(e.target.files[0]); e.target.value = ''; });
-    $('#funcSel').addEventListener('change', (e) => showFunc(+e.target.value));
-    $('#funcAdd').addEventListener('click', () => { if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; } editFunction(null); });
-    $('#funcEdit').addEventListener('click', () => { if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; } st.fi === 0 ? editProgram() : editFunction(st.fi); });
-    $('#funcDel').addEventListener('click', () => { if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; } deleteFunction(); });
+    $('#funcSel').addEventListener('change', (e) => (e.target.value === 'uml' ? showUml() : showFunc(+e.target.value)));
+    const busy = () => { if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return true; } return false; };
+    $('#funcAdd').addEventListener('click', () => { if (busy()) return; if (!isOO()) editFunction(null); else if (st.uml) classDialog(null); else editFunction(null, { cls: M.classOf(st.prog, func()), ctor: false }); });
+    $('#funcEdit').addEventListener('click', () => { if (busy()) return; if (isUml()) editUmlSel(); else if (st.fi === 0) editProgram(); else editFunction(st.fi); });
+    $('#funcDel').addEventListener('click', () => { if (busy()) return; if (isUml()) deleteUmlSel(); else deleteFunction(); });
+    $('#viewFn').addEventListener('click', () => setView('functions'));
+    $('#viewOo').addEventListener('click', () => setView('objects'));
+    $('#backUml').addEventListener('click', showUml);
     $('#runBtn').addEventListener('click', onRunBtn);
     $('#stepBtn').addEventListener('click', onStepBtn);
     $('#pauseBtn').addEventListener('click', onPauseBtn);
@@ -1532,11 +1987,13 @@
       try { st.prog = M.parseFprg(saved.xml); st.fi = Math.min(saved.fi || 0, st.prog.functions.length - 1); st.fileName = saved.fileName || null; ok = true; } catch (e) { ok = false; }
     }
     if (!ok) st.prog = Examples.get('media').make();
+    if (M.hasClasses(st.prog)) st.view = 'objects';
+    st.uml = isOO();
     render(); initLayout(); renderVars(); renderFiles(); setStatus('idle', 'Pronto');
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { render(); fitIfLarge(); });
     setTimeout(fitIfLarge, 0);
     // API minima per i test automatici
-    window.FlowLab = { get state() { return st; }, run, loadText, serialize: () => M.serializeFprg(st.prog), render, setTab, submitInput, loadExample: (id) => { st.dirty = false; loadExample(id); } };
+    window.FlowLab = { get state() { return st; }, run, loadText, serialize: () => M.serializeFprg(st.prog), render, setTab, submitInput, setView, showUml, showFunc, loadExample: (id) => { st.dirty = false; loadExample(id); } };
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

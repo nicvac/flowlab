@@ -54,6 +54,69 @@ function setRets(f, list) {
   f.variable = list.length ? list[0].name : '';
 }
 
+/* ------------------------- Classi (vista Oggetti) ------------------------
+   prog.classes = [{ id, name, parent, attributes: [...], x, y }]
+   attributo: { name, type, array, size, visibility, static, init }
+   I metodi restano in prog.functions (così editor e interprete li trattano
+   come funzioni) con: cls = id della classe, visibility, static, ctor.
+   Main resta prog.functions[0]: è il metodo statico della classe principale. */
+const VISIBILITY = { public: '+', private: '-', protected: '#' };
+const VIS_IT = { public: 'pubblico', private: 'privato', protected: 'protetto' };
+
+function makeClass(name, props) {
+  return Object.assign({ id: newId(), name, parent: '', attributes: [], x: 40, y: 40 }, props || {});
+}
+function makeAttribute(props) {
+  return Object.assign({ name: '', type: 'Integer', array: false, size: '', visibility: 'private', static: false, init: '' }, props || {});
+}
+const hasClasses = (prog) => Array.isArray(prog.classes) && prog.classes.length > 0;
+function classById(prog, id) { return hasClasses(prog) ? prog.classes.find((c) => c.id === id) || null : null; }
+function classByName(prog, name) {
+  if (!hasClasses(prog) || !name) return null;
+  const l = String(name).toLowerCase();
+  return prog.classes.find((c) => c.name.toLowerCase() === l) || null;
+}
+const classOf = (prog, f) => classById(prog, f.cls);
+const mainClass = (prog) => classOf(prog, prog.functions[0]);
+const membersOf = (prog, c) => prog.functions.filter((f) => f.cls === c.id);
+/* catena di ereditarietà: la classe, poi il padre, il nonno... (si ferma sui cicli) */
+function chainOf(prog, c) {
+  const out = [];
+  while (c && !out.includes(c)) { out.push(c); c = classByName(prog, c.parent); }
+  return out;
+}
+const isSubclass = (prog, c, of) => chainOf(prog, c).includes(of);
+/* nome di classe ricavato dal nome del programma: "Media dei voti" -> "MediaDeiVoti" */
+function defaultClassName(prog) {
+  const words = String(prog.attrs.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^A-Za-z0-9_]+/).filter(Boolean);
+  let n = words.map((w) => w[0].toUpperCase() + w.slice(1)).join('');
+  if (!/^[A-Za-z_]/.test(n)) n = '';
+  return n || 'Programma';
+}
+/* vista Oggetti: tutte le funzioni diventano metodi statici di un'unica classe */
+function wrapInClass(prog) {
+  const c = makeClass(defaultClassName(prog));
+  prog.classes = [c];
+  for (const f of prog.functions) Object.assign(f, { cls: c.id, visibility: 'public', static: true, ctor: false });
+  return c;
+}
+/* una sola classe con soli metodi statici pubblici: equivale al programma a funzioni */
+function isTrivialOO(prog) {
+  if (!hasClasses(prog)) return true;
+  if (prog.classes.length !== 1) return false;
+  const c = prog.classes[0];
+  if (c.parent || c.attributes.length) return false;
+  return prog.functions.every((f) => f.cls === c.id && f.static && !f.ctor && (f.visibility || 'public') === 'public');
+}
+/* come sopra e con il nome predefinito: si salva nel formato standard senza perdere nulla */
+const isPlainOO = (prog) => isTrivialOO(prog) && (!hasClasses(prog) || prog.classes[0].name === defaultClassName(prog));
+function unwrapClasses(prog) {
+  delete prog.classes;
+  for (const f of prog.functions) { delete f.cls; delete f.visibility; delete f.static; delete f.ctor; }
+}
+/* tipi utilizzabili: i quattro di base e, nella vista Oggetti, le classi */
+const typeList = (prog) => ['Integer', 'Real', 'String', 'Boolean', ...(hasClasses(prog) ? prog.classes.map((c) => c.name) : [])];
+
 function newProgram() {
   return {
     attrs: { name: '', authors: '', about: '', created: '', edited: '' },
@@ -99,7 +162,30 @@ function parseFprg(text) {
   const root = doc.documentElement;
   if (root.nodeName.toLowerCase() !== FPRG_ROOT) throw new Error('Il file non è un programma .fprg valido (elemento principale mancante).');
   _skipped = [];
+  _classNames = new Map();
   const prog = { attrs: { name: '', authors: '', about: '', created: '', edited: '' }, functions: [], fileversion: root.getAttribute('fileversion') || '' };
+  // estensione FlowLab: classi (lette per prime, perché i tipi le possono nominare)
+  const clsEl = [...root.children].find((el) => el.nodeName.toLowerCase() === 'flowlab-classes');
+  if (clsEl) {
+    prog.classes = [];
+    for (const c of clsEl.children) if (c.nodeName.toLowerCase() === 'class') {
+      const cl = makeClass((c.getAttribute('name') || '').trim(), { parent: (c.getAttribute('parent') || '').trim(), x: +c.getAttribute('x') || 40, y: +c.getAttribute('y') || 40 });
+      if (!cl.name || _classNames.has(cl.name.toLowerCase())) continue;
+      _classNames.set(cl.name.toLowerCase(), cl.name);
+      prog.classes.push(cl);
+      cl._attrEls = [...c.children].filter((a) => a.nodeName.toLowerCase() === 'attribute');
+    }
+    for (const cl of prog.classes) {
+      cl.attributes = cl._attrEls.map((a) => makeAttribute({
+        name: a.getAttribute('name') || '', type: normType(a.getAttribute('type')), array: boolAttr(a.getAttribute('array'), false), size: a.getAttribute('size') || '',
+        visibility: VISIBILITY[(a.getAttribute('visibility') || '').toLowerCase()] ? a.getAttribute('visibility').toLowerCase() : 'private',
+        static: boolAttr(a.getAttribute('static'), false), init: a.getAttribute('init') || '',
+      }));
+      delete cl._attrEls;
+      const par = _classNames.get(cl.parent.toLowerCase()); cl.parent = par && par.toLowerCase() !== cl.name.toLowerCase() ? par : '';
+    }
+    if (!prog.classes.length) delete prog.classes;
+  }
   for (const el of root.children) {
     const tag = el.nodeName.toLowerCase();
     if (tag === 'attributes') {
@@ -112,6 +198,14 @@ function parseFprg(text) {
         type: normType(el.getAttribute('type'), true),
         variable: el.getAttribute('variable') || '',
       });
+      if (prog.classes) {
+        const owner = classByName(prog, el.getAttribute('flowlab-class'));
+        if (owner) f.cls = owner.id;
+        const vis = (el.getAttribute('flowlab-visibility') || 'public').toLowerCase();
+        f.visibility = VISIBILITY[vis] ? vis : 'public';
+        f.static = boolAttr(el.getAttribute('flowlab-static'), false);
+        f.ctor = boolAttr(el.getAttribute('flowlab-ctor'), false);
+      }
       // estensione FlowLab: più valori restituiti, "nome:Tipo;nome:Tipo"
       const multi = el.getAttribute('flowlab-returns');
       if (multi) {
@@ -134,14 +228,23 @@ function parseFprg(text) {
   }
   prog.skipped = _skipped;
   if (!prog.functions.length) prog.functions.push(makeFunction('Main'));
-  const mi = prog.functions.findIndex((f) => f.name.toLowerCase() === 'main');
+  const mi = prog.functions.findIndex((f) => f.name.toLowerCase() === 'main' && !f.ctor);
   if (mi > 0) prog.functions.unshift(prog.functions.splice(mi, 1)[0]);
   if (mi < 0) prog.functions.unshift(makeFunction('Main'));
+  if (prog.classes) {
+    // metodi senza classe: vanno nella classe del Main (o nella prima)
+    const home = classOf(prog, prog.functions[0]) || prog.classes[0];
+    for (const f of prog.functions) if (!classById(prog, f.cls)) Object.assign(f, { cls: home.id, static: f.static || f === prog.functions[0], ctor: false });
+    Object.assign(prog.functions[0], { static: true, ctor: false, visibility: 'public' });
+  }
+  _classNames = new Map();
   return prog;
 }
 
+let _classNames = new Map();
 function normType(t, allowNone) {
   const l = String(t || '').toLowerCase();
+  if (_classNames.has(l)) return _classNames.get(l);
   if (l === 'integer') return 'Integer';
   if (l === 'real') return 'Real';
   if (l === 'string') return 'String';
@@ -247,9 +350,23 @@ function serializeFprg(prog) {
   L.push(`        <attribute name="created" value="${xmlEsc(created)}"/>`);
   L.push(`        <attribute name="edited" value="${xmlEsc(edited)}"/>`);
   L.push('    </attributes>');
+  // una classe che contiene solo funzioni statiche si salva nel formato standard
+  const oo = !isPlainOO(prog);
+  if (oo) {
+    L.push('    <flowlab-classes>');
+    for (const c of prog.classes) {
+      const head = `        <class name="${xmlEsc(c.name)}" parent="${xmlEsc(c.parent || '')}" x="${Math.round(c.x || 0)}" y="${Math.round(c.y || 0)}"`;
+      if (!c.attributes.length) { L.push(head + '/>'); continue; }
+      L.push(head + '>');
+      for (const a of c.attributes) L.push(`            <attribute name="${xmlEsc(a.name)}" type="${xmlEsc(a.type)}" array="${TF(a.array)}" size="${xmlEsc(a.array ? fgExpr(a.size) : '')}" visibility="${a.visibility}" static="${TF(a.static)}" init="${xmlEsc(fgExpr(a.init || ''))}"/>`);
+      L.push('        </class>');
+    }
+    L.push('    </flowlab-classes>');
+  }
   for (const f of prog.functions) {
     const rs = rets(f);
-    const extra = rs.length > 1 ? ` flowlab-returns="${xmlEsc(rs.map((r) => r.name + ':' + r.type).join(';'))}"` : '';
+    let extra = rs.length > 1 ? ` flowlab-returns="${xmlEsc(rs.map((r) => r.name + ':' + r.type).join(';'))}"` : '';
+    if (oo) { const c = classOf(prog, f); extra += ` flowlab-class="${xmlEsc(c ? c.name : '')}" flowlab-visibility="${f.visibility || 'public'}" flowlab-static="${TF(!!f.static)}"${f.ctor ? ' flowlab-ctor="True"' : ''}`; }
     // per le procedure si conserva il nome eventualmente lasciato in "variable" da altri editor
     L.push(`    <function name="${xmlEsc(f.name)}" type="${rs.length ? rs[0].type : 'None'}" variable="${xmlEsc(rs.length ? rs[0].name : (f.variable || ''))}"${extra}>`);
     if (f.params.length) {
@@ -314,6 +431,7 @@ function writeBlock(stmts, L, depth) {
 /* Funzionalità del formato .fprg esteso usate dal programma */
 function extendedFeatures(prog) {
   const out = new Set();
+  if (!isPlainOO(prog)) out.add('classi e oggetti');
   for (const f of prog.functions) {
     if (rets(f).length > 1) out.add('funzioni con più valori restituiti');
     if (f.params.some((p) => p.array && (p.dims || 1) > 1)) out.add('array a più dimensioni');
@@ -344,5 +462,5 @@ function isIncomplete(s) {
   }
 }
 
-const ModelLib = { FPRG_ROOT, KINDS, extendedFeatures, rets, setRets, fgExpr, newId, makeStmt, makeFunction, newProgram, cloneStmt, reId, walk, findStmt, parseFprg, serializeFprg, isIncomplete, normType };
+const ModelLib = { FPRG_ROOT, KINDS, VISIBILITY, VIS_IT, makeClass, makeAttribute, hasClasses, classById, classByName, classOf, mainClass, membersOf, chainOf, isSubclass, defaultClassName, wrapInClass, isTrivialOO, isPlainOO, unwrapClasses, typeList, extendedFeatures, rets, setRets, fgExpr, newId, makeStmt, makeFunction, newProgram, cloneStmt, reId, walk, findStmt, parseFprg, serializeFprg, isIncomplete, normType };
 if (typeof module !== 'undefined') module.exports = ModelLib;

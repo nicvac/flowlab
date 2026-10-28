@@ -6,6 +6,7 @@ await page.evaluate(() => { localStorage.clear(); FlowLab.loadExample('bolle'); 
 await page.click('.tabw[data-tab=vars] [role=tab]');
 await page.click('#runBtn'); await page.waitForTimeout(600);
 console.log('scheda Variabili:', (await page.innerText('#varsBody')).replace(/\t/g, ' ').split('\n').filter(Boolean).join(' | '));
+await page.click('#varsBody tr.arr .caret'); await page.waitForTimeout(300);
 await page.click('#varsBody .avlink'); await page.waitForTimeout(300);
 console.log('finestra aperta:', await page.$eval('.avwin .fwin-title', t => t.textContent), '| celle:', await page.$$eval('.avwin .av-c', c => c.length));
 await page.screenshot({ path: 'test/vl.png', clip: { x: 700, y: 40, width: 666, height: 360 } });

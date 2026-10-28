@@ -20,9 +20,15 @@ Il software è stato creato con **Claude Opus 5.5** di Anthropic.
 - **Visualizzatore di array per il debug**: dalla scheda Variabili ogni array si apre in una finestra mobile. Un array a una dimensione è una striscia, a due una scacchiera, a tre un cubo aperto a libro (si sfoglia la prima dimensione, ogni pagina è una scacchiera su carta a quadretti); oltre le tre dimensioni le prime si scelgono con dei selettori di indice. Si vedono solo le celle che entrano nella finestra, con una sfumatura verso la trasparenza dove ce ne sono altre, e durante l'esecuzione la vista si sposta sulla cella appena modificata.
 - **Costanti**: un blocco dedicato (`MAX: Intero = 100`) con un valore che non può essere modificato; nel codice diventano `const` (C++, C#, JavaScript), `final` (Java) o una variabile in maiuscolo (Python).
 - **Funzioni con più valori restituiti**, come in Python: `min, max, idxMin, idxMax ← calcolaMassimoEMinimo(V, N)`. Nel codice generato diventano tuple in Python e C#, `std::tie` in C++, un `record` in Java (16+), un array destrutturato in JavaScript. È un'estensione di FlowLab: gli altri programmi che usano il formato `.fprg` non possono eseguire questi programmi.
+- **Classi e oggetti (vista Oggetti)**: il comando *Funzioni / Oggetti* nella barra cambia vista. Nella vista Oggetti il foglio mostra un **diagramma delle classi UML**: ogni classe ha attributi e metodi con i modificatori d'accesso (`+` pubblico, `-` privato, `#` protetto), i membri statici sono sottolineati, le frecce indicano l'ereditarietà e le associazioni (attributi che hanno come tipo un'altra classe, con la molteplicità). All'inizio il programma è un'unica classe con le funzioni come metodi statici; la vista Funzioni resta disponibile finché c'è una sola classe con soli metodi statici e pubblici.
+  - Doppio clic su un metodo: si apre il suo diagramma di flusso, che si disegna come una funzione. Clic destro su una classe: nuovi attributi, metodi e costruttori. Le classi si spostano trascinandole.
+  - Nelle espressioni: `p ← new Punto(1, 2)`, `p.x`, `p.sposta(3, 4)`, `this.x`, `Punto.contatore`, `super(...)` come primo blocco di un costruttore, `super.metodo()`, `null`.
+  - Ereditarietà con ridefinizione dei metodi (polimorfismo), più costruttori con parametri diversi, attributi e metodi statici, valori iniziali degli attributi. I modificatori d'accesso sono controllati durante l'esecuzione: leggere un attributo privato da fuori della classe dà errore, come in Java.
+  - Nella scheda Variabili gli oggetti si aprono con la freccina per vedere i loro attributi; compaiono anche `this` e gli attributi statici.
+  - Nel codice generato diventano classi vere: `extends`/`super` in Java, `: base(...)` e `virtual`/`override` in C#, puntatori, `virtual` e liste di inizializzazione in C++, `self` e `super().__init__` in Python, `class`/`extends` in JavaScript. In Python e JavaScript, che non hanno l'overloading, le versioni con parametri diversi sono raccolte in un unico metodo che sceglie in base agli argomenti.
 - **Codice generato:** pseudocodice italiano, Python, C++, Java, C#, JavaScript.
 - **Esportazione:** `.fprg`, SVG, PNG, codice sorgente.
-- **Esempi pronti:** media dei voti, pari/dispari, tabellina, MCD di Euclide, indovina il numero, fattoriale ricorsivo, ordinamento a bolle, lettura/scrittura di file.
+- **Esempi pronti:** media dei voti, pari/dispari, tabellina, MCD di Euclide, indovina il numero, fattoriale ricorsivo, ordinamento a bolle, minimo e massimo, matrici e cubi, conto in banca, forme geometriche, lista collegata, lettura/scrittura di file.
 
 ## Compatibilità con il formato .fprg
 
@@ -39,6 +45,7 @@ Se il programma usa una delle funzionalità estese di FlowLab, il file viene sal
 - costanti
 - array a più dimensioni
 - funzioni con più valori restituiti
+- classi e oggetti
 
 ### Verifica
 
@@ -66,6 +73,8 @@ src/
   interp.js    interprete a generatore (passo-passo, input, interruzioni)
   codegen.js   generatori di codice (pseudocodice, Python, C++, Java, C#, JS)
   render.js    impaginazione e disegno SVG del diagramma
+  uml.js       diagramma delle classi
+  arrayview.js finestre per visualizzare gli array
   examples.js  programmi di esempio
   app.js       interfaccia
   style.css, body.html
@@ -74,5 +83,5 @@ test/          test Node e Playwright
 ```
 
 Per ricostruire: `python3 build.py`.
-Test: `node test/node_interp.js`, `node test/node_codegen.js all`, `node test/ui.mjs` (richiede Playwright).
+Test: `node test/node_interp.js`, `node test/node_codegen.js all`, `node test/node_oo.js`, `node test/node_codegen_oo.js run` (compila ed esegue il codice a oggetti generato e lo confronta con l'interprete), `node test/ui.mjs` e `node test/oo_ui.mjs` (richiedono Playwright).
 

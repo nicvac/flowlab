@@ -37,8 +37,9 @@ const ArrayView = (() => {
 
   /* ------------------------------------------------------------------ */
   class Viewer {
-    constructor(key, funcName, cell) {
-      this.key = key; this.funcName = funcName; this.name = cell.name;
+    constructor(key, funcName, cell, o) {
+      this.key = key; this.funcName = funcName; this.name = (o && o.label) || cell.name;
+      this.fixed = !!(o && o.fixed); // array dentro un oggetto: la cella resta sempre la stessa
       this.cell = null; this.live = true;
       this.lead = []; this.page = 0;               // indici scelti per le dimensioni iniziali e pagina del libro
       this.snapshot = null; this.changed = new Set(); this.focus = null;
@@ -116,8 +117,8 @@ const ArrayView = (() => {
       this.page = 0;
       this.snapshot = null; this.changed = new Set();
       this.measure();
-      this.titleEl.textContent = `${cell.name} · ${E.TYPE_IT[cell.type]}[${this.dims.join(' × ')}]`;
-      this.win.setAttribute('aria-label', `Array ${cell.name}`);
+      this.titleEl.textContent = `${this.name} · ${E.typeName(cell.type)}[${this.dims.join(' × ')}]`;
+      this.win.setAttribute('aria-label', `Array ${this.name}`);
       const firstBind = !this.win.dataset.mode;
       this.win.dataset.mode = N === 1 ? 'strip' : N === 2 ? 'board' : 'book';
       if (firstBind && N === 1) this.win.style.height = '190px';
@@ -315,17 +316,18 @@ const ArrayView = (() => {
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   /* ------------------------------------------------------------------ */
-  function open(funcName, cell) {
-    const key = funcName.toLowerCase() + '::' + cell.name.toLowerCase();
+  function open(funcName, cell, o) {
+    const key = funcName.toLowerCase() + '::' + ((o && o.label) || cell.name).toLowerCase();
     const v = viewers.get(key);
     if (v) { v.bind(cell); v.live = true; v.raise(); v.update(); return v; }
-    const nv = new Viewer(key, funcName, cell);
+    const nv = new Viewer(key, funcName, cell, o);
     viewers.set(key, nv);
     return nv;
   }
   /* resolve(funcName, varName) → cella attuale o null */
   function refresh(resolve) {
     for (const v of viewers.values()) {
+      if (v.fixed) { v.update(); continue; }
       const c = resolve(v.funcName, v.name);
       v.live = !!c;
       if (c && c !== v.cell && c.array) v.bind(c);

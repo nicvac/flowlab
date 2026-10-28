@@ -62,7 +62,7 @@ const KIND_IT = {
 };
 
 function caption(s) {
-  const T = ExprLib.TYPE_IT;
+  const T = new Proxy({}, { get: (_, t) => ExprLib.typeName(t) });
   if (ModelLib.isIncomplete(s)) return { text: KIND_IT[s.kind], incomplete: true };
   switch (s.kind) {
     case 'declare': {
@@ -314,11 +314,14 @@ class Renderer {
     };
   }
 
-  func(f, expanded) {
+  /* opts.owner: nome della classe (vista Oggetti), opts.isMain: è il punto di partenza */
+  func(f, expanded, opts) {
     this.reset();
     this.expanded = expanded;
-    const isMain = f.name.toLowerCase() === 'main';
-    const sig = isMain ? 'Inizio' : `${f.name}(${f.params.map((p) => `${p.name}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''}: ${ExprLib.TYPE_IT[p.type]}`).join(', ')})`;
+    const o = opts || {};
+    const isMain = o.isMain != null ? o.isMain : f.name.toLowerCase() === 'main';
+    const ps = f.params.map((p) => `${p.name}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''}: ${ExprLib.typeName(p.type)}`).join(', ');
+    const sig = isMain ? 'Inizio' : f.ctor ? `new ${f.name}(${ps})` : `${o.owner ? o.owner + '.' : ''}${f.name}(${ps})`;
     const rsl = ModelLib.rets(f);
     const endText = rsl.length ? `Restituisci ${rsl.map((x) => x.name || '?').join(', ')}` : 'Fine';
     const sw = this.boxW(sig, 'rect') + 10, ew = this.boxW(endText, 'rect') + 10;
@@ -327,10 +330,10 @@ class Renderer {
     const M = 40;
     const W = Math.ceil(L + R + M * 2), Hh = Math.ceil(R_.H * 2 + B.h + M * 2);
     const cx = Math.round(M + L), y0 = M;
-    this.shape('start:' + f.id, '', 'term', 'term', cx, y0, sw, R_.H, sig, isMain ? 'Inizio del programma: doppio clic per le proprietà' : `Inizio di ${f.name}: doppio clic per modificare la funzione`);
+    this.shape('start:' + f.id, '', 'term', 'term', cx, y0, sw, R_.H, sig, isMain ? 'Inizio del programma: doppio clic per le proprietà' : f.ctor ? `Costruttore di ${f.name}: doppio clic per modificarlo` : `Inizio di ${f.name}: doppio clic per modificare ${o.owner ? 'il metodo' : 'la funzione'}`);
     const tail = B.draw(cx, y0 + R_.H, { node: 'start:' + f.id, pts: [[cx, y0 + R_.H]] });
     this.edge(tail.node, 'end:' + f.id, tail.pts, tail.tag);
-    this.shape('end:' + f.id, '', 'term', 'term', cx, y0 + R_.H + B.h, ew, R_.H, endText, rsl.length ? `La funzione restituisce ${rsl.map((x) => `${x.name}: ${ExprLib.TYPE_IT[x.type]}`).join(', ')}` : 'Fine della funzione');
+    this.shape('end:' + f.id, '', 'term', 'term', cx, y0 + R_.H + B.h, ew, R_.H, endText, rsl.length ? `${o.owner ? 'Il metodo' : 'La funzione'} restituisce ${rsl.map((x) => `${x.name}: ${ExprLib.typeName(x.type)}`).join(', ')}` : (f.ctor ? 'Fine del costruttore: l\'oggetto è pronto' : `Fine ${o.owner ? 'del metodo' : 'della funzione'}`));
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" class="chart" viewBox="0 0 ${W} ${Hh}" width="${W}" height="${Hh}" data-w="${W}" data-h="${Hh}">`
       + '<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" class="ahead"/></marker></defs>'
       + `<g class="lines">${this.ln.join('')}</g><g class="hits">${this.hit.join('')}</g><g class="trail"></g><g class="shapes">${this.sh.join('')}</g><g class="labels">${this.lbl.join('')}</g></svg>`;
@@ -338,4 +341,4 @@ class Renderer {
   }
 }
 
-const RenderLib = { Renderer, caption, KIND_IT, textW, R_ };
+const RenderLib = { Renderer, caption, KIND_IT, textW, fitText: fit, R_ };

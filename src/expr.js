@@ -11,7 +11,10 @@ class FlowError extends Error {
 }
 
 const TYPES = ['Integer', 'Real', 'String', 'Boolean'];
-const TYPE_IT = { Integer: 'Intero', Real: 'Reale', String: 'Stringa', Boolean: 'Booleano', None: 'Nessuno' };
+const TYPE_IT = { Integer: 'Intero', Real: 'Reale', String: 'Stringa', Boolean: 'Booleano', None: 'Nessuno', Object: 'Oggetto' };
+/* nome leggibile di un tipo: i tipi base in italiano, le classi con il loro nome */
+const typeName = (t) => TYPE_IT[t] || t;
+const isBaseType = (t) => TYPES.includes(t);
 
 /* ---------------------------- Lessico ---------------------------------- */
 const SYM = [
@@ -19,7 +22,7 @@ const SYM = [
   ['≤', '<='], ['≥', '>='], ['≠', '!='], ['∧', 'and'], ['∨', 'or'], ['¬', 'not'],
   ['×', '*'], ['∗', '*'], ['÷', '/'], ['⁄', '/'], ['∕', '/'], ['↑', '^'], ['⭡', '^'], ['−', '-'],
   ['(', '('], [')', ')'], ['[', '['], [']', ']'], [',', ','], ['<', '<'], ['>', '>'], ['=', '=='],
-  ['&', '&'], ['+', '+'], ['-', '-'], ['*', '*'], ['/', '/'], ['%', '%'], ['^', '^'], ['!', 'not'],
+  ['&', '&'], ['+', '+'], ['-', '-'], ['*', '*'], ['/', '/'], ['%', '%'], ['^', '^'], ['!', 'not'], ['.', '.'],
 ];
 const WORD_OPS = { and: 'and', or: 'or', not: 'not', mod: '%' };
 
@@ -147,7 +150,42 @@ function parseExpr(src) {
     if (isOp('not')) { const t = toks[p++]; return node({ k: 'un', op: 'not', e: unE() }, t); }
     return primary();
   }
+  function args() {
+    eat('(');
+    const out = [];
+    if (!isOp(')')) {
+      out.push(orE());
+      while (isOp(',')) { p++; out.push(orE()); }
+    }
+    eat(')');
+    return out;
+  }
+  function indexList() {
+    // indici: v[i]  m[i, j]  m[i][j]  (anche misti)
+    const indices = [];
+    while (isOp('[')) {
+      p++;
+      indices.push(orE());
+      while (isOp(',')) { p++; indices.push(orE()); }
+      eat(']');
+    }
+    return indices;
+  }
+  /* atomo seguito da accessi con il punto: p.x  p.sposta(1, 2)  v[i].nome  this.dati[k] */
   function primary() {
+    let e = atom();
+    while (isOp('.')) {
+      p++;
+      const t = peek();
+      if (t.k !== 'id') throw new FlowError('Dopo il punto serve il nome di un attributo o di un metodo', { pos: t.pos });
+      p++;
+      if (isOp('(')) { e = node({ k: 'mcall', obj: e, name: t.v, args: args() }, t); continue; }
+      if (isOp('[')) { const indices = indexList(); e = node({ k: 'member', obj: e, name: t.v, index: indices[0], indices }, t); continue; }
+      e = node({ k: 'member', obj: e, name: t.v }, t);
+    }
+    return e;
+  }
+  function atom() {
     const t = peek();
     if (t.k === 'num') { p++; return node({ k: 'num', v: t.v, t: t.real ? 'Real' : 'Integer', text: t.text }, t); }
     if (t.k === 'str') { p++; return node({ k: 'str', v: t.v }, t); }
@@ -157,27 +195,20 @@ function parseExpr(src) {
       const low = t.v.toLowerCase();
       if (low === 'true' || low === 'false') return node({ k: 'bool', v: low === 'true' }, t);
       if ((low === 'pi' || t.v === 'π') && !isOp('(')) return node({ k: 'pi' }, t);
-      if (isOp('(')) {
-        p++;
-        const args = [];
-        if (!isOp(')')) {
-          args.push(orE());
-          while (isOp(',')) { p++; args.push(orE()); }
-        }
-        eat(')');
-        return node({ k: 'call', name: t.v, args }, t);
+      // programmazione a oggetti
+      if (low === 'null') return node({ k: 'null' }, t);
+      if (low === 'this') return node({ k: 'this' }, t);
+      if (low === 'new' && peek().k === 'id') {
+        const c = toks[p++];
+        return node({ k: 'new', cls: c.v, args: isOp('(') ? args() : [] }, t);
       }
-      if (isOp('[')) {
-        // indici: v[i]  m[i, j]  m[i][j]  (anche misti)
-        const indices = [];
-        while (isOp('[')) {
-          p++;
-          indices.push(orE());
-          while (isOp(',')) { p++; indices.push(orE()); }
-          eat(']');
-        }
-        return node({ k: 'var', name: t.v, index: indices[0], indices }, t);
+      if (low === 'super') {
+        if (isOp('(')) return node({ k: 'supercall', args: args() }, t);
+        if (isOp('.')) return node({ k: 'super' }, t);
+        throw new FlowError('super si usa come super(...) all\'inizio di un costruttore oppure come super.metodo(...)', { pos: t.pos });
       }
+      if (isOp('(')) return node({ k: 'call', name: t.v, args: args() }, t);
+      if (isOp('[')) { const indices = indexList(); return node({ k: 'var', name: t.v, index: indices[0], indices }, t); }
       return node({ k: 'var', name: t.v }, t);
     }
     if (t.k === 'eof') throw new FlowError("L'espressione termina in modo inatteso", { pos: t.pos });
@@ -192,11 +223,11 @@ function parseExpr(src) {
   return e;
 }
 
-/* Riferimento modificabile: nome oppure nome[indice] */
+/* Riferimento modificabile: nome, nome[indice] oppure attributo di un oggetto (p.x, this.v[i]) */
 function parseLValue(src) {
   const e = parseExpr(src);
   const inner = e.k === 'par' ? e.e : e;
-  if (inner.k !== 'var') throw new FlowError('Serve il nome di una variabile (eventualmente con indice, es. v[i])');
+  if (inner.k !== 'var' && inner.k !== 'member') throw new FlowError('Serve il nome di una variabile (eventualmente con indice, es. v[i]) o di un attributo (es. p.x)');
   return inner;
 }
 
@@ -220,14 +251,14 @@ function parseLValueList(src) {
   const lvs = parts.map((p) => parseLValue(p));
   if (lvs.length > 1) {
     const seen = new Set();
-    for (const lv of lvs) { const k = lv.name.toLowerCase() + (lv.index ? '[]' : ''); if (!lv.index && seen.has(k)) throw new FlowError(`La variabile "${lv.name}" compare più volte`); seen.add(k); }
+    for (const lv of lvs) { if (lv.k !== 'var' || lv.index) continue; const k = lv.name.toLowerCase(); if (seen.has(k)) throw new FlowError(`La variabile "${lv.name}" compare più volte`); seen.add(k); }
   }
   return lvs;
 }
 
 function validIdent(s) { return /^[\p{L}_][\p{L}\p{N}_]*$/u.test(s); }
 
-const RESERVED = new Set(['and', 'or', 'not', 'mod', 'true', 'false', 'pi', 'π', 'integer', 'real', 'string', 'boolean', 'if', 'while', 'do', 'for', 'main']);
+const RESERVED = new Set(['and', 'or', 'not', 'mod', 'true', 'false', 'pi', 'π', 'integer', 'real', 'string', 'boolean', 'if', 'while', 'do', 'for', 'main', 'new', 'this', 'super', 'null']);
 
 /* ------------------------------ Valori --------------------------------- */
 const V = {
@@ -235,6 +266,7 @@ const V = {
   real: (v) => ({ t: 'Real', v }),
   str: (v) => ({ t: 'String', v }),
   bool: (v) => ({ t: 'Boolean', v }),
+  obj: (o) => ({ t: 'Object', v: o }), // riferimento a un oggetto (o = null per null)
 };
 const isNum = (x) => x.t === 'Integer' || x.t === 'Real';
 
@@ -254,6 +286,7 @@ function fmtValue(x) {
     case 'Integer': return String(x.v);
     case 'Real': return fmtReal(x.v);
     case 'Boolean': return x.v ? 'true' : 'false';
+    case 'Object': return x.v ? `${x.v.cls.name}#${x.v.id}` : 'null';
     default: return String(x.v);
   }
 }
@@ -266,11 +299,18 @@ function checkInt(v, node) {
 }
 
 /* Conversione per assegnamento/parametri */
-function coerce(val, type, what) {
+/* isA(classeOggetto, nomeTipo): verifica di compatibilità per i tipi classe (fornita dall'interprete) */
+function coerce(val, type, what, isA) {
+  if (!isBaseType(type)) {
+    if (val.t !== 'Object') throw new FlowError(`Tipi incompatibili: ${what || 'il valore'} è ${typeName(val.t)} ma serve un oggetto ${type}`);
+    if (val.v && isA && !isA(val.v.cls, type)) throw new FlowError(`Tipi incompatibili: ${what || 'il valore'} è un oggetto ${val.v.cls.name}, che non è un ${type}`);
+    return val;
+  }
   if (val.t === type) return val;
   if (type === 'Real' && val.t === 'Integer') return V.real(val.v);
   if (type === 'Integer' && val.t === 'Real') return V.int(Math.trunc(val.v));
-  throw new FlowError(`Tipi incompatibili: ${what || 'il valore'} è ${TYPE_IT[val.t]} ma serve ${TYPE_IT[type]}`);
+  const got = val.t === 'Object' ? (val.v ? `un oggetto ${val.v.cls.name}` : 'null') : typeName(val.t);
+  throw new FlowError(`Tipi incompatibili: ${what || 'il valore'} è ${got} ma serve ${typeName(type)}`);
 }
 
 /* Conversione testo digitato dall'utente */
@@ -291,7 +331,8 @@ function parseInputText(text, type) {
       if (['false', 'falso', 'f', '0', 'no'].includes(l)) return V.bool(false);
       throw new FlowError(`"${text}" non è un valore booleano (usa true o false)`);
     }
-    default: return V.str(String(text));
+    case 'String': return V.str(String(text));
+    default: throw new FlowError(`Non si può leggere da tastiera un oggetto ${type}: leggi i singoli valori e crea l'oggetto con new`);
   }
 }
 
@@ -346,6 +387,12 @@ function* evalE(node, ctx) {
     case 'bool': return V.bool(node.v);
     case 'pi': return V.real(Math.PI);
     case 'par': return yield* evalE(node.e, ctx);
+    case 'null': return V.obj(null);
+    case 'this': case 'member': case 'mcall': case 'new':
+      if (!ctx.oo) throw new FlowError('Oggetti, new e this si usano nella vista Oggetti', { node });
+      return yield* ctx.oo(node);
+    case 'super': throw new FlowError('super si usa come super.metodo(...)', { node });
+    case 'supercall': throw new FlowError('super(...) si usa solo in un blocco Chiamata, come primo blocco di un costruttore', { node });
     case 'var': {
       const cell = ctx.getVar(node.name, node);
       if (cell.array) {
@@ -399,6 +446,7 @@ function arrIndex(iv, cell, node) {
   return iv.v;
 }
 
+const REL_OPS = ['==', '!=', '<', '<=', '>', '>='];
 function* evalBin(node, ctx) {
   const op = node.op;
   if (op === 'and' || op === 'or') {
@@ -412,6 +460,12 @@ function* evalBin(node, ctx) {
   }
   const l = yield* evalE(node.l, ctx);
   const r = yield* evalE(node.r, ctx);
+  if ((l.t === 'Object' || r.t === 'Object') && op !== '&') {
+    // tra riferimenti: solo uguaglianza (stesso oggetto) e diversità
+    if (op !== '==' && op !== '!=') throw new FlowError(REL_OPS.includes(op) ? 'Gli oggetti si possono solo confrontare con = oppure != (stesso oggetto o no)' : `L'operatore ${op} non si applica agli oggetti`, { node });
+    if (l.t !== r.t) throw new FlowError(`Impossibile confrontare ${typeName(l.t)} con ${typeName(r.t)}`, { node });
+    return V.bool(op === '==' ? l.v === r.v : l.v !== r.v);
+  }
   switch (op) {
     case '&': return V.str(fmtValue(l) + fmtValue(r));
     case '+': case '-': case '*': case '%': case '/': case '^': {
@@ -469,8 +523,8 @@ function* evalCall(node, ctx) {
     if (node.args.length < 1 || node.args.length > 2) throw new FlowError('Size richiede il nome di un array e, per più dimensioni, il numero della dimensione: Size(m, 1)', { node });
     const a = node.args[0];
     const inner = a.k === 'par' ? a.e : a;
-    if (inner.k !== 'var' || inner.index) throw new FlowError('Size richiede il nome di un array', { node });
-    const cell = ctx.getVar(inner.name, inner);
+    if ((inner.k !== 'var' && inner.k !== 'member') || inner.index) throw new FlowError('Size richiede il nome di un array', { node });
+    const cell = inner.k === 'var' ? ctx.getVar(inner.name, inner) : yield* ctx.cellOf(inner);
     if (!cell.array) throw new FlowError(`"${inner.name}" non è un array`, { node });
     const dims = cell.dims || [cell.items.length];
     let d = 0;
@@ -507,7 +561,9 @@ function inferType(node, scope) {
     case 'bool': return 'Boolean';
     case 'pi': return 'Real';
     case 'par': return inferType(node.e, scope);
-    case 'var': { const v = scope.vars.get(node.name.toLowerCase()); return v ? v.type : 'Unknown'; }
+    case 'var': { const v = scope.vars.get(node.name.toLowerCase()); return v ? v.type : (scope.oo ? scope.oo(node) : 'Unknown'); }
+    case 'null': return 'Null';
+    case 'this': case 'member': case 'mcall': case 'new': return scope.oo ? scope.oo(node) : 'Unknown';
     case 'un': return node.op === 'not' ? 'Boolean' : inferType(node.e, scope);
     case 'bin': {
       const op = node.op;
@@ -520,7 +576,7 @@ function inferType(node, scope) {
       return a === 'Unknown' ? b : a;
     }
     case 'call': {
-      const f = scope.funcs.get(node.name.toLowerCase());
+      const f = scope.funcs.get(node.name.toLowerCase()) || (scope.oo && scope.oo(node, true));
       if (f) return f.type;
       const b = BUILTINS[node.name.toLowerCase()];
       if (!b) return 'Unknown';
@@ -531,5 +587,5 @@ function inferType(node, scope) {
   return 'Unknown';
 }
 
-const ExprLib = { FlowError, TYPES, TYPE_IT, tokenize, parseExpr, parseLValue, splitTop, parseLValueList, arrOffset, validIdent, RESERVED, V, isNum, fmtValue, fmtReal, literalOf, checkInt, coerce, parseInputText, BUILTINS, BUILTIN_NAMES, evalE, arrIndex, inferType };
+const ExprLib = { FlowError, TYPES, TYPE_IT, typeName, isBaseType, tokenize, parseExpr, parseLValue, splitTop, parseLValueList, arrOffset, validIdent, RESERVED, V, isNum, fmtValue, fmtReal, literalOf, checkInt, coerce, parseInputText, BUILTINS, BUILTIN_NAMES, evalE, arrIndex, inferType };
 if (typeof module !== 'undefined') module.exports = ExprLib;
