@@ -300,46 +300,11 @@ const ArrayView = (() => {
       this.flip(d);
       this.afterNav();
     }
-    /* voltare pagina come in un libro rilegato a sinistra:
-       avanti  → il foglio con la pagina che si lascia si solleva dal bordo destro e
-                 ruota verso sinistra, scoprendo la pagina successiva sotto;
-       indietro → il foglio della pagina precedente torna da sinistra verso destra
-                 e si posa sopra quella che si stava guardando. */
     flip(d) {
-      if (reduceMotion() || !this.pageEl.isConnected) return;
-      this.endFlip();
-      // fotografia della pagina che si sta lasciando (prima di ridisegnare)
-      this.pendingFlip = { d, old: this.sheet() };
-    }
-    sheet() {
-      const c = this.pageEl.cloneNode(true);
-      c.classList.add('av-sheet');
-      c.style.boxShadow = 'none';
-      c.removeAttribute('tabindex');
-      c.querySelectorAll('[tabindex]').forEach((x) => x.removeAttribute('tabindex'));
-      c._sl = this.body.scrollLeft; c._st = this.body.scrollTop;
-      return c;
-    }
-    runFlip() {
-      const { d, old } = this.pendingFlip; this.pendingFlip = null;
-      const place = (el) => {
-        Object.assign(el.style, { left: this.pageEl.offsetLeft + 'px', top: this.pageEl.offsetTop + 'px', width: this.pageEl.offsetWidth + 'px', height: this.pageEl.offsetHeight + 'px' });
-        this.stage.append(el);
-        const b = el.querySelector('.av-body'); if (b) { b.scrollLeft = el._sl; b.scrollTop = el._st; }
-      };
-      const layers = [];
-      if (d === 'next') { place(old); old.classList.add('turn-away'); layers.push(old); }
-      else {
-        place(old); layers.push(old);                         // la pagina di prima resta ferma sotto…
-        const nw = this.sheet(); place(nw); nw.classList.add('turn-back'); layers.push(nw); // …e quella precedente ci torna sopra
-      }
-      this.flipLayers = layers;
-      this.flipTimer = setTimeout(() => this.endFlip(), 700);
-    }
-    endFlip() {
-      clearTimeout(this.flipTimer);
-      (this.flipLayers || []).forEach((x) => x.remove());
-      this.flipLayers = null; this.pendingFlip = null;
+      if (reduceMotion()) return;
+      this.pageEl.classList.remove('turn-next', 'turn-prev');
+      void this.pageEl.offsetWidth;
+      this.pageEl.classList.add(d === 'next' ? 'turn-next' : 'turn-prev');
     }
     afterNav() {
       if (this.steppers) this.steppers.forEach((s) => s._refresh());
@@ -434,7 +399,6 @@ const ArrayView = (() => {
         el.style.setProperty('--fl', l + 'px'); el.style.setProperty('--fr', r2 + 'px');
         el.style.setProperty('--ft', t + 'px'); el.style.setProperty('--fb', bt + 'px');
       }
-      if (this.pendingFlip) this.runFlip();
     }
     hover(e) {
       const t = e.target.closest('.av-c');
