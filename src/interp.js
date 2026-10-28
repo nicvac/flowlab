@@ -579,6 +579,8 @@ class Interpreter {
           if (s.array) frame.vars.set(key, { name: n, type: s.type, array: true, dims: dims.slice(), items: new Array(size).fill(undefined) });
           else frame.vars.set(key, { name: n, type: s.type, array: false, value: undefined });
         }
+        // valore iniziale: vale per tutte le variabili del blocco
+        if (!s.array && String(s.init || '').trim()) for (const n of names) yield* this.store({ k: 'var', name: n }, yield* ev(s.init));
         return;
       }
       case 'const': {

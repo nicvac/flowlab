@@ -1285,7 +1285,7 @@ const newId = () => 's' + (__id++);
 
 /* Definizione dei tipi di blocco: campi salvati nel file e valori di default */
 const KINDS = {
-  declare:    { fields: { name: '', type: 'Integer', array: false, size: '' } },
+  declare:    { fields: { name: '', type: 'Integer', array: false, size: '', init: '' } },
   const:      { fields: { name: '', type: 'Integer', expression: '' } },
   assign:     { fields: { variable: '', expression: '' } },
   input:      { fields: { variable: '' } },
@@ -1549,6 +1549,17 @@ function parseBlock(el) {
       out.push(makeStmt('const', { name, type: normType(c.getAttribute('type')), expression }));
       continue;
     }
+    // estensione FlowLab: dichiarazione con valore iniziale = <declare flowlab-init="True"/> seguita
+    // da un'assegnazione per ogni nome, tutte con la stessa espressione
+    if (c.nodeName.toLowerCase() === 'declare' && String(c.getAttribute('flowlab-init')).toLowerCase() === 'true' && !boolAttr(c.getAttribute('array'), false)) {
+      const names = (c.getAttribute('name') || '').split(',').map((x) => x.trim()).filter(Boolean);
+      const as = kids.slice(i + 1, i + 1 + names.length);
+      const expr = as[0] ? as[0].getAttribute('expression') || '' : '';
+      if (names.length && as.length === names.length && as.every((a, k) => a.nodeName.toLowerCase() === 'assign' && (a.getAttribute('variable') || '').trim().toLowerCase() === names[k].toLowerCase() && (a.getAttribute('expression') || '') === expr)) {
+        const d = parseStmt(c); d.init = expr; out.push(d); i += names.length;
+        continue;
+      }
+    }
     const s = parseStmt(c);
     if (s) out.push(s); else _skipped.push(c.nodeName);
   }
@@ -1679,7 +1690,13 @@ function writeBlock(stmts, L, depth) {
   const sub = (arr) => (arr.length ? () => writeBlock(arr, L, depth + 1) : null);
   for (const s of stmts) {
     switch (s.kind) {
-      case 'declare': open('declare', [['name', s.name], ['type', s.type], ['array', TF(s.array)], ['size', s.array ? s.size : '']]); break;
+      case 'declare':
+        if (!s.array && String(s.init || '').trim()) {
+          // gli altri editor vedono la dichiarazione e un'assegnazione per ogni variabile
+          open('declare', [['name', s.name], ['type', s.type], ['array', 'False'], ['size', ''], ['flowlab-init', 'True']]);
+          for (const n of s.name.split(',').map((x) => x.trim()).filter(Boolean)) open('assign', [['variable', n], ['expression', s.init]]);
+        } else open('declare', [['name', s.name], ['type', s.type], ['array', TF(s.array)], ['size', s.array ? s.size : '']]);
+        break;
       case 'assign': open('assign', [['variable', s.variable], ['expression', s.expression]]); break;
       case 'const':
         // gli altri editor vedono una variabile dichiarata e assegnata: il programma resta eseguibile
@@ -1719,6 +1736,7 @@ function extendedFeatures(prog) {
     if (f.params.some((p) => p.array && (p.dims || 1) > 1)) out.add('array a più dimensioni');
     walk(f.body, (s) => {
       if (s.kind === 'const') out.add('costanti');
+      if (s.kind === 'declare' && !s.array && String(s.init || '').trim()) out.add('dichiarazioni con valore iniziale');
       if (s.kind === 'declare' && s.array && _MX.splitTop(s.size).length > 1) out.add('array a più dimensioni');
       for (const k of ['variable', 'expression', 'start', 'end', 'step']) {
         if (typeof s[k] !== 'string' || !s[k].includes('[')) continue;
@@ -2328,6 +2346,8 @@ class Interpreter {
           if (s.array) frame.vars.set(key, { name: n, type: s.type, array: true, dims: dims.slice(), items: new Array(size).fill(undefined) });
           else frame.vars.set(key, { name: n, type: s.type, array: false, value: undefined });
         }
+        // valore iniziale: vale per tutte le variabili del blocco
+        if (!s.array && String(s.init || '').trim()) for (const n of names) yield* this.store({ k: 'var', name: n }, yield* ev(s.init));
         return;
       }
       case 'const': {
@@ -2817,7 +2837,7 @@ LANGS.pseudo = {
       for (const s of stmts) {
         switch (s.kind) {
           case 'const': o.line(`COSTANTE ${s.name} : ${TIPO[s.type] || s.type} = ${E(s.expression, sc)}`); break;
-          case 'declare': o.line(`DICHIARA ${s.array ? `ARRAY ${s.name.split(',').map((x) => x.trim() + '[' + dimsOf(s, E, sc).join(', ') + ']').join(', ')} DI ${TIPO[s.type] || s.type}` : `${s.name} : ${TIPO[s.type] || s.type}`}`); break;
+          case 'declare': o.line(`DICHIARA ${s.array ? `ARRAY ${s.name.split(',').map((x) => x.trim() + '[' + dimsOf(s, E, sc).join(', ') + ']').join(', ')} DI ${TIPO[s.type] || s.type}` : `${s.name} : ${TIPO[s.type] || s.type}${String(s.init || '').trim() ? ' = ' + E(s.init, sc) : ''}`}`); break;
           case 'assign': o.line(`${targetsOf(s).map((x) => E(x, sc)).join(', ')} ← ${E(s.expression, sc)}`); break;
           case 'input': o.line(`LEGGI ${E(s.variable, sc)}`); break;
           case 'output': o.line(`SCRIVI ${E(s.expression, sc)}${s.newline ? '' : '   // senza a capo'}`); break;
@@ -2956,6 +2976,7 @@ LANGS.python = {
         switch (s.kind) {
           case 'const': o.line(`${vname(s.name.trim(), sc)} = ${E(s.expression, sc)}  # costante`); break;
           case 'declare': {
+            if (!s.array && String(s.init || '').trim()) { for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(`${nm} = ${asReal(s.init, s.type, E, sc)}`); break; }
             const init = initOf(s, stmts[si + 1]);
             if (init != null) { o.line(`${s.name.trim()} = ${asReal(init, s.type, E, sc)}`); si++; break; }
             for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) {
@@ -3187,6 +3208,7 @@ function cFamily(cfg) {
           switch (s.kind) {
             case 'const': o.line(cfg.constDecl(s.name.trim(), s.type, E(s.expression, sc), isLiteralExpr(s.expression))); break;
             case 'declare': {
+              if (!s.array && String(s.init || '').trim() && cfg.declareInit) { for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declareInit(nm, s.type, asReal(s.init, s.type, E, sc))); break; }
               const init = initOf(s, stmts[si + 1]);
               if (init != null && cfg.declareInit) { o.line(cfg.declareInit(s.name.trim(), s.type, asReal(init, s.type, E, sc))); si++; break; }
               for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declare(nm, s.type, s.array, s.array ? dimsOf(s, E, sc) : null, used));
@@ -3889,7 +3911,7 @@ function caption(s) {
   switch (s.kind) {
     case 'declare': {
       const names = s.name.split(',').map((x) => x.trim()).filter(Boolean);
-      return { text: `${s.array ? names.map((n) => `${n}[${s.size}]`).join(', ') : names.join(', ')}: ${T[s.type]}` };
+      return { text: `${s.array ? names.map((n) => `${n}[${s.size}]`).join(', ') : names.join(', ')}: ${T[s.type]}${!s.array && String(s.init || '').trim() ? ' = ' + s.init : ''}` };
     }
     case 'assign': return { text: `${s.variable} ← ${s.expression}` };
     case 'const': return { text: `${s.name}: ${T[s.type]} = ${s.expression}`, badge: 'C' };
@@ -5665,7 +5687,8 @@ const ArrayView = (() => {
       { key: 'name', label: 'Nomi delle variabili', type: 'names', required: true, placeholder: 'es. a, b, totale' },
       { key: 'type', label: 'Tipo', type: 'seg', options: TYPE_OPTS },
       { key: 'array', label: 'Array (elenco di valori con indice da 0)', type: 'check' },
-      { key: 'size', label: 'Numero di elementi', type: 'exprlist', placeholder: 'es. 10   oppure   3, 4 per una matrice', hint: 'Per un array a più dimensioni separa le dimensioni con la virgola: 3, 4 è una matrice 3 × 4', showIf: 'array' }] },
+      { key: 'size', label: 'Numero di elementi', type: 'exprlist', placeholder: 'es. 10   oppure   3, 4 per una matrice', hint: 'Per un array a più dimensioni separa le dimensioni con la virgola: 3, 4 è una matrice 3 × 4', showIf: 'array' },
+      { key: 'init', label: 'Valore iniziale (facoltativo)', type: 'expr', placeholder: 'es. 0', hint: 'Con più nomi tutte le variabili partono da questo valore. Se resta vuoto, la variabile non ha un valore finché non le assegni qualcosa.', showIf: '!array' }] },
     const: { title: 'Costante', help: 'Un valore con un nome che non cambia durante il programma. Per convenzione si scrive in maiuscolo.', fields: [
       { key: 'name', label: 'Nome della costante', type: 'ident', required: true, placeholder: 'es. MAX' },
       { key: 'type', label: 'Tipo', type: 'seg', options: TYPE_OPTS },
@@ -5734,7 +5757,7 @@ const ArrayView = (() => {
       onOk: () => {
         const vals = {};
         for (const spec of form.fields) {
-          if (ws[spec.key].hidden) { vals[spec.key] = spec.type === 'check' ? false : (spec.key === 'size' ? '' : s[spec.key]); continue; }
+          if (ws[spec.key].hidden) { vals[spec.key] = spec.type === 'check' ? false : (spec.key === 'size' || spec.key === 'init' ? '' : s[spec.key]); continue; }
           const e = ws[spec.key]._check ? ws[spec.key]._check() : '';
           if (e) return e;
           vals[spec.key] = ws[spec.key]._get();

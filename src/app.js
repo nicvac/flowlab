@@ -498,7 +498,8 @@
       { key: 'name', label: 'Nomi delle variabili', type: 'names', required: true, placeholder: 'es. a, b, totale' },
       { key: 'type', label: 'Tipo', type: 'seg', options: TYPE_OPTS },
       { key: 'array', label: 'Array (elenco di valori con indice da 0)', type: 'check' },
-      { key: 'size', label: 'Numero di elementi', type: 'exprlist', placeholder: 'es. 10   oppure   3, 4 per una matrice', hint: 'Per un array a più dimensioni separa le dimensioni con la virgola: 3, 4 è una matrice 3 × 4', showIf: 'array' }] },
+      { key: 'size', label: 'Numero di elementi', type: 'exprlist', placeholder: 'es. 10   oppure   3, 4 per una matrice', hint: 'Per un array a più dimensioni separa le dimensioni con la virgola: 3, 4 è una matrice 3 × 4', showIf: 'array' },
+      { key: 'init', label: 'Valore iniziale (facoltativo)', type: 'expr', placeholder: 'es. 0', hint: 'Con più nomi tutte le variabili partono da questo valore. Se resta vuoto, la variabile non ha un valore finché non le assegni qualcosa.', showIf: '!array' }] },
     const: { title: 'Costante', help: 'Un valore con un nome che non cambia durante il programma. Per convenzione si scrive in maiuscolo.', fields: [
       { key: 'name', label: 'Nome della costante', type: 'ident', required: true, placeholder: 'es. MAX' },
       { key: 'type', label: 'Tipo', type: 'seg', options: TYPE_OPTS },
@@ -567,7 +568,7 @@
       onOk: () => {
         const vals = {};
         for (const spec of form.fields) {
-          if (ws[spec.key].hidden) { vals[spec.key] = spec.type === 'check' ? false : (spec.key === 'size' ? '' : s[spec.key]); continue; }
+          if (ws[spec.key].hidden) { vals[spec.key] = spec.type === 'check' ? false : (spec.key === 'size' || spec.key === 'init' ? '' : s[spec.key]); continue; }
           const e = ws[spec.key]._check ? ws[spec.key]._check() : '';
           if (e) return e;
           vals[spec.key] = ws[spec.key]._get();

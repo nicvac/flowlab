@@ -11,7 +11,7 @@ const newId = () => 's' + (__id++);
 
 /* Definizione dei tipi di blocco: campi salvati nel file e valori di default */
 const KINDS = {
-  declare:    { fields: { name: '', type: 'Integer', array: false, size: '' } },
+  declare:    { fields: { name: '', type: 'Integer', array: false, size: '', init: '' } },
   const:      { fields: { name: '', type: 'Integer', expression: '' } },
   assign:     { fields: { variable: '', expression: '' } },
   input:      { fields: { variable: '' } },
@@ -275,6 +275,17 @@ function parseBlock(el) {
       out.push(makeStmt('const', { name, type: normType(c.getAttribute('type')), expression }));
       continue;
     }
+    // estensione FlowLab: dichiarazione con valore iniziale = <declare flowlab-init="True"/> seguita
+    // da un'assegnazione per ogni nome, tutte con la stessa espressione
+    if (c.nodeName.toLowerCase() === 'declare' && String(c.getAttribute('flowlab-init')).toLowerCase() === 'true' && !boolAttr(c.getAttribute('array'), false)) {
+      const names = (c.getAttribute('name') || '').split(',').map((x) => x.trim()).filter(Boolean);
+      const as = kids.slice(i + 1, i + 1 + names.length);
+      const expr = as[0] ? as[0].getAttribute('expression') || '' : '';
+      if (names.length && as.length === names.length && as.every((a, k) => a.nodeName.toLowerCase() === 'assign' && (a.getAttribute('variable') || '').trim().toLowerCase() === names[k].toLowerCase() && (a.getAttribute('expression') || '') === expr)) {
+        const d = parseStmt(c); d.init = expr; out.push(d); i += names.length;
+        continue;
+      }
+    }
     const s = parseStmt(c);
     if (s) out.push(s); else _skipped.push(c.nodeName);
   }
@@ -405,7 +416,13 @@ function writeBlock(stmts, L, depth) {
   const sub = (arr) => (arr.length ? () => writeBlock(arr, L, depth + 1) : null);
   for (const s of stmts) {
     switch (s.kind) {
-      case 'declare': open('declare', [['name', s.name], ['type', s.type], ['array', TF(s.array)], ['size', s.array ? s.size : '']]); break;
+      case 'declare':
+        if (!s.array && String(s.init || '').trim()) {
+          // gli altri editor vedono la dichiarazione e un'assegnazione per ogni variabile
+          open('declare', [['name', s.name], ['type', s.type], ['array', 'False'], ['size', ''], ['flowlab-init', 'True']]);
+          for (const n of s.name.split(',').map((x) => x.trim()).filter(Boolean)) open('assign', [['variable', n], ['expression', s.init]]);
+        } else open('declare', [['name', s.name], ['type', s.type], ['array', TF(s.array)], ['size', s.array ? s.size : '']]);
+        break;
       case 'assign': open('assign', [['variable', s.variable], ['expression', s.expression]]); break;
       case 'const':
         // gli altri editor vedono una variabile dichiarata e assegnata: il programma resta eseguibile
@@ -445,6 +462,7 @@ function extendedFeatures(prog) {
     if (f.params.some((p) => p.array && (p.dims || 1) > 1)) out.add('array a più dimensioni');
     walk(f.body, (s) => {
       if (s.kind === 'const') out.add('costanti');
+      if (s.kind === 'declare' && !s.array && String(s.init || '').trim()) out.add('dichiarazioni con valore iniziale');
       if (s.kind === 'declare' && s.array && _MX.splitTop(s.size).length > 1) out.add('array a più dimensioni');
       for (const k of ['variable', 'expression', 'start', 'end', 'step']) {
         if (typeof s[k] !== 'string' || !s[k].includes('[')) continue;

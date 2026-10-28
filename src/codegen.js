@@ -295,7 +295,7 @@ LANGS.pseudo = {
       for (const s of stmts) {
         switch (s.kind) {
           case 'const': o.line(`COSTANTE ${s.name} : ${TIPO[s.type] || s.type} = ${E(s.expression, sc)}`); break;
-          case 'declare': o.line(`DICHIARA ${s.array ? `ARRAY ${s.name.split(',').map((x) => x.trim() + '[' + dimsOf(s, E, sc).join(', ') + ']').join(', ')} DI ${TIPO[s.type] || s.type}` : `${s.name} : ${TIPO[s.type] || s.type}`}`); break;
+          case 'declare': o.line(`DICHIARA ${s.array ? `ARRAY ${s.name.split(',').map((x) => x.trim() + '[' + dimsOf(s, E, sc).join(', ') + ']').join(', ')} DI ${TIPO[s.type] || s.type}` : `${s.name} : ${TIPO[s.type] || s.type}${String(s.init || '').trim() ? ' = ' + E(s.init, sc) : ''}`}`); break;
           case 'assign': o.line(`${targetsOf(s).map((x) => E(x, sc)).join(', ')} ← ${E(s.expression, sc)}`); break;
           case 'input': o.line(`LEGGI ${E(s.variable, sc)}`); break;
           case 'output': o.line(`SCRIVI ${E(s.expression, sc)}${s.newline ? '' : '   // senza a capo'}`); break;
@@ -434,6 +434,7 @@ LANGS.python = {
         switch (s.kind) {
           case 'const': o.line(`${vname(s.name.trim(), sc)} = ${E(s.expression, sc)}  # costante`); break;
           case 'declare': {
+            if (!s.array && String(s.init || '').trim()) { for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(`${nm} = ${asReal(s.init, s.type, E, sc)}`); break; }
             const init = initOf(s, stmts[si + 1]);
             if (init != null) { o.line(`${s.name.trim()} = ${asReal(init, s.type, E, sc)}`); si++; break; }
             for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) {
@@ -665,6 +666,7 @@ function cFamily(cfg) {
           switch (s.kind) {
             case 'const': o.line(cfg.constDecl(s.name.trim(), s.type, E(s.expression, sc), isLiteralExpr(s.expression))); break;
             case 'declare': {
+              if (!s.array && String(s.init || '').trim() && cfg.declareInit) { for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declareInit(nm, s.type, asReal(s.init, s.type, E, sc))); break; }
               const init = initOf(s, stmts[si + 1]);
               if (init != null && cfg.declareInit) { o.line(cfg.declareInit(s.name.trim(), s.type, asReal(init, s.type, E, sc))); si++; break; }
               for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declare(nm, s.type, s.array, s.array ? dimsOf(s, E, sc) : null, used));

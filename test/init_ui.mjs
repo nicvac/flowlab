@@ -1,0 +1,25 @@
+// Dichiarazione con valore iniziale dal dialogo
+import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1366, height: 820 } });
+const errs = []; page.on('pageerror', (e) => errs.push(e.message));
+await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
+const wait = (ms = 120) => page.waitForTimeout(ms);
+await page.evaluate(() => { localStorage.clear(); const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); FlowLab.loadText('<?xml version="1.0"?><flowgorithm fileversion="4.2"><attributes><attribute name="name" value="Prova"/></attributes><function name="Main" type="None" variable=""><parameters/><body/></function></flowgorithm>', 'p.fprg'); });
+await wait(200);
+await page.click('#chart .ins >> nth=0'); await page.click('#pop .insbtn[title="Dichiara"]'); await wait(80);
+console.log('campo visibile:', await page.isVisible('#f_init'));
+await page.check('#f_array'); await page.dispatchEvent('#f_array', 'change'); await wait(40);
+console.log('nascosto con array:', !(await page.isVisible('#f_init')));
+await page.uncheck('#f_array'); await page.dispatchEvent('#f_array', 'change'); await wait(40);
+await page.fill('#f_name', 'conta, totale'); await page.fill('#f_init', '10'); await page.click('.modal footer .btn.primary'); await wait(120);
+const n = await page.locator('#chart .ins').count();
+await page.click(`#chart .ins >> nth=${n - 1}`); await page.click('#pop .insbtn[title="Output"]'); await wait(80);
+await page.fill('#f_expression', 'conta + totale'); await page.click('.modal footer .btn.primary'); await wait(120);
+console.log('blocco:', await page.locator('#chart .shape[data-kind=declare] text').first().textContent());
+await page.click('#runBtn'); await wait(300);
+console.log('output:', (await page.evaluate(() => document.querySelector('#conOut').textContent)));
+await page.evaluate(() => FlowLab.setTab('code')); await page.selectOption('#langSel', 'java'); await wait(200);
+console.log('java:', (await page.innerText('#codeOut')).split('\n').filter((l) => /conta|totale/.test(l)).join(' | '));
+console.log('ERR', errs);
+await browser.close();

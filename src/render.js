@@ -69,7 +69,7 @@ function caption(s) {
   switch (s.kind) {
     case 'declare': {
       const names = s.name.split(',').map((x) => x.trim()).filter(Boolean);
-      return { text: `${s.array ? names.map((n) => `${n}[${s.size}]`).join(', ') : names.join(', ')}: ${T[s.type]}` };
+      return { text: `${s.array ? names.map((n) => `${n}[${s.size}]`).join(', ') : names.join(', ')}: ${T[s.type]}${!s.array && String(s.init || '').trim() ? ' = ' + s.init : ''}` };
     }
     case 'assign': return { text: `${s.variable} ← ${s.expression}` };
     case 'const': return { text: `${s.name}: ${T[s.type]} = ${s.expression}`, badge: 'C' };
