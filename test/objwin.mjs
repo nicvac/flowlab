@@ -20,6 +20,7 @@ await page.click('#runBtn'); await wait(400);
 console.log('stato:', await page.evaluate(() => FlowLab.run.state), '· output:', (await page.evaluate(() => document.querySelector('#conOut').textContent)).slice(0, 200));
 console.log('dopo la fine, la finestra aperta indica:', await page.locator('.ovwin .av-state').first().textContent());
 await page.locator('.ovwin .iconbtn').first().click();
+await page.evaluate(() => FlowLab.setTab('vars')); // a fine esecuzione si torna alla console
 await page.click('#varsBody button.ov-link.obj'); await wait();
 const ov = page.locator('.ovwin').first();
 console.log('Disegno:', (await ov.locator('tbody tr').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ')).join(' | '));

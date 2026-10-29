@@ -6,7 +6,7 @@ const errs = []; page.on('pageerror', (e) => errs.push(e.message));
 await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
 const wait = (ms = 130) => page.waitForTimeout(ms);
 const head = (n) => page.locator(`.ubox:has(.uname:text-is("${n}")) .uhit.head`);
-await page.evaluate(() => { localStorage.clear(); const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); FlowLab.loadExample('animali'); });
+await page.evaluate(() => { localStorage.clear(); const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); (FlowLab.loadExample('animali'), FlowLab.showUml()); });
 await wait(250);
 console.log('stereotipi:', await page.locator('.ustereo').allTextContents(), '· astratti:', await page.locator('.urow.abs .umem').allTextContents());
 await page.screenshot({ path: 'test/abs1.png' });

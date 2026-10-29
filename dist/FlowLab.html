@@ -7135,8 +7135,7 @@ const ArrayView = (() => {
     const before = keepUndo ? snapshot() : null;
     st.undo = before ? [before] : []; st.redo = []; st.prog = prog; st.fi = 0; st.sel = null; st.fileName = name || null; st.dirty = false; st.sourceUrl = null;
     run.errId = null; run.mainFrame = null;
-    if (M.hasClasses(prog)) { st.view = 'objects'; store.set('view', 'objects'); }
-    st.uml = isOO(); st.usel = null;
+    startView();
     render(); renderVars();
     setTimeout(fitIfLarge, 0);
     if (prog.skipped && prog.skipped.length) toast(`Aperto ${name || 'programma'}: ignorati ${prog.skipped.length} blocchi non supportati (${[...new Set(prog.skipped)].join(', ')})`, 'warn');
@@ -7221,8 +7220,7 @@ const ArrayView = (() => {
     guardDirty(() => {
       if (isRunning()) stopRun();
       st.prog = ex.make(); st.fi = 0; st.sel = null; st.usel = null; st.undo = []; st.redo = []; st.fileName = null; st.dirty = false; run.mainFrame = null; run.errId = null;
-      if (M.hasClasses(st.prog)) { st.view = 'objects'; store.set('view', 'objects'); }
-      st.uml = isOO();
+      startView();
       conClear(); render(); renderVars(); setTimeout(fitIfLarge, 0);
     });
   }

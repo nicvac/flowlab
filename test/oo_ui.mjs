@@ -12,7 +12,7 @@ const say = (...a) => console.log(...a);
 const wait = (ms = 120) => page.waitForTimeout(ms);
 
 // 1. esempio con ereditarietà: si apre il diagramma delle classi
-await page.evaluate(() => FlowLab.loadExample('forme')); await wait(300);
+await page.evaluate(() => (FlowLab.loadExample('forme'), FlowLab.showUml())); await wait(300);
 say('vista:', await page.evaluate(() => FlowLab.state.view), '· uml:', await page.evaluate(() => FlowLab.state.uml));
 say('classi nel diagramma:', await page.locator('#chart svg.uml .ubox').count(), '· relazioni:', await page.locator('#chart .urel').count(), '· etichette:', await page.locator('#chart .ulab').allTextContents());
 await page.screenshot({ path: 'test/oo1_uml.png' });
@@ -107,7 +107,7 @@ say('annulla spostamento:', await page.evaluate(() => FlowLab.state.prog.classes
 say('formato esteso:', await page.evaluate(() => /flowlab-classes/.test(FlowLab.serialize())));
 
 // 8. variabili con oggetti: passo dopo passo nella lista collegata
-await page.evaluate(() => FlowLab.loadExample('lista')); await wait(200);
+await page.evaluate(() => (FlowLab.loadExample('lista'), FlowLab.showUml())); await wait(200);
 await page.evaluate(() => FlowLab.setTab('vars'));
 for (let i = 0; i < 30; i++) { await page.click('#stepBtn'); await wait(15); }
 say('in esecuzione:', await page.evaluate(() => FlowLab.run.state), '· metodo:', await page.innerText('#crumbWhere').catch(() => ''));
@@ -118,7 +118,7 @@ say('dopo aver aperto:', (await page.locator('#varsBody tbody tr').allInnerTexts
 await page.screenshot({ path: 'test/oo5_vars.png' });
 
 // 9. tema scuro del diagramma
-await page.evaluate(() => FlowLab.loadExample('forme')); await wait(150);
+await page.evaluate(() => (FlowLab.loadExample('forme'), FlowLab.showUml())); await wait(150);
 await page.click('#themeBtn'); await wait(150);
 await page.screenshot({ path: 'test/oo6_dark.png' });
 await page.click('#themeBtn');

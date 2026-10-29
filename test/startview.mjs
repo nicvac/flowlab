@@ -23,5 +23,7 @@ const srv = spawn('python3', ['-m', 'http.server', '8766', '--bind', '127.0.0.1'
 await new Promise((r) => setTimeout(r, 800));
 for (const ex of ['animali', 'fattoriale']) { await page.goto(`http://127.0.0.1:8766/dist/FlowLab.html?url=../esempi/${ex}.fprg`); await page.waitForTimeout(700); console.log(`?url=${ex}:`, await where()); }
 srv.kill();
+// dagli esempi
+for (const ex of ['forme', 'fattoriale', 'animali', 'media']) { await page.evaluate((e) => { FlowLab.state.dirty = false; FlowLab.loadExample(e); }, ex); await page.waitForTimeout(150); console.log(`esempio ${ex}:`, await where()); }
 console.log('ERR', errs);
 await browser.close();

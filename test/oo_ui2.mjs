@@ -10,7 +10,7 @@ const wait = (ms = 120) => page.waitForTimeout(ms);
 const out = async () => (await page.innerText('#conOut')).split('\n').slice(1, -1).join(' | ');
 const head = (name) => page.locator(`.ubox:has(.uname:text-is("${name}")) .uhit.head`);
 
-await page.evaluate(() => FlowLab.loadExample('forme')); await wait(250);
+await page.evaluate(() => (FlowLab.loadExample('forme'), FlowLab.showUml())); await wait(250);
 await page.click('#runBtn'); await wait(300);
 const before = await out();
 await page.evaluate(() => FlowLab.showUml()); await wait(100);
