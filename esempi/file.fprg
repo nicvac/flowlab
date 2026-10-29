@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Quadrati su file"/>
+        <attribute name="authors" value="Esempi FlowLab"/>
+        <attribute name="about" value="Scrive i quadrati su un file e poi li rilegge finché il file non finisce."/>
+        <attribute name="saved" value="2026-10-29 08:00:00 PM"/>
+        <attribute name="created" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <declare name="i, q, somma" type="Integer" array="False" size=""/>
+            <open expression="&quot;quadrati.txt&quot;" mode="write"/>
+            <for variable="i" start="1" end="5" direction="inc" step="1">
+                <write expression="i * i"/>
+            </for>
+            <close mode="write"/>
+            <output expression="&quot;Ho scritto quadrati.txt (lo trovi nella scheda File)&quot;" newline="True"/>
+            <assign variable="somma" expression="0"/>
+            <open expression="&quot;quadrati.txt&quot;" mode="read"/>
+            <while expression="not EOF()">
+                <read variable="q"/>
+                <output expression="&quot;Letto &quot; &amp; q" newline="True"/>
+                <assign variable="somma" expression="somma + q"/>
+            </while>
+            <close mode="read"/>
+            <output expression="&quot;Somma = &quot; &amp; somma" newline="True"/>
+        </body>
+    </function>
+</flowgorithm>

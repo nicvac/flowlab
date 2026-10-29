@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Pari o dispari"/>
+        <attribute name="authors" value="Esempi FlowLab"/>
+        <attribute name="about" value="Usa il resto della divisione per 2."/>
+        <attribute name="saved" value="2026-10-29 08:00:00 PM"/>
+        <attribute name="created" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <declare name="numero" type="Integer" array="False" size=""/>
+            <output expression="&quot;Inserisci un numero intero&quot;" newline="True"/>
+            <input variable="numero"/>
+            <if expression="numero mod 2 = 0">
+                <then>
+                    <output expression="numero &amp; &quot; è pari&quot;" newline="True"/>
+                </then>
+                <else>
+                    <output expression="numero &amp; &quot; è dispari&quot;" newline="True"/>
+                </else>
+            </if>
+        </body>
+    </function>
+</flowgorithm>

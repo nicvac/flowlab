@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="MCD di Euclide"/>
+        <attribute name="authors" value="Esempi FlowLab"/>
+        <attribute name="about" value="Massimo comun divisore con l'algoritmo delle divisioni successive."/>
+        <attribute name="saved" value="2026-10-29 08:00:00 PM"/>
+        <attribute name="created" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <declare name="a, b, r" type="Integer" array="False" size=""/>
+            <comment text="Algoritmo di Euclide: finché b non è zero, la coppia (a, b) diventa (b, a mod b).&#10;Quando b vale zero, a contiene il massimo comun divisore."/>
+            <output expression="&quot;Primo numero&quot;" newline="True"/>
+            <input variable="a"/>
+            <output expression="&quot;Secondo numero&quot;" newline="True"/>
+            <input variable="b"/>
+            <while expression="b != 0">
+                <assign variable="r" expression="a mod b"/>
+                <assign variable="a" expression="b"/>
+                <assign variable="b" expression="r"/>
+            </while>
+            <output expression="&quot;MCD = &quot; &amp; a" newline="True"/>
+        </body>
+    </function>
+</flowgorithm>

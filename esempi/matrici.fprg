@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Matrici e cubi"/>
+        <attribute name="authors" value="Esempi FlowLab"/>
+        <attribute name="about" value="Riempie una tavola pitagorica 10 × 10, un cubo 4 × 6 × 8 e un array a 4 dimensioni. Apri gli array dalla scheda Variabili ed esegui con Passo."/>
+        <attribute name="saved" value="2026-10-29 08:00:00 PM"/>
+        <attribute name="created" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Apri la scheda Variabili e premi il pulsante accanto a un array per vederlo in una finestra."/>
+            <declare name="N" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="N" expression="10"/>
+            <declare name="tavola" type="Integer" array="True" size="N, N"/>
+            <declare name="cubo" type="Integer" array="True" size="4, 6, 8"/>
+            <declare name="quattro" type="Integer" array="True" size="2, 3, 4, 5"/>
+            <declare name="i, j, k, l" type="Integer" array="False" size=""/>
+            <for variable="i" start="0" end="N - 1" direction="inc" step="1">
+                <for variable="j" start="0" end="N - 1" direction="inc" step="1">
+                    <assign variable="tavola[i, j]" expression="(i + 1) * (j + 1)"/>
+                </for>
+            </for>
+            <for variable="i" start="0" end="Size(cubo, 0) - 1" direction="inc" step="1">
+                <for variable="j" start="0" end="Size(cubo, 1) - 1" direction="inc" step="1">
+                    <for variable="k" start="0" end="Size(cubo, 2) - 1" direction="inc" step="1">
+                        <assign variable="cubo[i][j][k]" expression="i * 100 + j * 10 + k"/>
+                    </for>
+                </for>
+            </for>
+            <for variable="i" start="0" end="1" direction="inc" step="1">
+                <for variable="j" start="0" end="2" direction="inc" step="1">
+                    <for variable="k" start="0" end="3" direction="inc" step="1">
+                        <for variable="l" start="0" end="4" direction="inc" step="1">
+                            <assign variable="quattro[i, j, k, l]" expression="i + j + k + l"/>
+                        </for>
+                    </for>
+                </for>
+            </for>
+            <output expression="&quot;7 × 8 = &quot; &amp; tavola[6, 7] &amp; &quot; · cubo[3, 5, 7] = &quot; &amp; cubo[3, 5, 7] &amp; &quot; · somma diagonale = &quot; &amp; SommaDiagonale(tavola)" newline="True"/>
+        </body>
+    </function>
+    <function name="SommaDiagonale" type="Integer" variable="s">
+        <parameters>
+            <parameter name="m" type="Integer" array="True" flowlab-dims="2"/>
+        </parameters>
+        <body>
+            <declare name="s, i" type="Integer" array="False" size=""/>
+            <assign variable="s" expression="0"/>
+            <for variable="i" start="0" end="Size(m) - 1" direction="inc" step="1">
+                <assign variable="s" expression="s + m[i, i]"/>
+            </for>
+        </body>
+    </function>
+</flowgorithm>

@@ -1,0 +1,79 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Animali"/>
+        <attribute name="authors" value="Esempi FlowLab"/>
+        <attribute name="about" value="Animale è astratta: ogni animale fa un verso, ma solo Cane e Gatto sanno quale. presentati() è scritto una volta sola in Animale e usa il verso giusto per ogni oggetto."/>
+        <attribute name="saved" value="2026-10-29 08:00:00 PM"/>
+        <attribute name="created" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+    </attributes>
+    <flowlab-classes>
+        <class name="Animali" parent="" x="40" y="60"/>
+        <class name="Animale" parent="" abstract="True" x="340" y="40">
+            <attribute name="nome" type="String" array="False" size="" visibility="protected" static="False" init=""/>
+        </class>
+        <class name="Cane" parent="Animale" x="220" y="290"/>
+        <class name="Gatto" parent="Animale" x="470" y="290"/>
+    </flowlab-classes>
+    <function name="Main" type="None" variable="" flowlab-class="Animali" flowlab-visibility="public" flowlab-static="True">
+        <parameters/>
+        <body>
+            <comment text="Prova ad aggiungere il blocco  a ← new Animale(&quot;x&quot;) : Animale è astratta e il programma si ferma con un errore."/>
+            <declare name="a, b" type="Animale" array="False" size=""/>
+            <assign variable="a" expression="new Cane(&quot;Fido&quot;)"/>
+            <assign variable="b" expression="new Gatto(&quot;Micia&quot;)"/>
+            <output expression="a.presentati()" newline="True"/>
+            <output expression="b.presentati()" newline="True"/>
+        </body>
+    </function>
+    <function name="Animale" type="None" variable="" flowlab-class="Animale" flowlab-visibility="public" flowlab-static="False" flowlab-ctor="True">
+        <parameters>
+            <parameter name="n" type="String" array="False"/>
+        </parameters>
+        <body>
+            <assign variable="nome" expression="n"/>
+        </body>
+    </function>
+    <function name="verso" type="String" variable="v" flowlab-class="Animale" flowlab-visibility="public" flowlab-static="False" flowlab-abstract="True">
+        <parameters/>
+        <body/>
+    </function>
+    <function name="presentati" type="String" variable="testo" flowlab-class="Animale" flowlab-visibility="public" flowlab-static="False">
+        <parameters/>
+        <body>
+            <declare name="testo" type="String" array="False" size=""/>
+            <assign variable="testo" expression="&quot;Sono &quot; &amp; nome &amp; &quot; e faccio &quot; &amp; verso()"/>
+        </body>
+    </function>
+    <function name="Cane" type="None" variable="" flowlab-class="Cane" flowlab-visibility="public" flowlab-static="False" flowlab-ctor="True">
+        <parameters>
+            <parameter name="n" type="String" array="False"/>
+        </parameters>
+        <body>
+            <call expression="super(n)"/>
+        </body>
+    </function>
+    <function name="verso" type="String" variable="v" flowlab-class="Cane" flowlab-visibility="public" flowlab-static="False">
+        <parameters/>
+        <body>
+            <declare name="v" type="String" array="False" size=""/>
+            <assign variable="v" expression="&quot;Bau&quot;"/>
+        </body>
+    </function>
+    <function name="Gatto" type="None" variable="" flowlab-class="Gatto" flowlab-visibility="public" flowlab-static="False" flowlab-ctor="True">
+        <parameters>
+            <parameter name="n" type="String" array="False"/>
+        </parameters>
+        <body>
+            <call expression="super(n)"/>
+        </body>
+    </function>
+    <function name="verso" type="String" variable="v" flowlab-class="Gatto" flowlab-visibility="public" flowlab-static="False">
+        <parameters/>
+        <body>
+            <declare name="v" type="String" array="False" size=""/>
+            <assign variable="v" expression="&quot;Miao&quot;"/>
+        </body>
+    </function>
+</flowgorithm>

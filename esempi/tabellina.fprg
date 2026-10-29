@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Tabellina"/>
+        <attribute name="authors" value="Esempi FlowLab"/>
+        <attribute name="about" value="Stampa la tabellina di un numero da 1 a 10."/>
+        <attribute name="saved" value="2026-10-29 08:00:00 PM"/>
+        <attribute name="created" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <declare name="n, i" type="Integer" array="False" size=""/>
+            <output expression="&quot;Di quale numero vuoi la tabellina?&quot;" newline="True"/>
+            <input variable="n"/>
+            <for variable="i" start="1" end="10" direction="inc" step="1">
+                <output expression="n &amp; &quot; × &quot; &amp; i &amp; &quot; = &quot; &amp; n * i" newline="True"/>
+            </for>
+        </body>
+    </function>
+</flowgorithm>

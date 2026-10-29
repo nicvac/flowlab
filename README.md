@@ -21,6 +21,7 @@ https://nicvac.github.io/flowlab/dist/FlowLab.html?url=https://github.com/utente
 - Vanno bene i file su GitHub (anche il link «blob» della pagina del file: FlowLab lo trasforma nel file grezzo), nei Gist e su GitHub Pages. Altri siti funzionano se permettono la lettura da altre pagine (CORS).
 - Dopo l'apertura il parametro sparisce dalla barra degli indirizzi: ricaricando la pagina si ritrova il proprio lavoro. Il programma che c'era prima si recupera con Ctrl+Z.
 - Dal menu File: *Apri da indirizzo web…* e *Copia il link a questo programma*, per condividerlo con la classe.
+- Nella cartella [`esempi/`](esempi/) ci sono tutti gli esempi in formato `.fprg`, con i link che li aprono direttamente in FlowLab.
 
 ## Funzionalità
 
@@ -93,6 +94,7 @@ src/
   examples.js  programmi di esempio
   app.js       interfaccia
   style.css, body.html
+esempi/        gli esempi in formato .fprg (si rigenerano con node tools/esempi.js)
 build.py       unisce i sorgenti in dist/FlowLab.html (standalone) e dist/artifact.html
 test/          test Node e Playwright
 ```

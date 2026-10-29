@@ -1,0 +1,111 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Conto in banca"/>
+        <attribute name="authors" value="Esempi FlowLab"/>
+        <attribute name="about" value="Una classe con attributi privati, due costruttori e un attributo statico che conta i conti aperti."/>
+        <attribute name="saved" value="2026-10-29 08:00:00 PM"/>
+        <attribute name="created" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+    </attributes>
+    <flowlab-classes>
+        <class name="ContoInBanca" parent="" x="40" y="60"/>
+        <class name="ContoBancario" parent="" x="360" y="40">
+            <attribute name="titolare" type="String" array="False" size="" visibility="private" static="False" init=""/>
+            <attribute name="saldo" type="Real" array="False" size="" visibility="private" static="False" init=""/>
+            <attribute name="contiAperti" type="Integer" array="False" size="" visibility="public" static="True" init="0"/>
+        </class>
+    </flowlab-classes>
+    <function name="Main" type="None" variable="" flowlab-class="ContoInBanca" flowlab-visibility="public" flowlab-static="True">
+        <parameters/>
+        <body>
+            <comment text="Prova ad aggiungere il blocco  a.saldo ← 1000000 : saldo è privato e il programma si ferma con un errore."/>
+            <declare name="a, b" type="ContoBancario" array="False" size=""/>
+            <assign variable="a" expression="new ContoBancario(&quot;Anna&quot;, 100)"/>
+            <assign variable="b" expression="new ContoBancario(&quot;Bruno&quot;)"/>
+            <call expression="a.deposita(50)"/>
+            <if expression="a.preleva(30)">
+                <then>
+                    <output expression="&quot;Anna ha prelevato 30 €&quot;" newline="True"/>
+                </then>
+                <else/>
+            </if>
+            <if expression="not b.preleva(10)">
+                <then>
+                    <output expression="&quot;Bruno non ha abbastanza soldi per prelevare 10 €&quot;" newline="True"/>
+                </then>
+                <else/>
+            </if>
+            <output expression="a.descrivi()" newline="True"/>
+            <output expression="b.descrivi()" newline="True"/>
+            <output expression="&quot;Conti aperti: &quot; &amp; ContoBancario.contiAperti" newline="True"/>
+        </body>
+    </function>
+    <function name="ContoBancario" type="None" variable="" flowlab-class="ContoBancario" flowlab-visibility="public" flowlab-static="False" flowlab-ctor="True">
+        <parameters>
+            <parameter name="nome" type="String" array="False"/>
+        </parameters>
+        <body>
+            <assign variable="titolare" expression="nome"/>
+            <assign variable="saldo" expression="0"/>
+            <assign variable="contiAperti" expression="contiAperti + 1"/>
+        </body>
+    </function>
+    <function name="ContoBancario" type="None" variable="" flowlab-class="ContoBancario" flowlab-visibility="public" flowlab-static="False" flowlab-ctor="True">
+        <parameters>
+            <parameter name="nome" type="String" array="False"/>
+            <parameter name="iniziale" type="Real" array="False"/>
+        </parameters>
+        <body>
+            <assign variable="titolare" expression="nome"/>
+            <assign variable="saldo" expression="iniziale"/>
+            <assign variable="contiAperti" expression="contiAperti + 1"/>
+        </body>
+    </function>
+    <function name="deposita" type="None" variable="" flowlab-class="ContoBancario" flowlab-visibility="public" flowlab-static="False">
+        <parameters>
+            <parameter name="importo" type="Real" array="False"/>
+        </parameters>
+        <body>
+            <if expression="importo &gt; 0">
+                <then>
+                    <assign variable="saldo" expression="saldo + importo"/>
+                </then>
+                <else>
+                    <output expression="&quot;Importo non valido&quot;" newline="True"/>
+                </else>
+            </if>
+        </body>
+    </function>
+    <function name="preleva" type="Boolean" variable="riuscito" flowlab-class="ContoBancario" flowlab-visibility="public" flowlab-static="False">
+        <parameters>
+            <parameter name="importo" type="Real" array="False"/>
+        </parameters>
+        <body>
+            <declare name="riuscito" type="Boolean" array="False" size=""/>
+            <if expression="importo &gt; 0 and importo &lt;= saldo">
+                <then>
+                    <assign variable="saldo" expression="saldo - importo"/>
+                    <assign variable="riuscito" expression="true"/>
+                </then>
+                <else>
+                    <assign variable="riuscito" expression="false"/>
+                </else>
+            </if>
+        </body>
+    </function>
+    <function name="getSaldo" type="Real" variable="s" flowlab-class="ContoBancario" flowlab-visibility="public" flowlab-static="False">
+        <parameters/>
+        <body>
+            <declare name="s" type="Real" array="False" size=""/>
+            <assign variable="s" expression="saldo"/>
+        </body>
+    </function>
+    <function name="descrivi" type="String" variable="testo" flowlab-class="ContoBancario" flowlab-visibility="public" flowlab-static="False">
+        <parameters/>
+        <body>
+            <declare name="testo" type="String" array="False" size=""/>
+            <assign variable="testo" expression="titolare &amp; &quot;: &quot; &amp; ToFixed(saldo, 2) &amp; &quot; €&quot;"/>
+        </body>
+    </function>
+</flowgorithm>

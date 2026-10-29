@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Indovina il numero"/>
+        <attribute name="authors" value="Esempi FlowLab"/>
+        <attribute name="about" value="Il computer pensa un numero da 1 a 100."/>
+        <attribute name="saved" value="2026-10-29 08:00:00 PM"/>
+        <attribute name="created" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <declare name="segreto, tentativo, tentativi" type="Integer" array="False" size=""/>
+            <assign variable="segreto" expression="Random(100) + 1"/>
+            <assign variable="tentativi" expression="0"/>
+            <output expression="&quot;Ho pensato un numero da 1 a 100. Prova a indovinarlo!&quot;" newline="True"/>
+            <do expression="tentativo != segreto">
+                <input variable="tentativo"/>
+                <assign variable="tentativi" expression="tentativi + 1"/>
+                <if expression="tentativo &lt; segreto">
+                    <then>
+                        <output expression="&quot;Più alto&quot;" newline="True"/>
+                    </then>
+                    <else>
+                        <if expression="tentativo &gt; segreto">
+                            <then>
+                                <output expression="&quot;Più basso&quot;" newline="True"/>
+                            </then>
+                            <else/>
+                        </if>
+                    </else>
+                </if>
+            </do>
+            <output expression="&quot;Indovinato in &quot; &amp; tentativi &amp; &quot; tentativi&quot;" newline="True"/>
+        </body>
+    </function>
+</flowgorithm>

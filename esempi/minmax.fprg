@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Minimo e massimo"/>
+        <attribute name="authors" value="Esempi FlowLab"/>
+        <attribute name="about" value="Una funzione che restituisce quattro valori insieme, come in Python."/>
+        <attribute name="saved" value="2026-10-29 08:00:00 PM"/>
+        <attribute name="created" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <declare name="V" type="Integer" array="True" size="8"/>
+            <declare name="N, i, min, max, idxMin, idxMax" type="Integer" array="False" size=""/>
+            <assign variable="N" expression="Size(V)"/>
+            <for variable="i" start="0" end="N - 1" direction="inc" step="1">
+                <assign variable="V[i]" expression="Random(100)"/>
+                <output expression="V[i] &amp; &quot; &quot;" newline="False"/>
+            </for>
+            <output expression="&quot;&quot;" newline="True"/>
+            <assign variable="min, max, idxMin, idxMax" expression="calcolaMassimoEMinimo(V, N)"/>
+            <output expression="&quot;Minimo &quot; &amp; min &amp; &quot; in posizione &quot; &amp; idxMin" newline="True"/>
+            <output expression="&quot;Massimo &quot; &amp; max &amp; &quot; in posizione &quot; &amp; idxMax" newline="True"/>
+        </body>
+    </function>
+    <function name="calcolaMassimoEMinimo" type="Integer" variable="min" flowlab-returns="min:Integer;max:Integer;idxMin:Integer;idxMax:Integer">
+        <parameters>
+            <parameter name="V" type="Integer" array="True"/>
+            <parameter name="N" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <declare name="min, max, idxMin, idxMax" type="Integer" array="False" size=""/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <assign variable="min" expression="V[0]"/>
+            <assign variable="max" expression="V[0]"/>
+            <assign variable="idxMin" expression="0"/>
+            <assign variable="idxMax" expression="0"/>
+            <for variable="i" start="1" end="N - 1" direction="inc" step="1">
+                <if expression="V[i] &lt; min">
+                    <then>
+                        <assign variable="min" expression="V[i]"/>
+                        <assign variable="idxMin" expression="i"/>
+                    </then>
+                    <else/>
+                </if>
+                <if expression="V[i] &gt; max">
+                    <then>
+                        <assign variable="max" expression="V[i]"/>
+                        <assign variable="idxMax" expression="i"/>
+                    </then>
+                    <else/>
+                </if>
+            </for>
+        </body>
+    </function>
+</flowgorithm>

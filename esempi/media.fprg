@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Media dei voti"/>
+        <attribute name="authors" value="Esempi FlowLab"/>
+        <attribute name="about" value="Legge N voti, calcola la media e dice se è sufficiente."/>
+        <attribute name="saved" value="2026-10-29 08:00:00 PM"/>
+        <attribute name="created" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <declare name="n, i" type="Integer" array="False" size=""/>
+            <declare name="voto, somma, media" type="Real" array="False" size=""/>
+            <output expression="&quot;Quanti voti vuoi inserire?&quot;" newline="True"/>
+            <input variable="n"/>
+            <assign variable="somma" expression="0"/>
+            <for variable="i" start="1" end="n" direction="inc" step="1">
+                <output expression="&quot;Voto &quot; &amp; i &amp; &quot;: &quot;" newline="False"/>
+                <input variable="voto"/>
+                <assign variable="somma" expression="somma + voto"/>
+            </for>
+            <if expression="n &gt; 0">
+                <then>
+                    <assign variable="media" expression="somma / n"/>
+                    <output expression="&quot;Media: &quot; &amp; ToFixed(media, 2)" newline="True"/>
+                    <if expression="media &gt;= 6">
+                        <then>
+                            <output expression="&quot;Sufficiente&quot;" newline="True"/>
+                        </then>
+                        <else>
+                            <output expression="&quot;Insufficiente&quot;" newline="True"/>
+                        </else>
+                    </if>
+                </then>
+                <else>
+                    <output expression="&quot;Nessun voto inserito&quot;" newline="True"/>
+                </else>
+            </if>
+        </body>
+    </function>
+</flowgorithm>

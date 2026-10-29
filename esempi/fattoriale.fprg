@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Fattoriale ricorsivo"/>
+        <attribute name="authors" value="Esempi FlowLab"/>
+        <attribute name="about" value="Una funzione che chiama se stessa."/>
+        <attribute name="saved" value="2026-10-29 08:00:00 PM"/>
+        <attribute name="created" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjtlc2VtcGk7MjAyNi0xMC0yOSAwODowMDowMCBQTTsx"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <declare name="n" type="Integer" array="False" size=""/>
+            <output expression="&quot;Calcolo di n! — inserisci n&quot;" newline="True"/>
+            <input variable="n"/>
+            <output expression="n &amp; &quot;! = &quot; &amp; Fattoriale(n)" newline="True"/>
+        </body>
+    </function>
+    <function name="Fattoriale" type="Integer" variable="risultato">
+        <parameters>
+            <parameter name="k" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <declare name="risultato" type="Integer" array="False" size=""/>
+            <if expression="k &lt;= 1">
+                <then>
+                    <assign variable="risultato" expression="1"/>
+                </then>
+                <else>
+                    <assign variable="risultato" expression="k * Fattoriale(k - 1)"/>
+                </else>
+            </if>
+        </body>
+    </function>
+</flowgorithm>
