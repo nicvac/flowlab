@@ -2249,6 +2249,13 @@
     window.addEventListener('beforeunload', (e) => { if (st.dirty && window.self === window.top) { e.preventDefault(); e.returnValue = ''; } });
   }
 
+  /* all'apertura: vista Funzioni sul Main (Inizio); la vista Oggetti solo se il programma
+     ha più classi o membri che le funzioni non possono mostrare, e comunque sul Main */
+  function startView() {
+    st.view = M.hasClasses(st.prog) && !M.isTrivialOO(st.prog) ? 'objects' : 'functions';
+    store.set('view', st.view);
+    st.fi = 0; st.uml = false; st.sel = null; st.usel = null;
+  }
   function init() {
     ArrayView.configure({ host: () => $('#floatLayer'), nextZ: () => ++zTop });
     bindUi(); bindChart(); bindKeys();
@@ -2258,8 +2265,7 @@
       try { st.prog = M.parseFprg(saved.xml); st.fi = Math.min(saved.fi || 0, st.prog.functions.length - 1); st.fileName = saved.fileName || null; ok = true; } catch (e) { ok = false; }
     }
     if (!ok) st.prog = Examples.get('media').make();
-    if (M.hasClasses(st.prog)) st.view = 'objects';
-    st.uml = isOO();
+    startView();
     render(); initLayout(); renderVars(); renderFiles(); setStatus('idle', 'Pronto');
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { render(); fitIfLarge(); });
     setTimeout(fitIfLarge, 0);
@@ -2269,6 +2275,7 @@
     try { const sp = new URLSearchParams(location.search); q = sp.get('url') || sp.get('fprg'); } catch (e) { q = null; }
     if (q) openUrl(q, ok).then((done) => {
       if (!done) return;
+      startView(); render();
       try { const u = new URL(location.href); u.searchParams.delete('url'); u.searchParams.delete('fprg'); history.replaceState(null, '', u.href); } catch (e) { /* ignora */ }
     });
     // API minima per i test automatici
