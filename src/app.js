@@ -1358,6 +1358,11 @@
     run.curId = null; run.curFrame = null; clearTrail();
     decorate(); renderVars();
     setStatus('done', 'Programma terminato');
+    // dopo Esegui si mostrano i risultati: la console (anche se era aperta la scheda Variabili)
+    if (run.mode === 'run') {
+      if (!isFloat('console') && document.body.classList.contains('side-hidden')) setSideHidden(false);
+      showPane('console');
+    }
   }
   function onError(e) {
     flushStreams();
