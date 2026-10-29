@@ -7115,18 +7115,71 @@ const ArrayView = (() => {
       setTimeout(() => ta.select(), 50);
     }
   }
-  function loadText(text, name) {
+  /* keepUndo: il programma di prima resta recuperabile con Annulla */
+  function loadText(text, name, keepUndo) {
     let prog;
-    try { prog = M.parseFprg(text); } catch (e) { toast(e.message, 'error'); return; }
+    try { prog = M.parseFprg(text); } catch (e) { toast(e.message, 'error'); return false; }
     if (isRunning()) stopRun();
-    st.undo = []; st.redo = []; st.prog = prog; st.fi = 0; st.sel = null; st.fileName = name || null; st.dirty = false;
+    const before = keepUndo ? snapshot() : null;
+    st.undo = before ? [before] : []; st.redo = []; st.prog = prog; st.fi = 0; st.sel = null; st.fileName = name || null; st.dirty = false; st.sourceUrl = null;
     run.errId = null; run.mainFrame = null;
     if (M.hasClasses(prog)) { st.view = 'objects'; store.set('view', 'objects'); }
     st.uml = isOO(); st.usel = null;
     render(); renderVars();
     setTimeout(fitIfLarge, 0);
     if (prog.skipped && prog.skipped.length) toast(`Aperto ${name || 'programma'}: ignorati ${prog.skipped.length} blocchi non supportati (${[...new Set(prog.skipped)].join(', ')})`, 'warn');
-    else toast(`Aperto ${name || 'programma'}`, 'ok');
+    else toast(`Aperto ${name || 'programma'}${before ? ' · Ctrl+Z per tornare al programma di prima' : ''}`, 'ok');
+    return true;
+  }
+
+  /* ------------------------ Apertura da indirizzo web ----------------------
+     FlowLab.html?url=https://…/programma.fprg apre il file all'avvio. Il sito deve
+     permettere la lettura da altre pagine (CORS): va bene per esempio un file su
+     GitHub (i link «blob» si trasformano nel file grezzo), GitHub Pages, un Gist. */
+  function rawUrl(u) {
+    const s = String(u).trim();
+    let m = s.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:blob|raw)\/(.+)$/i);
+    if (m) return `https://raw.githubusercontent.com/${m[1]}/${m[2]}/${m[3].replace(/[?#].*$/, '')}`;
+    m = s.match(/^https?:\/\/gist\.github\.com\/([^/]+)\/([0-9a-f]+)\/?$/i);
+    if (m) return `https://gist.githubusercontent.com/${m[1]}/${m[2]}/raw`;
+    if (/^https?:\/\/(www\.)?dropbox\.com\//i.test(s)) return s.replace(/([?&])dl=0/, '$1dl=1').replace(/^https?:\/\/(www\.)?dropbox\.com/i, 'https://dl.dropboxusercontent.com');
+    return s;
+  }
+  async function openUrl(u, keepUndo) {
+    const src = rawUrl(u);
+    let abs;
+    try { abs = new URL(src, location.href).href; } catch (e) { toast('Indirizzo non valido: ' + u, 'error'); return false; }
+    toast('Apro ' + abs + '…');
+    let text;
+    try {
+      const r = await fetch(abs, { cache: 'no-cache' });
+      if (!r.ok) throw new Error(`il server risponde ${r.status} ${r.statusText || ''}`.trim());
+      text = await r.text();
+    } catch (e) {
+      const why = e instanceof TypeError ? 'il sito non risponde oppure non permette di leggere il file da un\'altra pagina (CORS). Prova con un link a GitHub, a un Gist o a GitHub Pages' : e.message;
+      toast(`Impossibile aprire ${abs}: ${why}`, 'error');
+      return false;
+    }
+    const name = decodeURIComponent(abs.split(/[?#]/)[0].split('/').pop() || 'programma.fprg');
+    if (!loadText(text, name, keepUndo)) return false;
+    st.sourceUrl = abs;
+    return true;
+  }
+  function openUrlDialog() {
+    const f = field({ key: 'furl', label: 'Indirizzo del file .fprg', type: 'plain', placeholder: 'https://github.com/…/programma.fprg', hint: 'Funziona con i file su GitHub, nei Gist e su GitHub Pages; i link «blob» di GitHub vanno bene così come sono.' }, st.sourceUrl || '');
+    openModal({ title: 'Apri da indirizzo web', body: h('div', { class: 'fields' }, f), okText: 'Apri', onOk: () => {
+      const u = f._get().trim(); if (!u) return 'Scrivi l\'indirizzo del file';
+      guardDirty(() => openUrl(u, true));
+      return true;
+    } });
+  }
+  /* link a FlowLab che apre direttamente questo programma */
+  async function copyShareLink() {
+    if (!st.sourceUrl) { infoBox('Link al programma', 'Il link si può creare per i programmi aperti da un indirizzo web (File › Apri da indirizzo web…). Pubblica il file .fprg online, per esempio su GitHub, e aprilo da lì.'); return; }
+    const base = location.protocol.startsWith('http') ? location.href.split(/[?#]/)[0] : 'https://nicvac.github.io/flowlab/dist/FlowLab.html';
+    const link = `${base}?url=${encodeURIComponent(st.sourceUrl)}`;
+    try { await navigator.clipboard.writeText(link); toast('Link copiato: chi lo apre trova questo programma in FlowLab', 'ok'); }
+    catch (e) { const ta = h('textarea', { class: 'mono', rows: 3, readonly: true, 'aria-label': 'Link al programma' }); ta.value = link; openModal({ title: 'Link al programma', wide: true, body: ta, okText: 'Chiudi', noCancel: true }); setTimeout(() => ta.select(), 50); }
   }
   function fitIfLarge() {
     const svg = $('#chart svg'); const wrap = $('#canvasWrap');
@@ -7348,8 +7401,10 @@ const ArrayView = (() => {
     menu(btn, [
       { label: 'Nuovo programma', key: 'Ctrl+Alt+N', do: newProgram },
       { label: 'Apri file .fprg…', key: 'Ctrl+O', do: openFile },
+      { label: 'Apri da indirizzo web…', do: openUrlDialog },
       { label: 'Salva come .fprg', key: 'Ctrl+S', do: saveFile },
       { label: 'Copia XML negli appunti', do: copyXml },
+      { label: 'Copia il link a questo programma', do: copyShareLink },
       '-',
       { label: 'Esporta diagramma SVG', do: () => download(safeName(st.prog.attrs.name) + '_' + (isUml() ? 'classi' : safeName(fname(func()))) + '.svg', exportSvg(), 'image/svg+xml') },
       { label: 'Esporta diagramma PNG', do: exportPng },
@@ -7531,8 +7586,16 @@ const ArrayView = (() => {
     render(); initLayout(); renderVars(); renderFiles(); setStatus('idle', 'Pronto');
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { render(); fitIfLarge(); });
     setTimeout(fitIfLarge, 0);
+    // ?url=…: apre il programma indicato; poi il parametro si toglie dalla barra degli indirizzi,
+    // così ricaricando la pagina si ritrova il lavoro (salvato in automatico) e non il file originale
+    let q = null;
+    try { const sp = new URLSearchParams(location.search); q = sp.get('url') || sp.get('fprg'); } catch (e) { q = null; }
+    if (q) openUrl(q, ok).then((done) => {
+      if (!done) return;
+      try { const u = new URL(location.href); u.searchParams.delete('url'); u.searchParams.delete('fprg'); history.replaceState(null, '', u.href); } catch (e) { /* ignora */ }
+    });
     // API minima per i test automatici
-    window.FlowLab = { get state() { return st; }, run, loadText, serialize: () => M.serializeFprg(st.prog), render, setTab, submitInput, setView, showUml, showFunc, loadExample: (id) => { st.dirty = false; loadExample(id); } };
+    window.FlowLab = { get state() { return st; }, run, loadText, serialize: () => M.serializeFprg(st.prog), render, setTab, submitInput, setView, showUml, showFunc, openUrl, rawUrl, loadExample: (id) => { st.dirty = false; loadExample(id); } };
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

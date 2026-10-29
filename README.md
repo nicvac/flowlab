@@ -10,6 +10,18 @@ Il software è stato creato con **Claude Opus 5.5** di Anthropic.
 - **online**, senza installare nulla: apri <https://nicvac.github.io/flowlab/dist/FlowLab.html>;
 - **offline**: scarica [`dist/FlowLab.html`](dist/FlowLab.html) e aprilo con Chrome.
 
+### Aprire un programma da un indirizzo web
+
+Aggiungendo `?url=` seguito dall'indirizzo di un file `.fprg`, FlowLab apre direttamente quel programma:
+
+```
+https://nicvac.github.io/flowlab/dist/FlowLab.html?url=https://github.com/utente/repo/blob/main/esercizio.fprg
+```
+
+- Vanno bene i file su GitHub (anche il link «blob» della pagina del file: FlowLab lo trasforma nel file grezzo), nei Gist e su GitHub Pages. Altri siti funzionano se permettono la lettura da altre pagine (CORS).
+- Dopo l'apertura il parametro sparisce dalla barra degli indirizzi: ricaricando la pagina si ritrova il proprio lavoro. Il programma che c'era prima si recupera con Ctrl+Z.
+- Dal menu File: *Apri da indirizzo web…* e *Copia il link a questo programma*, per condividerlo con la classe.
+
 ## Funzionalità
 
 - **Editor:** clic su una freccia per aggiungere un blocco, doppio clic per modificarlo, trascinamento per spostarlo; copia/incolla, annulla/ripeti, più funzioni con parametri e array.
