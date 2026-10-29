@@ -1839,12 +1839,155 @@
     });
   }
 
-  function exportSvg() {
-    const svg = $('#chart svg').cloneNode(true);
+  function exportSvg(source, css) {
+    const svg = (source || $('#chart svg')).cloneNode(true);
     svg.setAttribute('width', svg.dataset.w); svg.setAttribute('height', svg.dataset.h);
-    svg.insertBefore(h('style', null, exportCss()), svg.firstChild);
+    svg.insertBefore(h('style', null, css || exportCss()), svg.firstChild);
     $$('.hits, .ctoggle, .uadd, .uhit', svg).forEach((x) => x.remove());
     return new XMLSerializer().serializeToString(svg);
+  }
+
+  /* ------------------------- Esportazione in PDF -------------------------
+     Copertina con i dati e l'indice, diagramma delle classi, diagramma di flusso
+     di ogni funzione o metodo (con tutti i testi espansi), codice sorgente. */
+  const svgFromString = (str) => { const d = h('div', { html: str }); return d.firstElementChild; };
+  const loadImg = (svgStr) => new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = () => rej(new Error('immagine non disponibile')); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr); });
+  async function exportPdf() {
+    if (isRunning()) { toast('Ferma il programma prima di esportare', 'warn'); return; }
+    toast('Preparo il PDF…');
+    // colori del tema chiaro, qualunque sia il tema in uso
+    const root = document.documentElement, oldTheme = root.dataset.theme;
+    root.dataset.theme = 'light';
+    const css = exportCss();
+    if (oldTheme) root.dataset.theme = oldTheme; else delete root.dataset.theme;
+    const prog = st.prog, oo = isOO() && M.hasClasses(prog);
+    const doc = new PdfLib.Doc();
+    const M0 = 42, CW = doc.W - M0 * 2, TOP = 58, BOTTOM = doc.H - 46;
+    const INK = [23, 34, 45], MUTED = [90, 104, 117], ACCENT = [12, 108, 128];
+    const title = prog.attrs.name || 'Programma senza nome';
+    const sigOf = (f) => `${f.name}(${f.params.map((p) => `${p.name}${p.array ? '[]' : ''}: ${E.typeName(p.type)}`).join(', ')})${M.rets(f).length ? ': ' + M.rets(f).map((r) => E.typeName(r.type)).join(', ') : ''}`;
+    const heading = (f) => {
+      if (f === prog.functions[0]) return 'Inizio (programma principale)';
+      const c = oo ? M.classOf(prog, f) : null;
+      if (!c) return 'Funzione ' + sigOf(f);
+      if (f.ctor) return `Costruttore di ${c.name}: new ${sigOf(f)}`;
+      return `${f.abstract ? 'Metodo astratto' : f.static ? 'Metodo statico' : 'Metodo'} ${c.name}.${sigOf(f)}`;
+    };
+    // ordine: Main, poi per classe (costruttori e metodi) o le funzioni nell'ordine del programma
+    const funcs = oo ? [prog.functions[0], ...prog.classes.flatMap((c) => { const ms = M.membersOf(prog, c).filter((f) => f !== prog.functions[0]); return [...ms.filter((f) => f.ctor), ...ms.filter((f) => !f.ctor)]; })] : prog.functions.slice();
+
+    /* ---- copertina ---- */
+    let p = doc.page();
+    let y = 92;
+    doc.text(p, M0, y, 'FlowLab', { font: 'F2', size: 12, color: ACCENT }); y += 34;
+    for (const l of PdfLib.wrap(title, 'F2', 24, CW)) { doc.text(p, M0, y, l, { font: 'F2', size: 24, color: INK }); y += 30; }
+    const meta = [prog.attrs.authors ? 'Autori: ' + prog.attrs.authors : null, `Esportato il ${new Date().toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}`, oo ? `Programma a oggetti: ${prog.classes.length} ${prog.classes.length === 1 ? 'classe' : 'classi'}` : `Programma a funzioni: ${prog.functions.length} ${prog.functions.length === 1 ? 'diagramma' : 'diagrammi'}`].filter(Boolean);
+    for (const m of meta) { doc.text(p, M0, y, m, { size: 11, color: MUTED }); y += 16; }
+    y += 10; doc.line(p, M0, y, M0 + CW, y); y += 24;
+    if (String(prog.attrs.about || '').trim()) {
+      for (const l of PdfLib.wrap(prog.attrs.about, 'F1', 11.5, CW)) { doc.text(p, M0, y, l, { size: 11.5 }); y += 16; }
+      y += 14;
+    }
+    doc.text(p, M0, y, 'Contenuto', { font: 'F2', size: 13 }); y += 20;
+    // indice: i numeri di pagina si scrivono alla fine, quando l'impaginazione è nota
+    const toc = [];
+    if (oo) toc.push({ key: 'uml', label: 'Diagramma delle classi' });
+    for (const f of funcs) toc.push({ key: f.id, label: heading(f) });
+    toc.push({ key: 'code', label: `Codice sorgente (${CodeGen.LANGS[st.lang].label})` });
+    const tocAt = [], sectionPage = {};
+    for (const t of toc) {
+      PdfLib.wrap(t.label, 'F1', 10.5, CW - 50).forEach((l, k, arr) => {
+        if (y > BOTTOM - 10) { p = doc.page(); y = TOP + 10; }
+        doc.text(p, M0 + 10, y, l, { size: 10.5 });
+        if (k === arr.length - 1) tocAt.push({ p, y, key: t.key });
+        y += 14;
+      });
+    }
+
+    /* ---- diagrammi: stanno nella pagina se ci entrano, altrimenti si dividono ---- */
+    p = doc.page(); y = TOP;
+    const K = 2.2; // pixel per punto: risoluzione delle immagini
+    async function placeDiagram(key, label, svgStr, W, Hh, note) {
+      const scale = Math.min(0.75, CW / W); // 1 px = 0,75 pt al massimo (dimensione naturale)
+      const w = W * scale, hpt = svgStr ? Hh * scale : 0;
+      // un diagramma che sta in una pagina non si divide: se non c'è posto va alla pagina dopo
+      const need = 30 + hpt + (note ? 18 : 0);
+      const fitsPage = need <= BOTTOM - TOP;
+      if (y > TOP && y + (fitsPage ? need : 30 + 160) > BOTTOM) { p = doc.page(); y = TOP; }
+      sectionPage[key] = doc.pages.length;
+      doc.text(p, M0, y + 12, label, { font: 'F2', size: 12.5, color: INK });
+      y += 20; doc.line(p, M0, y, M0 + CW, y, { color: [207, 216, 225] }); y += 10;
+      if (note) { doc.text(p, M0, y + 10, note, { font: 'F4', size: 10, color: MUTED }); y += 18; }
+      if (!svgStr) { y += 14; return; }
+      const img = await loadImg(svgStr);
+      const x0 = M0 + (CW - w) / 2;
+      let done = 0;
+      while (done < hpt - 0.5) {
+        let room = BOTTOM - y;
+        if (room < 60) { p = doc.page(); y = TOP; room = BOTTOM - y; }
+        const part = Math.min(room, hpt - done);
+        const cw = Math.max(1, Math.round(w * K)), ch = Math.max(1, Math.round(part * K));
+        const cv = h('canvas', { width: cw, height: ch });
+        const cx = cv.getContext('2d');
+        cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, cw, ch);
+        cx.drawImage(img, 0, -done * K, w * K, hpt * K);
+        doc.image(p, doc.addJpeg(cv.toDataURL('image/jpeg', 0.9), cw, ch), x0, y, w, part);
+        done += part; y += part;
+        if (done < hpt - 0.5) { p = doc.page(); y = TOP; }
+      }
+      y += 26;
+    }
+    try {
+      if (oo) {
+        const u = UmlLib.render(prog, null);
+        await placeDiagram('uml', 'Diagramma delle classi', exportSvg(svgFromString(u.svg), css), u.W, u.H);
+      }
+      const all = new Set();
+      for (const f of prog.functions) M.walk(f.body, (x) => all.add(x.id));
+      const r = new RenderLib.Renderer();
+      for (const f of funcs) {
+        if (f.abstract) {
+          const c = M.classOf(prog, f);
+          await placeDiagram(f.id, heading(f), null, 1, 1, `Senza corpo: lo definiscono le sottoclassi di ${c.name}.`);
+          continue;
+        }
+        const c = oo ? M.classOf(prog, f) : null;
+        const out = r.func(f, all, oo ? { owner: c ? c.name : '', isMain: f === prog.functions[0] } : undefined);
+        await placeDiagram(f.id, heading(f), exportSvg(svgFromString(out.svg), css), out.W, out.H);
+      }
+    } catch (e) { toast('Impossibile creare le immagini dei diagrammi: ' + e.message, 'error'); return; }
+
+    /* ---- codice ---- */
+    const code = CodeGen.generate(prog, st.lang).replace(/\n$/, '');
+    p = doc.page(); y = TOP;
+    sectionPage.code = doc.pages.length;
+    doc.text(p, M0, y + 12, `Codice sorgente · ${CodeGen.LANGS[st.lang].label}`, { font: 'F2', size: 12.5 }); y += 20;
+    doc.line(p, M0, y, M0 + CW, y, { color: [207, 216, 225] }); y += 16;
+    const FS = 8.6, LH = 10.6, NW = 26, cols = Math.floor((CW - NW) / (0.6 * FS));
+    code.split('\n').forEach((line, i) => {
+      const parts = []; let rest = line.replace(/\t/g, '    ');
+      do { parts.push(rest.slice(0, cols)); rest = rest.slice(cols); } while (rest.length);
+      parts.forEach((part, k) => {
+        if (y > BOTTOM - 4) { p = doc.page(); y = TOP + 6; }
+        if (!k) doc.text(p, M0, y, String(i + 1).padStart(4, ' '), { font: 'F3', size: 7.5, color: [134, 147, 160] });
+        doc.text(p, M0 + NW, y, (k ? '  ' : '') + part, { font: 'F3', size: FS });
+        y += LH;
+      });
+    });
+
+    /* ---- intestazione e numeri di pagina ---- */
+    for (const t of tocAt) { const n = String(sectionPage[t.key] || ''); doc.text(t.p, M0 + CW - PdfLib.textWidth(n, 'F1', 10.5), t.y, n, { size: 10.5, color: MUTED }); }
+    const N = doc.pages.length;
+    doc.pages.forEach((pg, i) => {
+      if (i === 0) { doc.text(pg, M0, doc.H - 26, `${i + 1} / ${N}`, { size: 8.5, color: MUTED }); return; }
+      doc.text(pg, M0, 30, title, { size: 8.5, color: MUTED });
+      doc.line(pg, M0, 36, M0 + CW, 36, { color: [225, 231, 237], width: 0.6 });
+      const t = `${i + 1} / ${N}`;
+      doc.text(pg, M0 + CW - PdfLib.textWidth(t, 'F1', 8.5), doc.H - 26, t, { size: 8.5, color: MUTED });
+    });
+    const blob = doc.build({ title, author: prog.attrs.authors || '' });
+    window.__lastPdf = blob; // per i test automatici
+    await download(safeName(prog.attrs.name) + '.pdf', blob, 'application/pdf');
   }
   function exportCss() {
     const cs = getComputedStyle(document.documentElement);
@@ -1887,6 +2030,7 @@
       '-',
       { label: 'Esporta diagramma SVG', do: () => download(safeName(st.prog.attrs.name) + '_' + (isUml() ? 'classi' : safeName(fname(func()))) + '.svg', exportSvg(), 'image/svg+xml') },
       { label: 'Esporta diagramma PNG', do: exportPng },
+      { label: 'Esporta tutto il progetto in PDF', do: exportPdf },
       { label: 'Scarica codice sorgente', do: () => download(safeName(st.prog.attrs.name) + '.' + CodeGen.LANGS[st.lang].ext, CodeGen.generate(st.prog, st.lang), 'text/plain') },
       '-',
       { label: 'Proprietà del programma…', do: editProgram },

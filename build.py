@@ -1,6 +1,6 @@
 import re, pathlib
 src = pathlib.Path('src')
-js_files = ['expr.js','model.js','interp.js','codegen.js','render.js','uml.js','examples.js','arrayview.js','app.js']
+js_files = ['expr.js','model.js','interp.js','codegen.js','render.js','uml.js','pdf.js','examples.js','arrayview.js','app.js']
 js = '\n'.join((src/f).read_text() for f in js_files)
 assert '</script' not in js
 css = (src/'style.css').read_text()

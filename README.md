@@ -28,7 +28,7 @@ Il software è stato creato con **Claude Opus 5.5** di Anthropic.
   - Nella scheda Variabili gli oggetti si aprono con la freccina per vedere i loro attributi; compaiono anche `this` e gli attributi statici.
   - Nel codice generato diventano classi vere: `extends`/`super` in Java, `: base(...)` e `virtual`/`override` in C#, puntatori, `virtual` e liste di inizializzazione in C++, `self` e `super().__init__` in Python, `class`/`extends` in JavaScript. In Python e JavaScript, che non hanno l'overloading, le versioni con parametri diversi sono raccolte in un unico metodo che sceglie in base agli argomenti.
 - **Codice generato:** pseudocodice italiano, Python, C++, Java, C#, JavaScript.
-- **Esportazione:** `.fprg`, SVG, PNG, codice sorgente.
+- **Esportazione:** `.fprg`, SVG, PNG, codice sorgente e **tutto il progetto in PDF** (copertina con indice, diagramma delle classi, diagramma di flusso di ogni funzione o metodo con i testi espansi, codice sorgente nel linguaggio scelto nella scheda Codice).
 - **Esempi pronti:** media dei voti, pari/dispari, tabellina, MCD di Euclide, indovina il numero, fattoriale ricorsivo, ordinamento a bolle, minimo e massimo, matrici e cubi, conto in banca, forme geometriche, animali (classi astratte), lista collegata, lettura/scrittura di file.
 
 ## Compatibilità con il formato .fprg
@@ -76,6 +76,7 @@ src/
   codegen.js   generatori di codice (pseudocodice, Python, C++, Java, C#, JS)
   render.js    impaginazione e disegno SVG del diagramma
   uml.js       diagramma delle classi
+  pdf.js       scrittura dei file PDF
   arrayview.js finestre per visualizzare gli array
   examples.js  programmi di esempio
   app.js       interfaccia
