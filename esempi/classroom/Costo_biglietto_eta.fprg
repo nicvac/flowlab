@@ -1,10 +1,12 @@
 <?xml version="1.0"?>
-<flowgorithm fileversion="3.0">
+<flowgorithm fileversion="4.2">
     <attributes>
         <attribute name="name" value="Costo del biglietto in base all'eta'"/>
         <attribute name="authors" value="Nicola Vacca"/>
         <attribute name="about" value="Calcola e visualizza il costo del biglietto (euro), data etaAnni (da leggere in input)."/>
-        <attribute name="saved" value="2026-10-30 10:00:00 AM"/>
+        <attribute name="saved" value="2026-10-30 11:32:22 AM"/>
+        <attribute name="created" value="Zmxvd2xhYjticm93c2VyOzIwMjYtMTAtMzAgMTE6MzI6MjIgQU07MQ=="/>
+        <attribute name="edited" value="Zmxvd2xhYjticm93c2VyOzIwMjYtMTAtMzAgMTE6MzI6MjIgQU07MQ=="/>
     </attributes>
     <function name="Main" type="None" variable="">
         <parameters/>
@@ -22,10 +24,8 @@
             <comment text="OUTPUT"/>
             <declare name="costoEuro" type="Real" array="False" size=""/>
             <comment text="Vincolo: etaAnni intero maggiore o uguale a 0"/>
-            <do expression="etaAnni &lt; 0">
-                <output expression="&quot;Eta' del visitatore in anni (&gt;= 0): &quot;" newline="True"/>
-                <input variable="etaAnni"/>
-            </do>
+            <output expression="&quot;Eta' del visitatore in anni (&gt;= 0): &quot;" newline="True"/>
+            <input variable="etaAnni"/>
             <if expression="etaAnni &lt;= ETA_MAX_GRATIS">
                 <then>
                     <assign variable="costoEuro" expression="COSTO_RIDOTTO"/>
