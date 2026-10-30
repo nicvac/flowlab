@@ -1,0 +1,72 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Funzioni sui vettori: caricamento casuale e media"/>
+        <attribute name="authors" value="Nicola Vacca"/>
+        <attribute name="about" value="Carica i vettori X e Y con valori casuali da 1 a 10 e visualizza la media di entrambi, usando le funzioni caricaRandom e calcolaMedia."/>
+        <attribute name="saved" value="2026-10-30 08:00:00 PM"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Usando le funzioni, carica i vettori X e Y con valori casuali da 1 a 10, poi calcola e visualizza la media di entrambi."/>
+            <comment text="COSTANTI"/>
+            <declare name="N" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="N" expression="10"/>
+            <declare name="MIN_VAL" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="MIN_VAL" expression="1"/>
+            <declare name="MAX_VAL" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="MAX_VAL" expression="10"/>
+            <comment text="LAVORO"/>
+            <declare name="x" type="Integer" array="True" size="N"/>
+            <declare name="y" type="Integer" array="True" size="N"/>
+            <comment text="OUTPUT"/>
+            <declare name="mediaX" type="Real" array="False" size=""/>
+            <declare name="mediaY" type="Real" array="False" size=""/>
+            <comment text="Caricamento dei due vettori"/>
+            <call expression="caricaRandom(x, N, MIN_VAL, MAX_VAL)"/>
+            <call expression="caricaRandom(y, N, MIN_VAL, MAX_VAL)"/>
+            <comment text="Calcolo delle medie"/>
+            <assign variable="mediaX" expression="calcolaMedia(x, N)"/>
+            <assign variable="mediaY" expression="calcolaMedia(y, N)"/>
+            <output expression="&quot;Media del vettore X: &quot; &amp; mediaX" newline="True"/>
+            <output expression="&quot;Media del vettore Y: &quot; &amp; mediaY" newline="True"/>
+        </body>
+    </function>
+    <function name="caricaRandom" type="None" variable="">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+            <parameter name="a" type="Integer" array="False"/>
+            <parameter name="b" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Riempie i primi n elementi di v con valori casuali in [a, b]: Random(b - a + 1) va da 0 a b - a, quindi a + Random(b - a + 1) va da a a b"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; n">
+                <assign variable="v[i]" expression="a + Random(b - a + 1)"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="calcolaMedia" type="Real" variable="media">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Restituisce la media dei primi n elementi di v (somma reale, cosi' la divisione da' un risultato con la virgola)"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <declare name="somma" type="Real" array="False" size=""/>
+            <declare name="media" type="Real" array="False" size=""/>
+            <assign variable="somma" expression="0"/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; n">
+                <assign variable="somma" expression="somma + v[i]"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+            <assign variable="media" expression="somma / n"/>
+        </body>
+    </function>
+</flowgorithm>
