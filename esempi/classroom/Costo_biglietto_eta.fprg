@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="3.0">
+    <attributes>
+        <attribute name="name" value="Costo del biglietto in base all'eta'"/>
+        <attribute name="authors" value="Nicola Vacca"/>
+        <attribute name="about" value="Calcola e visualizza il costo del biglietto (euro), data etaAnni (da leggere in input)."/>
+        <attribute name="saved" value="2026-10-30 10:00:00 AM"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Un museo vende biglietti d'ingresso il cui prezzo dipende dall'eta' del visitatore: fino a 10 anni compresi l'ingresso e' gratuito, sopra i 10 anni il biglietto costa 14 euro."/>
+            <comment text="COSTANTI"/>
+            <declare name="ETA_MAX_GRATIS" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="ETA_MAX_GRATIS" expression="10"/>
+            <declare name="COSTO_RIDOTTO" type="Real" array="False" size="" flowlab-const="True"/>
+            <assign variable="COSTO_RIDOTTO" expression="0"/>
+            <declare name="PREZZO_EURO" type="Real" array="False" size="" flowlab-const="True"/>
+            <assign variable="PREZZO_EURO" expression="14"/>
+            <comment text="INPUT"/>
+            <declare name="etaAnni" type="Integer" array="False" size=""/>
+            <comment text="OUTPUT"/>
+            <declare name="costoEuro" type="Real" array="False" size=""/>
+            <comment text="Vincolo: etaAnni intero maggiore o uguale a 0"/>
+            <do expression="etaAnni &lt; 0">
+                <output expression="&quot;Eta' del visitatore in anni (&gt;= 0): &quot;" newline="True"/>
+                <input variable="etaAnni"/>
+            </do>
+            <if expression="etaAnni &lt;= ETA_MAX_GRATIS">
+                <then>
+                    <assign variable="costoEuro" expression="COSTO_RIDOTTO"/>
+                </then>
+                <else>
+                    <assign variable="costoEuro" expression="PREZZO_EURO"/>
+                </else>
+            </if>
+            <output expression="&quot;Costo del biglietto (euro): &quot; &amp; costoEuro" newline="True"/>
+        </body>
+    </function>
+</flowgorithm>
