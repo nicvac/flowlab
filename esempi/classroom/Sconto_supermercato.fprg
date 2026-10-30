@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Sconto alla cassa del supermercato"/>
+        <attribute name="authors" value="Nicola Vacca"/>
+        <attribute name="about" value="Calcola e visualizza lo sconto applicato (% e euro) e il totale da pagare (euro), data spesaEuro (da leggere in input)."/>
+        <attribute name="saved" value="2026-10-30 06:30:46 PM"/>
+        <attribute name="created" value="Zmxvd2xhYjticm93c2VyOzIwMjYtMTAtMzAgMDY6MzA6NDYgUE07MQ=="/>
+        <attribute name="edited" value="Zmxvd2xhYjticm93c2VyOzIwMjYtMTAtMzAgMDY6MzA6NDYgUE07MQ=="/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="A novembre il supermercato del quartiere fa uno sconto alla cassa: 5% per una spesa fino a 50 euro compresi, 10% oltre i 50 euro. Ogni cliente deve sapere subito quale sconto ha ottenuto, a quanti euro corrisponde e quanto deve pagare."/>
+            <comment text="COSTANTI"/>
+            <declare name="SOGLIA_EURO" type="Real" array="False" size="" flowlab-const="True"/>
+            <assign variable="SOGLIA_EURO" expression="50"/>
+            <declare name="SCONTO_BASSO_PERC" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="SCONTO_BASSO_PERC" expression="5"/>
+            <declare name="SCONTO_ALTO_PERC" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="SCONTO_ALTO_PERC" expression="10"/>
+            <comment text="INPUT"/>
+            <declare name="spesaEuro" type="Real" array="False" size=""/>
+            <comment text="OUTPUT"/>
+            <declare name="scontoPerc" type="Integer" array="False" size=""/>
+            <declare name="scontoEuro" type="Real" array="False" size=""/>
+            <declare name="totaleEuro" type="Real" array="False" size=""/>
+            <comment text="Vincolo: spesaEuro reale positiva"/>
+            <output expression="&quot;Importo della spesa in euro (&gt; 0): &quot;" newline="True"/>
+            <input variable="spesaEuro"/>
+            <if expression="spesaEuro &lt;= SOGLIA_EURO">
+                <then>
+                    <assign variable="scontoPerc" expression="SCONTO_BASSO_PERC"/>
+                </then>
+                <else>
+                    <assign variable="scontoPerc" expression="SCONTO_ALTO_PERC"/>
+                </else>
+            </if>
+            <assign variable="scontoEuro" expression="spesaEuro * scontoPerc / 100"/>
+            <assign variable="totaleEuro" expression="spesaEuro - scontoEuro"/>
+            <output expression="&quot;Sconto applicato (%): &quot; &amp; scontoPerc" newline="True"/>
+            <output expression="&quot;Sconto applicato (euro): &quot; &amp; scontoEuro" newline="True"/>
+            <output expression="&quot;Totale da pagare (euro): &quot; &amp; totaleEuro" newline="True"/>
+        </body>
+    </function>
+</flowgorithm>
