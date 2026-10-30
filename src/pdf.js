@@ -1,6 +1,6 @@
 /* ==========================================================================
    FlowLab — scrittura di file PDF (senza librerie esterne)
-   Pagine A4 con testo nei font standard (Helvetica, Courier: codifica
+   Pagine A4 (o larghe come un A4 e alte a piacere) con testo nei font standard (Helvetica, Courier: codifica
    WinAnsi, che comprende le lettere accentate italiane) e immagini JPEG.
    Le coordinate passate ai metodi partono dall'angolo in alto a sinistra.
    ========================================================================== */
@@ -8,6 +8,7 @@
 
 const PdfLib = (() => {
   const PW = 595.28, PH = 841.89; // A4 in punti
+  const MAXH = 14400; // altezza massima di una pagina PDF (200 pollici)
   const FONTS = { F1: 'Helvetica', F2: 'Helvetica-Bold', F3: 'Courier', F4: 'Helvetica-Oblique', F5: 'Courier-Bold' };
   // caratteri fuori da WinAnsi: sostituzioni leggibili
   const SUBST = { '←': '<-', '→': '->', '≠': '!=', '≤': '<=', '≥': '>=', 'π': 'pi', '▦': '', '⋯': '...', '✖': 'x', '■': '', '▶': '>', '⏸': '||', '↺': '', '⚠': '!', '\t': '    ' };
@@ -35,21 +36,23 @@ const PdfLib = (() => {
     constructor() { this.pages = []; this.images = []; }
     get W() { return PW; }
     get H() { return PH; }
-    page() { const p = { ops: [], imgs: new Set() }; this.pages.push(p); return p; }
+    /* nuova pagina A4; con h, larga come un A4 e alta h punti (modulo continuo) */
+    page(h) { const p = { ops: [], imgs: new Set(), h: Math.min(MAXH, Math.max(72, h || PH)) }; this.pages.push(p); return p; }
+    get maxH() { return MAXH; }
     text(p, x, y, str, o) {
       const f = (o && o.font) || 'F1', size = (o && o.size) || 11, col = (o && o.color) || [23, 34, 45];
-      p.ops.push(`BT ${rgb(col)} rg /${f} ${num(size)} Tf ${num(x)} ${num(PH - y)} Td ${pdfStr(str)} Tj ET`);
+      p.ops.push(`BT ${rgb(col)} rg /${f} ${num(size)} Tf ${num(x)} ${num(p.h - y)} Td ${pdfStr(str)} Tj ET`);
     }
     line(p, x1, y1, x2, y2, o) {
       const col = (o && o.color) || [200, 210, 220], w = (o && o.width) || 0.8;
-      p.ops.push(`${rgb(col)} RG ${num(w)} w ${num(x1)} ${num(PH - y1)} m ${num(x2)} ${num(PH - y2)} l S`);
+      p.ops.push(`${rgb(col)} RG ${num(w)} w ${num(x1)} ${num(p.h - y1)} m ${num(x2)} ${num(p.h - y2)} l S`);
     }
     rect(p, x, y, w, h, o) {
       const fill = o && o.fill, stroke = o && o.stroke;
       let s = '';
       if (fill) s += `${rgb(fill)} rg `;
       if (stroke) s += `${rgb(stroke)} RG ${num(o.width || 0.8)} w `;
-      p.ops.push(`${s}${num(x)} ${num(PH - y - h)} ${num(w)} ${num(h)} re ${fill && stroke ? 'B' : fill ? 'f' : 'S'}`);
+      p.ops.push(`${s}${num(x)} ${num(p.h - y - h)} ${num(w)} ${num(h)} re ${fill && stroke ? 'B' : fill ? 'f' : 'S'}`);
     }
     /* immagine JPEG (data URL) di pw × ph pixel */
     addJpeg(dataUrl, pw, ph) {
@@ -60,7 +63,7 @@ const PdfLib = (() => {
     }
     image(p, img, x, y, w, h) {
       p.imgs.add(img);
-      p.ops.push(`q ${num(w)} 0 0 ${num(h)} ${num(x)} ${num(PH - y - h)} cm /${img.name} Do Q`);
+      p.ops.push(`q ${num(w)} 0 0 ${num(h)} ${num(x)} ${num(p.h - y - h)} cm /${img.name} Do Q`);
     }
     /* file PDF come Blob */
     build(info) {
@@ -88,7 +91,7 @@ const PdfLib = (() => {
       this.pages.forEach((p, i) => {
         const [pn, cn] = pageN[i];
         const xo = [...p.imgs].map((im) => `/${im.name} ${imgN.get(im)} 0 R`).join(' ');
-        obj(pn, `<< /Type /Page /Parent ${pagesN} 0 R /MediaBox [0 0 ${PW} ${PH}] /Resources << /Font << ${fontRes} >>${xo ? ` /XObject << ${xo} >>` : ''} >> /Contents ${cn} 0 R >>`);
+        obj(pn, `<< /Type /Page /Parent ${pagesN} 0 R /MediaBox [0 0 ${PW} ${num(p.h)}] /Resources << /Font << ${fontRes} >>${xo ? ` /XObject << ${xo} >>` : ''} >> /Contents ${cn} 0 R >>`);
         const stream = p.ops.join('\n');
         obj(cn, `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
       });

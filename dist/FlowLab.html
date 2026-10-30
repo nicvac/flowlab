@@ -4411,7 +4411,7 @@ const UmlLib = (() => {
 
 /* ==========================================================================
    FlowLab — scrittura di file PDF (senza librerie esterne)
-   Pagine A4 con testo nei font standard (Helvetica, Courier: codifica
+   Pagine A4 (o larghe come un A4 e alte a piacere) con testo nei font standard (Helvetica, Courier: codifica
    WinAnsi, che comprende le lettere accentate italiane) e immagini JPEG.
    Le coordinate passate ai metodi partono dall'angolo in alto a sinistra.
    ========================================================================== */
@@ -4419,6 +4419,7 @@ const UmlLib = (() => {
 
 const PdfLib = (() => {
   const PW = 595.28, PH = 841.89; // A4 in punti
+  const MAXH = 14400; // altezza massima di una pagina PDF (200 pollici)
   const FONTS = { F1: 'Helvetica', F2: 'Helvetica-Bold', F3: 'Courier', F4: 'Helvetica-Oblique', F5: 'Courier-Bold' };
   // caratteri fuori da WinAnsi: sostituzioni leggibili
   const SUBST = { '←': '<-', '→': '->', '≠': '!=', '≤': '<=', '≥': '>=', 'π': 'pi', '▦': '', '⋯': '...', '✖': 'x', '■': '', '▶': '>', '⏸': '||', '↺': '', '⚠': '!', '\t': '    ' };
@@ -4446,21 +4447,23 @@ const PdfLib = (() => {
     constructor() { this.pages = []; this.images = []; }
     get W() { return PW; }
     get H() { return PH; }
-    page() { const p = { ops: [], imgs: new Set() }; this.pages.push(p); return p; }
+    /* nuova pagina A4; con h, larga come un A4 e alta h punti (modulo continuo) */
+    page(h) { const p = { ops: [], imgs: new Set(), h: Math.min(MAXH, Math.max(72, h || PH)) }; this.pages.push(p); return p; }
+    get maxH() { return MAXH; }
     text(p, x, y, str, o) {
       const f = (o && o.font) || 'F1', size = (o && o.size) || 11, col = (o && o.color) || [23, 34, 45];
-      p.ops.push(`BT ${rgb(col)} rg /${f} ${num(size)} Tf ${num(x)} ${num(PH - y)} Td ${pdfStr(str)} Tj ET`);
+      p.ops.push(`BT ${rgb(col)} rg /${f} ${num(size)} Tf ${num(x)} ${num(p.h - y)} Td ${pdfStr(str)} Tj ET`);
     }
     line(p, x1, y1, x2, y2, o) {
       const col = (o && o.color) || [200, 210, 220], w = (o && o.width) || 0.8;
-      p.ops.push(`${rgb(col)} RG ${num(w)} w ${num(x1)} ${num(PH - y1)} m ${num(x2)} ${num(PH - y2)} l S`);
+      p.ops.push(`${rgb(col)} RG ${num(w)} w ${num(x1)} ${num(p.h - y1)} m ${num(x2)} ${num(p.h - y2)} l S`);
     }
     rect(p, x, y, w, h, o) {
       const fill = o && o.fill, stroke = o && o.stroke;
       let s = '';
       if (fill) s += `${rgb(fill)} rg `;
       if (stroke) s += `${rgb(stroke)} RG ${num(o.width || 0.8)} w `;
-      p.ops.push(`${s}${num(x)} ${num(PH - y - h)} ${num(w)} ${num(h)} re ${fill && stroke ? 'B' : fill ? 'f' : 'S'}`);
+      p.ops.push(`${s}${num(x)} ${num(p.h - y - h)} ${num(w)} ${num(h)} re ${fill && stroke ? 'B' : fill ? 'f' : 'S'}`);
     }
     /* immagine JPEG (data URL) di pw × ph pixel */
     addJpeg(dataUrl, pw, ph) {
@@ -4471,7 +4474,7 @@ const PdfLib = (() => {
     }
     image(p, img, x, y, w, h) {
       p.imgs.add(img);
-      p.ops.push(`q ${num(w)} 0 0 ${num(h)} ${num(x)} ${num(PH - y - h)} cm /${img.name} Do Q`);
+      p.ops.push(`q ${num(w)} 0 0 ${num(h)} ${num(x)} ${num(p.h - y - h)} cm /${img.name} Do Q`);
     }
     /* file PDF come Blob */
     build(info) {
@@ -4499,7 +4502,7 @@ const PdfLib = (() => {
       this.pages.forEach((p, i) => {
         const [pn, cn] = pageN[i];
         const xo = [...p.imgs].map((im) => `/${im.name} ${imgN.get(im)} 0 R`).join(' ');
-        obj(pn, `<< /Type /Page /Parent ${pagesN} 0 R /MediaBox [0 0 ${PW} ${PH}] /Resources << /Font << ${fontRes} >>${xo ? ` /XObject << ${xo} >>` : ''} >> /Contents ${cn} 0 R >>`);
+        obj(pn, `<< /Type /Page /Parent ${pagesN} 0 R /MediaBox [0 0 ${PW} ${num(p.h)}] /Resources << /Font << ${fontRes} >>${xo ? ` /XObject << ${xo} >>` : ''} >> /Contents ${cn} 0 R >>`);
         const stream = p.ops.join('\n');
         obj(cn, `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
       });
@@ -7335,28 +7338,27 @@ const ArrayView = (() => {
       });
     }
 
-    /* ---- diagrammi: stanno nella pagina se ci entrano, altrimenti si dividono ---- */
-    p = doc.page(); y = TOP;
+    /* ---- diagrammi: ognuno su una pagina larga come un A4 e alta quanto serve (modulo continuo) ---- */
     const K = 2.2; // pixel per punto: risoluzione delle immagini
+    const STRIP = 8000; // pixel: i diagrammi molto alti si disegnano a strisce (limiti dei canvas)
     async function placeDiagram(key, label, svgStr, W, Hh, note) {
-      const scale = Math.min(0.75, CW / W); // 1 px = 0,75 pt al massimo (dimensione naturale)
+      const head = 30 + (note ? 18 : 0), foot = doc.H - BOTTOM + 14;
+      let scale = Math.min(0.75, CW / W); // 1 px = 0,75 pt al massimo (dimensione naturale)
+      // oltre l'altezza massima di una pagina PDF il diagramma si rimpicciolisce
+      const maxImg = doc.maxH - TOP - head - foot;
+      if (svgStr && Hh * scale > maxImg) scale = maxImg / Hh;
       const w = W * scale, hpt = svgStr ? Hh * scale : 0;
-      // un diagramma che sta in una pagina non si divide: se non c'è posto va alla pagina dopo
-      const need = 30 + hpt + (note ? 18 : 0);
-      const fitsPage = need <= BOTTOM - TOP;
-      if (y > TOP && y + (fitsPage ? need : 30 + 160) > BOTTOM) { p = doc.page(); y = TOP; }
+      p = doc.page(TOP + head + hpt + foot); y = TOP;
       sectionPage[key] = doc.pages.length;
       doc.text(p, M0, y + 12, label, { font: 'F2', size: 12.5, color: INK });
       y += 20; doc.line(p, M0, y, M0 + CW, y, { color: [207, 216, 225] }); y += 10;
       if (note) { doc.text(p, M0, y + 10, note, { font: 'F4', size: 10, color: MUTED }); y += 18; }
-      if (!svgStr) { y += 14; return; }
+      if (!svgStr) return;
       const img = await loadImg(svgStr);
       const x0 = M0 + (CW - w) / 2;
       let done = 0;
-      while (done < hpt - 0.5) {
-        let room = BOTTOM - y;
-        if (room < 60) { p = doc.page(); y = TOP; room = BOTTOM - y; }
-        const part = Math.min(room, hpt - done);
+      while (done < hpt - 0.01) {
+        const part = Math.min(STRIP / K, hpt - done);
         const cw = Math.max(1, Math.round(w * K)), ch = Math.max(1, Math.round(part * K));
         const cv = h('canvas', { width: cw, height: ch });
         const cx = cv.getContext('2d');
@@ -7364,9 +7366,7 @@ const ArrayView = (() => {
         cx.drawImage(img, 0, -done * K, w * K, hpt * K);
         doc.image(p, doc.addJpeg(cv.toDataURL('image/jpeg', 0.9), cw, ch), x0, y, w, part);
         done += part; y += part;
-        if (done < hpt - 0.5) { p = doc.page(); y = TOP; }
       }
-      y += 26;
     }
     try {
       if (oo) {
@@ -7410,11 +7410,11 @@ const ArrayView = (() => {
     for (const t of tocAt) { const n = String(sectionPage[t.key] || ''); doc.text(t.p, M0 + CW - PdfLib.textWidth(n, 'F1', 10.5), t.y, n, { size: 10.5, color: MUTED }); }
     const N = doc.pages.length;
     doc.pages.forEach((pg, i) => {
-      if (i === 0) { doc.text(pg, M0, doc.H - 26, `${i + 1} / ${N}`, { size: 8.5, color: MUTED }); return; }
+      if (i === 0) { doc.text(pg, M0, pg.h - 26, `${i + 1} / ${N}`, { size: 8.5, color: MUTED }); return; }
       doc.text(pg, M0, 30, title, { size: 8.5, color: MUTED });
       doc.line(pg, M0, 36, M0 + CW, 36, { color: [225, 231, 237], width: 0.6 });
       const t = `${i + 1} / ${N}`;
-      doc.text(pg, M0 + CW - PdfLib.textWidth(t, 'F1', 8.5), doc.H - 26, t, { size: 8.5, color: MUTED });
+      doc.text(pg, M0 + CW - PdfLib.textWidth(t, 'F1', 8.5), pg.h - 26, t, { size: 8.5, color: MUTED });
     });
     const blob = doc.build({ title, author: prog.attrs.authors || '' });
     window.__lastPdf = blob; // per i test automatici

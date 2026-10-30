@@ -1990,28 +1990,27 @@
       });
     }
 
-    /* ---- diagrammi: stanno nella pagina se ci entrano, altrimenti si dividono ---- */
-    p = doc.page(); y = TOP;
+    /* ---- diagrammi: ognuno su una pagina larga come un A4 e alta quanto serve (modulo continuo) ---- */
     const K = 2.2; // pixel per punto: risoluzione delle immagini
+    const STRIP = 8000; // pixel: i diagrammi molto alti si disegnano a strisce (limiti dei canvas)
     async function placeDiagram(key, label, svgStr, W, Hh, note) {
-      const scale = Math.min(0.75, CW / W); // 1 px = 0,75 pt al massimo (dimensione naturale)
+      const head = 30 + (note ? 18 : 0), foot = doc.H - BOTTOM + 14;
+      let scale = Math.min(0.75, CW / W); // 1 px = 0,75 pt al massimo (dimensione naturale)
+      // oltre l'altezza massima di una pagina PDF il diagramma si rimpicciolisce
+      const maxImg = doc.maxH - TOP - head - foot;
+      if (svgStr && Hh * scale > maxImg) scale = maxImg / Hh;
       const w = W * scale, hpt = svgStr ? Hh * scale : 0;
-      // un diagramma che sta in una pagina non si divide: se non c'è posto va alla pagina dopo
-      const need = 30 + hpt + (note ? 18 : 0);
-      const fitsPage = need <= BOTTOM - TOP;
-      if (y > TOP && y + (fitsPage ? need : 30 + 160) > BOTTOM) { p = doc.page(); y = TOP; }
+      p = doc.page(TOP + head + hpt + foot); y = TOP;
       sectionPage[key] = doc.pages.length;
       doc.text(p, M0, y + 12, label, { font: 'F2', size: 12.5, color: INK });
       y += 20; doc.line(p, M0, y, M0 + CW, y, { color: [207, 216, 225] }); y += 10;
       if (note) { doc.text(p, M0, y + 10, note, { font: 'F4', size: 10, color: MUTED }); y += 18; }
-      if (!svgStr) { y += 14; return; }
+      if (!svgStr) return;
       const img = await loadImg(svgStr);
       const x0 = M0 + (CW - w) / 2;
       let done = 0;
-      while (done < hpt - 0.5) {
-        let room = BOTTOM - y;
-        if (room < 60) { p = doc.page(); y = TOP; room = BOTTOM - y; }
-        const part = Math.min(room, hpt - done);
+      while (done < hpt - 0.01) {
+        const part = Math.min(STRIP / K, hpt - done);
         const cw = Math.max(1, Math.round(w * K)), ch = Math.max(1, Math.round(part * K));
         const cv = h('canvas', { width: cw, height: ch });
         const cx = cv.getContext('2d');
@@ -2019,9 +2018,7 @@
         cx.drawImage(img, 0, -done * K, w * K, hpt * K);
         doc.image(p, doc.addJpeg(cv.toDataURL('image/jpeg', 0.9), cw, ch), x0, y, w, part);
         done += part; y += part;
-        if (done < hpt - 0.5) { p = doc.page(); y = TOP; }
       }
-      y += 26;
     }
     try {
       if (oo) {
@@ -2065,11 +2062,11 @@
     for (const t of tocAt) { const n = String(sectionPage[t.key] || ''); doc.text(t.p, M0 + CW - PdfLib.textWidth(n, 'F1', 10.5), t.y, n, { size: 10.5, color: MUTED }); }
     const N = doc.pages.length;
     doc.pages.forEach((pg, i) => {
-      if (i === 0) { doc.text(pg, M0, doc.H - 26, `${i + 1} / ${N}`, { size: 8.5, color: MUTED }); return; }
+      if (i === 0) { doc.text(pg, M0, pg.h - 26, `${i + 1} / ${N}`, { size: 8.5, color: MUTED }); return; }
       doc.text(pg, M0, 30, title, { size: 8.5, color: MUTED });
       doc.line(pg, M0, 36, M0 + CW, 36, { color: [225, 231, 237], width: 0.6 });
       const t = `${i + 1} / ${N}`;
-      doc.text(pg, M0 + CW - PdfLib.textWidth(t, 'F1', 8.5), doc.H - 26, t, { size: 8.5, color: MUTED });
+      doc.text(pg, M0 + CW - PdfLib.textWidth(t, 'F1', 8.5), pg.h - 26, t, { size: 8.5, color: MUTED });
     });
     const blob = doc.build({ title, author: prog.attrs.authors || '' });
     window.__lastPdf = blob; // per i test automatici
