@@ -1990,24 +1990,29 @@
       });
     }
 
-    /* ---- diagrammi: ognuno su una pagina larga come un A4 e alta quanto serve (modulo continuo) ---- */
+    /* ---- diagrammi: ognuno su una pagina alta quanto serve (modulo continuo) ----
+       scala fissa: il testo dei blocchi (12,5 px) diventa di 9 pt; i diagrammi più larghi
+       di un A4 allargano la pagina invece di rimpicciolirsi */
     const K = 2.2; // pixel per punto: risoluzione delle immagini
     const STRIP = 8000; // pixel: i diagrammi molto alti si disegnano a strisce (limiti dei canvas)
+    const SCALE = 9 / 12.5;
     async function placeDiagram(key, label, svgStr, W, Hh, note) {
       const head = 30 + (note ? 18 : 0), foot = doc.H - BOTTOM + 14;
-      let scale = Math.min(0.75, CW / W); // 1 px = 0,75 pt al massimo (dimensione naturale)
-      // oltre l'altezza massima di una pagina PDF il diagramma si rimpicciolisce
+      let scale = SCALE;
+      // oltre le dimensioni massime di una pagina PDF il diagramma si rimpicciolisce
       const maxImg = doc.maxH - TOP - head - foot;
       if (svgStr && Hh * scale > maxImg) scale = maxImg / Hh;
+      if (svgStr && W * scale > doc.maxH - M0 * 2) scale = (doc.maxH - M0 * 2) / W;
       const w = W * scale, hpt = svgStr ? Hh * scale : 0;
-      p = doc.page(TOP + head + hpt + foot); y = TOP;
+      p = doc.page(TOP + head + hpt + foot, svgStr ? w + M0 * 2 : 0); y = TOP;
+      const cwp = p.w - M0 * 2; // larghezza utile di questa pagina
       sectionPage[key] = doc.pages.length;
       doc.text(p, M0, y + 12, label, { font: 'F2', size: 12.5, color: INK });
-      y += 20; doc.line(p, M0, y, M0 + CW, y, { color: [207, 216, 225] }); y += 10;
+      y += 20; doc.line(p, M0, y, M0 + cwp, y, { color: [207, 216, 225] }); y += 10;
       if (note) { doc.text(p, M0, y + 10, note, { font: 'F4', size: 10, color: MUTED }); y += 18; }
       if (!svgStr) return;
       const img = await loadImg(svgStr);
-      const x0 = M0 + (CW - w) / 2;
+      const x0 = M0 + (cwp - w) / 2;
       let done = 0;
       while (done < hpt - 0.01) {
         const part = Math.min(STRIP / K, hpt - done);
@@ -2064,9 +2069,9 @@
     doc.pages.forEach((pg, i) => {
       if (i === 0) { doc.text(pg, M0, pg.h - 26, `${i + 1} / ${N}`, { size: 8.5, color: MUTED }); return; }
       doc.text(pg, M0, 30, title, { size: 8.5, color: MUTED });
-      doc.line(pg, M0, 36, M0 + CW, 36, { color: [225, 231, 237], width: 0.6 });
+      doc.line(pg, M0, 36, pg.w - M0, 36, { color: [225, 231, 237], width: 0.6 });
       const t = `${i + 1} / ${N}`;
-      doc.text(pg, M0 + CW - PdfLib.textWidth(t, 'F1', 8.5), pg.h - 26, t, { size: 8.5, color: MUTED });
+      doc.text(pg, pg.w - M0 - PdfLib.textWidth(t, 'F1', 8.5), pg.h - 26, t, { size: 8.5, color: MUTED });
     });
     const blob = doc.build({ title, author: prog.attrs.authors || '' });
     window.__lastPdf = blob; // per i test automatici

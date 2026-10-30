@@ -1,6 +1,6 @@
 /* ==========================================================================
    FlowLab — scrittura di file PDF (senza librerie esterne)
-   Pagine A4 (o larghe come un A4 e alte a piacere) con testo nei font standard (Helvetica, Courier: codifica
+   Pagine A4 (o di dimensioni a piacere, modulo continuo) con testo nei font standard (Helvetica, Courier: codifica
    WinAnsi, che comprende le lettere accentate italiane) e immagini JPEG.
    Le coordinate passate ai metodi partono dall'angolo in alto a sinistra.
    ========================================================================== */
@@ -36,8 +36,11 @@ const PdfLib = (() => {
     constructor() { this.pages = []; this.images = []; }
     get W() { return PW; }
     get H() { return PH; }
-    /* nuova pagina A4; con h, larga come un A4 e alta h punti (modulo continuo) */
-    page(h) { const p = { ops: [], imgs: new Set(), h: Math.min(MAXH, Math.max(72, h || PH)) }; this.pages.push(p); return p; }
+    /* nuova pagina A4; con h (e w), alta h punti e larga w punti, o come un A4 (modulo continuo) */
+    page(h, w) {
+      const p = { ops: [], imgs: new Set(), h: Math.min(MAXH, Math.max(72, h || PH)), w: Math.min(MAXH, Math.max(PW, w || PW)) };
+      this.pages.push(p); return p;
+    }
     get maxH() { return MAXH; }
     text(p, x, y, str, o) {
       const f = (o && o.font) || 'F1', size = (o && o.size) || 11, col = (o && o.color) || [23, 34, 45];
@@ -91,7 +94,7 @@ const PdfLib = (() => {
       this.pages.forEach((p, i) => {
         const [pn, cn] = pageN[i];
         const xo = [...p.imgs].map((im) => `/${im.name} ${imgN.get(im)} 0 R`).join(' ');
-        obj(pn, `<< /Type /Page /Parent ${pagesN} 0 R /MediaBox [0 0 ${PW} ${num(p.h)}] /Resources << /Font << ${fontRes} >>${xo ? ` /XObject << ${xo} >>` : ''} >> /Contents ${cn} 0 R >>`);
+        obj(pn, `<< /Type /Page /Parent ${pagesN} 0 R /MediaBox [0 0 ${num(p.w)} ${num(p.h)}] /Resources << /Font << ${fontRes} >>${xo ? ` /XObject << ${xo} >>` : ''} >> /Contents ${cn} 0 R >>`);
         const stream = p.ops.join('\n');
         obj(cn, `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
       });
