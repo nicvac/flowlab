@@ -492,7 +492,9 @@ class Interpreter {
     if (rs.length) {
       const vals = [];
       for (const r of rs) {
-        const cell = frame.vars.get(r.name.toLowerCase());
+        let cell = frame.vars.get(r.name.toLowerCase());
+        // un metodo può restituire direttamente un attributo della sua classe
+        if (!cell && this.oo && r.name) { try { cell = this.implicitField(r.name.toLowerCase(), node); } catch (e) { cell = null; } }
         if (!r.name || !cell) {
           this.stack.pop();
           throw new _E.FlowError(`La funzione ${func.name} deve restituire "${r.name}", ma questa variabile non è stata dichiarata`, { node, stmtId: 'end:' + func.id });

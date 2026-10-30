@@ -228,6 +228,12 @@ function exprPrinter(L) {
 }
 
 /* Python e JavaScript: i metodi della classe si chiamano con self./this. oppure Classe. (statici) */
+/* nome da restituire: una variabile, oppure un attributo (self.x / this.x / Classe.x) */
+function retName(name, sc, self) {
+  const h = sc.implicitField && sc.implicitField(name);
+  if (!h || !self) return h ? h.attr.name : name;
+  return h.attr.static ? `${h.owner.name}.${h.attr.name}` : `${self}.${h.attr.name}`;
+}
 function ucall(entry, sc, self) {
   if (!sc.ooMode || !entry || !entry.owner) return '';
   return entry.f.static ? entry.owner.name + '.' : self + '.';
@@ -543,11 +549,12 @@ LANGS.python = {
         const methodBody = (f, out) => {
           if (f.abstract) { out.line(`raise NotImplementedError("${f.name}() è astratto: lo definiscono le sottoclassi")`); return; }
           const before = out.lines.length;
-          block(f.body, buildScope(prog, f), out);
+          const msc = buildScope(prog, f);
+          block(f.body, msc, out);
           const rl = _CM.rets(f);
           if (rl.length) {
             if (out.lines.length === before + 1 && out.lines[out.lines.length - 1].trim() === 'pass') out.lines.pop();
-            out.line(`return ${rl.map((r) => r.name).join(', ')}`);
+            out.line(`return ${rl.map((r) => retName(r.name, msc, 'self')).join(', ')}`);
           }
         };
         const ctors = OO.ctors(prog, c);
@@ -1253,7 +1260,7 @@ LANGS.javascript = cFamily({
       }
       // corpo di un costruttore: in una sottoclasse super(...) va chiamato prima di usare this
       const ctorBody = (f) => { const sc = g.buildScope(f); const sp = OO.splitSuper(f); if (c.parent && !sp.args) o.line('super();'); g.block(o, f.body, sc); };
-      const methodBody = (f) => { if (f.abstract) { o.line(`throw new Error("${f.name}() è astratto: lo definiscono le sottoclassi");`); return; } g.block(o, f.body, g.buildScope(f)); const rl = _CM.rets(f); if (rl.length) o.line(rl.length > 1 ? `return [${rl.map((r) => r.name).join(', ')}];` : `return ${rl[0].name};`); };
+      const methodBody = (f) => { if (f.abstract) { o.line(`throw new Error("${f.name}() è astratto: lo definiscono le sottoclassi");`); return; } const msc = g.buildScope(f); g.block(o, f.body, msc); const rl = _CM.rets(f); const rn = (r) => retName(r.name, msc, 'this'); if (rl.length) o.line(rl.length > 1 ? `return [${rl.map(rn).join(', ')}];` : `return ${rn(rl[0])};`); };
       const emit = (group, isCtor) => {
         if (o.lines.length > start) o.line('');
         const f0 = group[0];

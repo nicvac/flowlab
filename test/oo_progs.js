@@ -76,4 +76,20 @@ const vettore = () => oo([
   { cls: 'Vettore', name: 'somma', rets: [['t', 'Integer']], body: [decl('t', 'Integer'), set('t', 'parziale(usati - 1)')] },
   { cls: 'Vettore', name: 'parziale', vis: 'private', params: [['k', 'Integer']], rets: [['t', 'Integer']], body: [decl('t', 'Integer'), S('if', { expression: 'k < 0', then: [set('t', '0')], else: [set('t', 'dati[k] + parziale(k - 1)')] })] },
 ]);
-module.exports = { oo, punto, forme, lista, vettore, out, set, decl, call };
+// metodi che restituiscono direttamente un attributo (senza dichiarare una variabile)
+const getter = () => oo([
+  decl('d', 'Distributore'),
+  set('d', 'new Distributore("Caffè", 3)'),
+  call('d.inserisci(2)'),
+  out('d.getNome() & ": credito " & d.getCredito() & " · prodotti venduti " & Distributore.getVenduti()'),
+], [
+  { name: 'Macchina', attributes: [{ name: 'nome', type: 'String', visibility: 'protected' }] },
+  { name: 'Distributore', parent: 'Macchina', attributes: [{ name: 'credito', type: 'Integer' }, { name: 'venduti', type: 'Integer', static: true, init: '7' }] },
+], [
+  { cls: 'Distributore', ctor: true, params: [['n', 'String'], ['c', 'Integer']], body: [set('nome', 'n'), set('credito', 'c')] },
+  { cls: 'Distributore', name: 'inserisci', params: [['euro', 'Integer']], body: [set('credito', 'credito + euro')] },
+  { cls: 'Distributore', name: 'getCredito', rets: [['credito', 'Integer']] },
+  { cls: 'Distributore', name: 'getNome', rets: [['nome', 'String']] },
+  { cls: 'Distributore', name: 'getVenduti', static: true, rets: [['venduti', 'Integer']] },
+]);
+module.exports = { oo, punto, forme, lista, vettore, getter, out, set, decl, call };

@@ -589,3 +589,9 @@ svg.wlinks { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1
 .abscard .tag { display: inline-block; font: 700 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
 .abscard p { margin: 8px 0; color: var(--ink); }
 .abscard .impls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 12px; }
+
+/* valore restituito che è un attributo della classe */
+.prow .rname { position: relative; min-width: 0; display: grid; }
+.prow .rname input { width: 100%; }
+.prow .rtag { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font: 700 10px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--s-call); background: var(--f-call); border-radius: 4px; padding: 1px 5px; pointer-events: none; }
+.prow .rtag[hidden] { display: none; }

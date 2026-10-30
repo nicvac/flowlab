@@ -2,7 +2,7 @@
 const M = require('../src/model.js'), C = require('../src/codegen.js'), { Interpreter } = require('../src/interp.js');
 const P = require('./oo_progs.js');
 const fs = require('fs'), cp = require('child_process'), path = require('path');
-const progs = { punto: P.punto(), forme: P.forme(), lista: P.lista(), vettore: P.vettore() };
+const progs = { punto: P.punto(), forme: P.forme(), lista: P.lista(), vettore: P.vettore(), getter: P.getter() };
 // anche gli esempi a oggetti dell'applicazione
 global.ExprLib = require('../src/expr.js'); global.ModelLib = M;
 const Examples = eval(fs.readFileSync(path.join(__dirname, '../src/examples.js'), 'utf8') + ';Examples');

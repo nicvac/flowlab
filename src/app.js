@@ -631,19 +631,32 @@
       h('button', { class: 'btn small', type: 'button', onclick: () => { params.push({ name: '', type: 'Integer', array: false }); drawParams(); plist.querySelector('.prow:last-child input').focus(); } }, '+ Aggiungi parametro'));
     // valori restituiti: nessuno = procedura, uno = funzione classica, più di uno = come in Python
     const rlist = h('div', { class: 'params' });
+    // metodi: si può restituire un attributo della classe (anche ereditato, se non privato)
+    const retAttrs = oo && !ctor ? retAttributes(cls) : [];
+    const attrOf = (n) => retAttrs.find((x) => x.attr.name.toLowerCase() === String(n).toLowerCase());
+    const dlId = 'retattrs_' + Math.random().toString(36).slice(2);
     const drawRets = () => {
       rlist.innerHTML = '';
       if (!rets.length) rlist.append(h('p', { class: 'muted small' }, 'Nessun valore: è una procedura.'));
       rets.forEach((r, i) => {
-        const nm = h('input', { type: 'text', class: 'mono', value: r.name, 'aria-label': 'Variabile restituita ' + (i + 1), placeholder: 'variabile', oninput: (e) => { r.name = e.target.value.trim(); } });
         const tp = h('select', { 'aria-label': 'Tipo del valore restituito ' + (i + 1), onchange: (e) => { r.type = e.target.value; } }, typeOpts().map(([v, l]) => h('option', { value: v, selected: v === r.type }, l)));
-        rlist.append(h('div', { class: 'prow rrow' }, nm, tp,
+        const tag = h('span', { class: 'rtag', title: 'È un attributo della classe: il metodo lo restituisce direttamente, senza dichiarare una variabile' }, 'attributo');
+        // scegliendo un attributo il tipo è il suo e non si cambia
+        const syncAttr = () => {
+          const a = attrOf(r.name);
+          if (a) { r.type = a.attr.type; tp.value = a.attr.type; }
+          tp.disabled = !!a; tag.hidden = !a;
+        };
+        const nm = h('input', { type: 'text', class: 'mono', value: r.name, list: retAttrs.length ? dlId : null, 'aria-label': 'Variabile restituita ' + (i + 1), placeholder: retAttrs.length ? 'variabile o attributo' : 'variabile', oninput: (e) => { r.name = e.target.value.trim(); syncAttr(); } });
+        syncAttr();
+        rlist.append(h('div', { class: 'prow rrow' }, h('div', { class: 'rname' }, nm, tag), tp,
           h('button', { class: 'iconbtn', type: 'button', title: 'Sposta su', 'aria-label': 'Sposta su', disabled: i === 0, onclick: () => { rets.splice(i - 1, 0, rets.splice(i, 1)[0]); drawRets(); } }, '↑'),
           h('button', { class: 'iconbtn', type: 'button', title: 'Rimuovi', 'aria-label': 'Rimuovi valore restituito', onclick: () => { rets.splice(i, 1); drawRets(); } }, '✕')));
       });
     };
     drawRets();
-    if (!ctor) body.append(h('div', { class: 'flabel' }, 'Valori restituiti'), h('p', { class: 'muted small', style: 'margin:0' }, `Le variabili vanno dichiarate nel corpo ${oo ? 'del metodo' : 'della funzione'}: quelle nuove vengono dichiarate in automatico. Con più valori la chiamata si scrive a, b ← ${oo ? 'obj.metodo' : 'Funzione'}(...)`), rlist,
+    if (retAttrs.length) body.append(h('datalist', { id: dlId }, retAttrs.map((x) => h('option', { value: x.attr.name }, `attributo ${x.owner === cls ? '' : 'di ' + x.owner.name + ' '}· ${E.typeName(x.attr.type)}`))));
+    if (!ctor) body.append(h('div', { class: 'flabel' }, 'Valori restituiti'), h('p', { class: 'muted small', style: 'margin:0' }, `Le variabili vanno dichiarate nel corpo ${oo ? 'del metodo' : 'della funzione'}: quelle nuove vengono dichiarate in automatico.${retAttrs.length ? ' Si può scegliere anche un attributo della classe: in quel caso non serve dichiararlo.' : ''} Con più valori la chiamata si scrive a, b ← ${oo ? 'obj.metodo' : 'Funzione'}(...)`), rlist,
       h('button', { class: 'btn small', type: 'button', onclick: () => { rets.push({ name: '', type: 'Integer' }); drawRets(); rlist.querySelector('.prow:last-child input').focus(); } }, '+ Aggiungi valore restituito'));
     openModal({
       title: isNew ? (ctor ? `Nuovo costruttore di ${cls.name}` : oo ? `Nuovo metodo in ${cls.name}` : 'Nuova funzione') : `Modifica ${what}`, body, okText: isNew ? 'Crea' : 'Salva', wide: true,
@@ -675,6 +688,12 @@
           if (E.RESERVED.has(r.name.toLowerCase())) return `"${r.name}" è una parola riservata`;
           if (rseen.has(r.name)) return `La variabile restituita ${r.name} è ripetuta`;
           rseen.add(r.name);
+          if (oo && !ctor) {
+            const a = M.chainOf(st.prog, cls).flatMap((k) => k.attributes.map((x) => ({ attr: x, owner: k }))).find((x) => x.attr.name.toLowerCase() === r.name.toLowerCase());
+            if (a && a.attr.array) return `${a.attr.name} è un array: un metodo non può restituire un array intero`;
+            if (a && a.owner !== cls && a.attr.visibility === 'private') return `${a.attr.name} è un attributo privato di ${a.owner.name}: ${cls.name} non lo vede`;
+            if (a && isStatic && !a.attr.static) return `${a.attr.name} è un attributo d'istanza: un metodo statico non lo può restituire`;
+          }
         }
         const seen = new Set();
         for (const p of params) {
@@ -686,12 +705,16 @@
           const target = isNew ? M.makeFunction(name, { params }) : f;
           Object.assign(target, { name, params });
           if (oo) Object.assign(target, { cls: cls.id, visibility: visW ? visW._get() : 'public', static: isStatic || target === st.prog.functions[0], ctor, abstract: isAbs });
+          // un attributo restituito si scrive come è dichiarato (i linguaggi distinguono le maiuscole)
+          for (const r of rets) { const a = attrOf(r.name); if (a) { r.name = a.attr.name; r.type = a.attr.type; } }
           if (isAbs && !cls.abstract) { cls.abstract = true; setTimeout(() => toast(`${cls.name} è diventata una classe astratta: contiene un metodo astratto`), 0); }
           M.setRets(target, rets);
           // dichiara le variabili restituite che non sono ancora dichiarate (raggruppate per tipo)
           const known = new Set(params.map((p) => p.name));
+          // gli attributi restituiti non si dichiarano
+          if (oo && !ctor) retAttributes(cls).forEach((x) => known.add(x.attr.name));
           M.walk(target.body, (x) => { if (x.kind === 'declare') x.name.split(',').forEach((n) => known.add(n.trim())); });
-          const missing = rets.filter((r) => !known.has(r.name));
+          const missing = rets.filter((r) => ![...known].some((k) => k.toLowerCase() === r.name.toLowerCase()));
           const decls = [];
           for (const r of missing) {
             const last = decls[decls.length - 1];
@@ -720,6 +743,13 @@
       if (st.fi === i) { st.fi = 0; if (isOO()) st.uml = true; } else if (st.fi > i) st.fi--;
       if (st.usel && st.usel.fid === f.id) st.usel = { cls: st.usel.cls, kind: 'class' };
     }));
+  }
+
+  /* attributi che un metodo della classe può restituire: propri e ereditati non privati, non array */
+  function retAttributes(cls) {
+    const out = [];
+    M.chainOf(st.prog, cls).forEach((k, i) => k.attributes.forEach((a) => { if (!a.array && (i === 0 || a.visibility !== 'private')) out.push({ attr: a, owner: k }); }));
+    return out;
   }
 
   /* ------------------------ Classi (vista Oggetti) ------------------------ */
