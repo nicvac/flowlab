@@ -4413,7 +4413,7 @@ const UmlLib = (() => {
 const PdfLib = (() => {
   const PW = 595.28, PH = 841.89; // A4 in punti
   const MAXH = 14400; // altezza massima di una pagina PDF (200 pollici)
-  const FONTS = { F1: 'Helvetica', F2: 'Helvetica-Bold', F3: 'Courier', F4: 'Helvetica-Oblique', F5: 'Courier-Bold' };
+  const FONTS = { F1: 'Helvetica', F2: 'Helvetica-Bold', F3: 'Courier', F4: 'Helvetica-Oblique', F5: 'Courier-Bold', F6: 'Courier-Oblique' };
   // caratteri fuori da WinAnsi: sostituzioni leggibili
   const SUBST = { '←': '<-', '→': '->', '≠': '!=', '≤': '<=', '≥': '>=', 'π': 'pi', '▦': '', '⋯': '...', '✖': 'x', '■': '', '▶': '>', '⏸': '||', '↺': '', '⚠': '!', '\t': '    ' };
   const CP1252 = { '€': 0x80, '‚': 0x82, 'ƒ': 0x83, '„': 0x84, '…': 0x85, '†': 0x86, '‡': 0x87, 'ˆ': 0x88, '‰': 0x89, 'Š': 0x8a, '‹': 0x8b, 'Œ': 0x8c, 'Ž': 0x8e, '‘': 0x91, '’': 0x92, '“': 0x93, '”': 0x94, '•': 0x95, '–': 0x96, '—': 0x97, '˜': 0x98, '™': 0x99, 'š': 0x9a, '›': 0x9b, 'œ': 0x9c, 'ž': 0x9e, 'Ÿ': 0x9f };
@@ -4515,7 +4515,7 @@ const PdfLib = (() => {
   /* larghezza approssimata del testo in punti (Helvetica ≈ Arial; Courier: 0,6 em) */
   const _cv = (() => { try { return document.createElement('canvas').getContext('2d'); } catch (e) { return null; } })();
   function textWidth(str, font, size) {
-    if (font === 'F3' || font === 'F5') return [...String(str)].length * 0.6 * size;
+    if (font === 'F3' || font === 'F5' || font === 'F6') return [...String(str)].length * 0.6 * size;
     if (!_cv) return String(str).length * 0.52 * size;
     _cv.font = `${font === 'F2' ? 'bold ' : font === 'F4' ? 'italic ' : ''}${size}px Helvetica, Arial, sans-serif`;
     return _cv.measureText(String(str)).width;
@@ -6919,23 +6919,31 @@ const ArrayView = (() => {
     $('#codeOut').innerHTML = highlight(code, st.lang);
     $('#codeOut').dataset.raw = code;
   }
-  function highlight(code, lang) {
+  /* il codice in righe di pezzi [classe, testo]: tk parola chiave, ts stringa, tn numero, tc commento */
+  function codeTokens(code, lang) {
     const L = CodeGen.LANGS[lang];
     const kw = new Set(L.keywords);
     const cm = L.comment === '#' ? '#[^\\n]*' : '\\/\\/[^\\n]*';
     const re = new RegExp(`(${cm})|("(?:[^"\\\\\\n]|\\\\.)*"|'(?:[^'\\\\\\n]|\\\\.)*')|(\\b\\d+(?:\\.\\d+)?\\b)|([\\p{L}_][\\p{L}\\p{N}_]*)|(\\n)|([\\s\\S])`, 'gu');
-    const escH = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    let out = '<span class="ln"></span>';
+    const lines = [[]];
+    const put = (cls, t) => { const ln = lines[lines.length - 1], last = ln[ln.length - 1]; if (last && last[0] === cls) last[1] += t; else ln.push([cls, t]); };
     let m;
     while ((m = re.exec(code))) {
-      if (m[1]) out += `<span class="tc">${escH(m[1])}</span>`;
-      else if (m[2]) out += `<span class="ts">${escH(m[2])}</span>`;
-      else if (m[3]) out += `<span class="tn">${m[3]}</span>`;
-      else if (m[4]) out += kw.has(m[4]) ? `<span class="tk">${m[4]}</span>` : escH(m[4]);
-      else if (m[5]) out += '\n<span class="ln"></span>';
-      else out += escH(m[6]);
+      if (m[1]) put('tc', m[1]);
+      else if (m[2]) put('ts', m[2]);
+      else if (m[3]) put('tn', m[3]);
+      else if (m[4]) put(kw.has(m[4]) ? 'tk' : '', m[4]);
+      else if (m[5]) lines.push([]);
+      else put('', m[6]);
     }
-    return out.replace(/\n<span class="ln"><\/span>$/, '\n');
+    return lines;
+  }
+  function highlight(code, lang) {
+    const escH = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const lines = codeTokens(code, lang);
+    // un a capo finale non apre una riga numerata vuota
+    const tail = lines.length > 1 && !lines[lines.length - 1].length ? (lines.pop(), '\n') : '';
+    return lines.map((ln) => '<span class="ln"></span>' + ln.map(([c, t]) => c ? `<span class="${c}">${escH(t)}</span>` : escH(t)).join('')).join('\n') + tail;
   }
 
   /* ------------------------- Schede e finestre mobili --------------------- */
@@ -7289,6 +7297,8 @@ const ArrayView = (() => {
     const root = document.documentElement, oldTheme = root.dataset.theme;
     root.dataset.theme = 'light';
     const css = exportCss();
+    const csv = getComputedStyle(root), hex = (n) => { const v = csv.getPropertyValue(n).trim().replace('#', ''); return v.length === 6 ? [0, 2, 4].map((k) => parseInt(v.slice(k, k + 2), 16)) : [23, 34, 45]; };
+    const CODE_COL = { '': hex('--ink'), tk: hex('--s-call'), ts: hex('--s-out'), tn: hex('--s-loop'), tc: hex('--faint') };
     if (oldTheme) root.dataset.theme = oldTheme; else delete root.dataset.theme;
     const prog = st.prog, oo = isOO() && M.hasClasses(prog);
     const doc = new PdfLib.Doc();
@@ -7389,22 +7399,34 @@ const ArrayView = (() => {
       }
     } catch (e) { toast('Impossibile creare le immagini dei diagrammi: ' + e.message, 'error'); return; }
 
-    /* ---- codice ---- */
+    /* ---- codice: pagine A4 orizzontali con margini ridotti, colorato come nella scheda Codice ---- */
     const code = CodeGen.generate(prog, st.lang).replace(/\n$/, '');
-    p = doc.page(); y = TOP;
+    const LW = doc.H, LHt = doc.W, MC = 22, CTOP = 34, CBOT = LHt - 22; // A4 orizzontale
+    const codePage = () => { const pg = doc.page(LHt, LW); pg.compact = true; return pg; };
+    p = codePage(); y = CTOP;
     sectionPage.code = doc.pages.length;
-    doc.text(p, M0, y + 12, `Codice sorgente · ${CodeGen.LANGS[st.lang].label}`, { font: 'F2', size: 12.5 }); y += 20;
-    doc.line(p, M0, y, M0 + CW, y, { color: [207, 216, 225] }); y += 16;
-    const FS = 8.6, LH = 10.6, NW = 26, cols = Math.floor((CW - NW) / (0.6 * FS));
-    code.split('\n').forEach((line, i) => {
-      const parts = []; let rest = line.replace(/\t/g, '    ');
-      do { parts.push(rest.slice(0, cols)); rest = rest.slice(cols); } while (rest.length);
-      parts.forEach((part, k) => {
-        if (y > BOTTOM - 4) { p = doc.page(); y = TOP + 6; }
-        if (!k) doc.text(p, M0, y, String(i + 1).padStart(4, ' '), { font: 'F3', size: 7.5, color: [134, 147, 160] });
-        doc.text(p, M0 + NW, y, (k ? '  ' : '') + part, { font: 'F3', size: FS });
+    doc.text(p, MC, y + 12, `Codice sorgente · ${CodeGen.LANGS[st.lang].label}`, { font: 'F2', size: 12.5 }); y += 20;
+    doc.line(p, MC, y, LW - MC, y, { color: [207, 216, 225] }); y += 14;
+    const FS = 8.6, LH = 10.6, NW = 26, CH = 0.6 * FS, cols = Math.floor((LW - MC * 2 - NW) / CH);
+    const FONT = { '': 'F3', tk: 'F5', ts: 'F3', tn: 'F3', tc: 'F6' };
+    codeTokens(code, st.lang).forEach((toks, i) => {
+      // pezzi colorati con la loro colonna; le righe troppo lunghe vanno a capo
+      const segs = []; let col = 0;
+      for (const [c, t] of toks) { const tx = t.replace(/\t/g, '    '); segs.push({ c, t: tx, at: col }); col += [...tx].length; }
+      const rows = Math.max(1, Math.ceil(col / cols));
+      for (let k = 0; k < rows; k++) {
+        if (y > CBOT - 4) { p = codePage(); y = CTOP + 4; }
+        if (!k) doc.text(p, MC, y, String(i + 1).padStart(4, ' '), { font: 'F3', size: 7.5, color: CODE_COL.tc });
+        const from = k * cols, to = from + cols, x0 = MC + NW + (k ? 2 * CH : 0);
+        for (const sg of segs) {
+          const chars = [...sg.t], a = Math.max(from, sg.at), b = Math.min(to, sg.at + chars.length);
+          if (a >= b) continue;
+          const piece = chars.slice(a - sg.at, b - sg.at).join('');
+          if (!piece.trim()) continue;
+          doc.text(p, x0 + (a - from) * CH, y, piece, { font: FONT[sg.c], size: FS, color: CODE_COL[sg.c] });
+        }
         y += LH;
-      });
+      }
     });
 
     /* ---- intestazione e numeri di pagina ---- */
@@ -7412,10 +7434,12 @@ const ArrayView = (() => {
     const N = doc.pages.length;
     doc.pages.forEach((pg, i) => {
       if (i === 0) { doc.text(pg, M0, pg.h - 26, `${i + 1} / ${N}`, { size: 8.5, color: MUTED }); return; }
-      doc.text(pg, M0, 30, title, { size: 8.5, color: MUTED });
-      doc.line(pg, M0, 36, pg.w - M0, 36, { color: [225, 231, 237], width: 0.6 });
+      // le pagine del codice hanno margini ridotti
+      const mx = pg.compact ? 22 : M0, ty = pg.compact ? 16 : 30, fy = pg.compact ? 12 : 26;
+      doc.text(pg, mx, ty, title, { size: 8.5, color: MUTED });
+      doc.line(pg, mx, ty + 6, pg.w - mx, ty + 6, { color: [225, 231, 237], width: 0.6 });
       const t = `${i + 1} / ${N}`;
-      doc.text(pg, pg.w - M0 - PdfLib.textWidth(t, 'F1', 8.5), pg.h - 26, t, { size: 8.5, color: MUTED });
+      doc.text(pg, pg.w - mx - PdfLib.textWidth(t, 'F1', 8.5), pg.h - fy, t, { size: 8.5, color: MUTED });
     });
     const blob = doc.build({ title, author: prog.attrs.authors || '' });
     window.__lastPdf = blob; // per i test automatici

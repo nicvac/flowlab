@@ -9,7 +9,7 @@
 const PdfLib = (() => {
   const PW = 595.28, PH = 841.89; // A4 in punti
   const MAXH = 14400; // altezza massima di una pagina PDF (200 pollici)
-  const FONTS = { F1: 'Helvetica', F2: 'Helvetica-Bold', F3: 'Courier', F4: 'Helvetica-Oblique', F5: 'Courier-Bold' };
+  const FONTS = { F1: 'Helvetica', F2: 'Helvetica-Bold', F3: 'Courier', F4: 'Helvetica-Oblique', F5: 'Courier-Bold', F6: 'Courier-Oblique' };
   // caratteri fuori da WinAnsi: sostituzioni leggibili
   const SUBST = { '←': '<-', '→': '->', '≠': '!=', '≤': '<=', '≥': '>=', 'π': 'pi', '▦': '', '⋯': '...', '✖': 'x', '■': '', '▶': '>', '⏸': '||', '↺': '', '⚠': '!', '\t': '    ' };
   const CP1252 = { '€': 0x80, '‚': 0x82, 'ƒ': 0x83, '„': 0x84, '…': 0x85, '†': 0x86, '‡': 0x87, 'ˆ': 0x88, '‰': 0x89, 'Š': 0x8a, '‹': 0x8b, 'Œ': 0x8c, 'Ž': 0x8e, '‘': 0x91, '’': 0x92, '“': 0x93, '”': 0x94, '•': 0x95, '–': 0x96, '—': 0x97, '˜': 0x98, '™': 0x99, 'š': 0x9a, '›': 0x9b, 'œ': 0x9c, 'ž': 0x9e, 'Ÿ': 0x9f };
@@ -111,7 +111,7 @@ const PdfLib = (() => {
   /* larghezza approssimata del testo in punti (Helvetica ≈ Arial; Courier: 0,6 em) */
   const _cv = (() => { try { return document.createElement('canvas').getContext('2d'); } catch (e) { return null; } })();
   function textWidth(str, font, size) {
-    if (font === 'F3' || font === 'F5') return [...String(str)].length * 0.6 * size;
+    if (font === 'F3' || font === 'F5' || font === 'F6') return [...String(str)].length * 0.6 * size;
     if (!_cv) return String(str).length * 0.52 * size;
     _cv.font = `${font === 'F2' ? 'bold ' : font === 'F4' ? 'italic ' : ''}${size}px Helvetica, Arial, sans-serif`;
     return _cv.measureText(String(str)).width;
