@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Stazione meteo comunale"/>
+        <attribute name="authors" value="Nicola Vacca"/>
+        <attribute name="about" value="Temperature massime di un mese di 30 giorni (da 5 a 40 °C): media, giorno più freddo, giorno più caldo e allerta caldo, usando funzioni sui vettori."/>
+        <attribute name="saved" value="2026-10-30 09:00:00 PM"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Una stazione meteo comunale registra la temperatura massima di ciascun giorno di un mese di 30 giorni, con valori compresi tra 5 °C e 40 °C."/>
+            <comment text="COSTANTI"/>
+            <declare name="GIORNI" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="GIORNI" expression="30"/>
+            <declare name="T_MIN" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="T_MIN" expression="5"/>
+            <declare name="T_MAX" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="T_MAX" expression="40"/>
+            <declare name="SOGLIA_ALLERTA" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="SOGLIA_ALLERTA" expression="10"/>
+            <comment text="LAVORO"/>
+            <declare name="temperature" type="Integer" array="True" size="GIORNI"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <comment text="OUTPUT"/>
+            <declare name="media" type="Real" array="False" size=""/>
+            <declare name="idxFreddo" type="Integer" array="False" size=""/>
+            <declare name="idxCaldo" type="Integer" array="False" size=""/>
+            <comment text="Caricamento e visualizzazione delle temperature (il giorno e' indice + 1)"/>
+            <call expression="caricaRandom(temperature, GIORNI, T_MIN, T_MAX)"/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; GIORNI">
+                <output expression="&quot;Giorno &quot; &amp; (i + 1) &amp; &quot;: &quot; &amp; temperature[i] &amp; &quot; °C&quot;" newline="True"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+            <comment text="Temperatura media del mese"/>
+            <assign variable="media" expression="calcolaMedia(temperature, GIORNI)"/>
+            <output expression="&quot;Temperatura media del mese: &quot; &amp; ToFixed(media, 1) &amp; &quot; °C&quot;" newline="True"/>
+            <comment text="Giorno piu' freddo e giorno piu' caldo: le funzioni restituiscono l'indice"/>
+            <assign variable="idxFreddo" expression="indiceMinimo(temperature, GIORNI)"/>
+            <assign variable="idxCaldo" expression="indiceMassimo(temperature, GIORNI)"/>
+            <output expression="&quot;Giorno più freddo: giorno &quot; &amp; (idxFreddo + 1) &amp; &quot; con &quot; &amp; temperature[idxFreddo] &amp; &quot; °C&quot;" newline="True"/>
+            <output expression="&quot;Giorno più caldo: giorno &quot; &amp; (idxCaldo + 1) &amp; &quot; con &quot; &amp; temperature[idxCaldo] &amp; &quot; °C&quot;" newline="True"/>
+            <comment text="Allerta caldo se la temperatura massima supera la media di oltre 10 °C"/>
+            <if expression="temperature[idxCaldo] - media &gt; SOGLIA_ALLERTA">
+                <then>
+                    <output expression="&quot;Allerta caldo&quot;" newline="True"/>
+                </then>
+                <else/>
+            </if>
+        </body>
+    </function>
+    <function name="caricaRandom" type="None" variable="">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+            <parameter name="a" type="Integer" array="False"/>
+            <parameter name="b" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Riempie i primi n elementi di v con valori casuali in [a, b]: Random(b - a + 1) va da 0 a b - a, quindi a + Random(b - a + 1) va da a a b"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; n">
+                <assign variable="v[i]" expression="a + Random(b - a + 1)"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="calcolaMedia" type="Real" variable="media">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Restituisce la media dei primi n elementi di v (somma reale, cosi' la divisione da' un risultato con la virgola)"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <declare name="somma" type="Real" array="False" size=""/>
+            <declare name="media" type="Real" array="False" size=""/>
+            <assign variable="somma" expression="0"/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; n">
+                <assign variable="somma" expression="somma + v[i]"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+            <assign variable="media" expression="somma / n"/>
+        </body>
+    </function>
+    <function name="indiceMinimo" type="Integer" variable="idxMin">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Restituisce l'indice dell'elemento minimo dei primi n elementi di v: si parte dal primo e si confronta con tutti gli altri"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <declare name="idxMin" type="Integer" array="False" size=""/>
+            <assign variable="idxMin" expression="0"/>
+            <assign variable="i" expression="1"/>
+            <while expression="i &lt; n">
+                <if expression="v[i] &lt; v[idxMin]">
+                    <then>
+                        <assign variable="idxMin" expression="i"/>
+                    </then>
+                    <else/>
+                </if>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="indiceMassimo" type="Integer" variable="idxMax">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Restituisce l'indice dell'elemento massimo dei primi n elementi di v: si parte dal primo e si confronta con tutti gli altri"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <declare name="idxMax" type="Integer" array="False" size=""/>
+            <assign variable="idxMax" expression="0"/>
+            <assign variable="i" expression="1"/>
+            <while expression="i &lt; n">
+                <if expression="v[i] &gt; v[idxMax]">
+                    <then>
+                        <assign variable="idxMax" expression="i"/>
+                    </then>
+                    <else/>
+                </if>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+</flowgorithm>
