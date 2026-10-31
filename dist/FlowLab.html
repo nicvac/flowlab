@@ -3914,6 +3914,24 @@ function wrapLines(text, maxW, font) {
   return out;
 }
 
+/* il testo in due righe di lunghezza simile, spezzato su uno spazio (null se non ce ne sono);
+   meglio andare a capo prima di un operatore, soprattutto se lega poco (and/or, confronti) */
+const OP_START = [[/^(?:and|or)\b/i, 0.75], [/^(?:not)\b/i, 0.8], [/^(?:<=|>=|==|!=|<>|<|>|=)(?:\s|$)/, 0.8], [/^(?:[-+&])/, 0.95], [/^(?:[*/%^]|mod\b)/i, 0.97]];
+const OP_END = /(?:[-+*/%<>=!&|^←,(]|\band|\bor|\bnot|\bmod)$/i;
+function split2(text, lmax) {
+  const t = String(text).trim();
+  let best = null, bc = Infinity, bfit = false;
+  const re = /\s+/g; let m;
+  while ((m = re.exec(t))) {
+    const l1 = t.slice(0, m.index), l2 = t.slice(m.index + m[0].length);
+    const w = Math.max(textW(l1), textW(l2)), fits = w <= lmax;
+    const op = OP_START.find(([r]) => r.test(l2));
+    const c = w * (op ? op[1] : 1) * (OP_END.test(l1) ? 1.15 : 1);
+    if ((fits && !bfit) || (fits === bfit && c < bc)) { bc = c; best = [l1, l2]; bfit = fits; }
+  }
+  return best;
+}
+
 function dedupe(pts) {
   const out = [];
   for (const p of pts) { const q = out[out.length - 1]; if (!q || q[0] !== p[0] || q[1] !== p[1]) out.push([p[0], p[1]]); }
@@ -4014,7 +4032,7 @@ class Renderer {
     const tw = w - (shp === 'diamond' ? 36 : shp === 'hex' ? 30 : shp === 'para' ? 24 : 18) - (badge ? 18 : 0) - side;
     let s = `<g class="shape c-${cat}${extra || ''}${mb && mb.open ? ' open' : ''}" data-id="${id}"${kind ? ` data-kind="${kind}"` : ''}><title>${esc(title || text)}</title>${shapePath(shp, cx, y, w, h)}`;
     const tx = cx - side / 2 - (badge && side ? 9 : 0);
-    if (mb && mb.open) {
+    if (mb && mb.lines) {
       const n = mb.lines.length;
       mb.lines.forEach((l, i) => { s += `<text x="${tx}" y="${y + h / 2 + (i - (n - 1) / 2) * LINE_H}" dy="0.35em">${esc(l)}</text>`; });
     } else s += `<text x="${tx}" y="${y + h / 2}" dy="0.35em">${esc(fit(text, tw))}</text>`;
@@ -4035,6 +4053,7 @@ class Renderer {
   /* larghezza e altezza di un blocco: se il testo non sta nella larghezza massima
      il blocco diventa espandibile; aperto, il testo va su più righe */
   measure(s, cap, shp, baseH) {
+    if (shp === 'diamond' && !cap.incomplete) return this.diamond(s, cap, baseH);
     const badgeW = cap.badge && !cap.incomplete ? 18 : 0;
     const expandable = !cap.incomplete && textW(cap.text) > R_.MAXW;
     const open = expandable && !!this.expanded && this.expanded.has(s.id);
@@ -4049,6 +4068,27 @@ class Renderer {
     }
     const padX = shp === 'hex' ? 44 : shp === 'para' ? 40 : R_.PADX * 2;
     return { w: Math.ceil(lw + padX + badgeW + TOG), h: Math.max(baseH, Math.ceil(lines.length * LINE_H + 18 + (shp === 'doc' ? 6 : 0))), expandable, open, lines };
+  }
+
+  /* rombo: il testo sta tutto dentro (il rettangolo del testo è inscritto nel rombo).
+     Una riga se è corta, altrimenti due righe di lunghezza simile; oltre la dimensione
+     massima il testo si tronca e il pulsante + mostra tutto */
+  diamond(s, cap, baseH) {
+    const t = cap.text, ONE = 200, LMAX = 220, OPENW = 240;
+    let lines = textW(t) <= ONE ? [t] : split2(t, LMAX);
+    let expandable = false;
+    if (!lines || lines.some((l) => textW(l) > LMAX)) {
+      const w = wrapLines(t, LMAX, R_.font);
+      expandable = w.length > 2;
+      lines = expandable ? [w[0], fit(w.slice(1).join(' '), LMAX)] : w;
+    }
+    const open = expandable && !!this.expanded && this.expanded.has(s.id);
+    if (open) lines = wrapLines(t, OPENW, R_.font);
+    const lw = Math.max(...lines.map((l) => textW(l)));
+    const n = lines.length, hh = ((n - 1) * LINE_H) / 2 + 7; // mezza altezza del testo
+    const b = Math.max(baseH / 2, n > 1 ? 2.5 * hh : 2 * hh); // mezza altezza del rombo
+    const a = (lw / 2 + 8) / (1 - hh / b); // mezza larghezza: (lw/2)/a + hh/b ≤ 1
+    return { w: Math.ceil(Math.max(R_.MINW, 2 * a)), h: Math.ceil(2 * b), expandable, open, lines };
   }
 
   /* ---- impaginazione ---- */
