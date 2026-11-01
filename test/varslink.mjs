@@ -5,6 +5,8 @@ await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.wa
 await page.evaluate(() => { localStorage.clear(); FlowLab.loadExample('bolle'); const s=document.querySelector('#speed'); s.value=0; s.dispatchEvent(new Event('input')); });
 await page.click('.tabw[data-tab=vars] [role=tab]');
 await page.click('#runBtn'); await page.waitForTimeout(600);
+// a fine esecuzione si apre la Console: si torna alla scheda Variabili
+await page.click('.tabw[data-tab=vars] [role=tab]'); await page.waitForTimeout(100);
 console.log('scheda Variabili:', (await page.innerText('#varsBody')).replace(/\t/g, ' ').split('\n').filter(Boolean).join(' | '));
 await page.click('#varsBody tr.arr .caret'); await page.waitForTimeout(300);
 await page.click('#varsBody .avlink'); await page.waitForTimeout(300);
