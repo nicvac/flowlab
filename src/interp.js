@@ -419,6 +419,8 @@ class Interpreter {
     if (!this.oo) return !!this.findFunc(name);
     const fr = this.frame; if (!fr || !fr.cls) return false;
     const low = name.toLowerCase();
+    // senza oggetto, il nome di una funzione integrata indica sempre la funzione integrata
+    if (_E.BUILTINS[low]) return false;
     return this.methodCands(fr.self ? fr.self.cls : fr.cls, low).length > 0 || this.methodCands(fr.cls, low).length > 0;
   }
 

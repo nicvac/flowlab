@@ -1,0 +1,30 @@
+// Metodo con il nome di una funzione integrata (toString) dal dialogo
+import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+const errs = []; page.on('pageerror', (e) => errs.push(e.message));
+await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
+const wait = (ms = 120) => page.waitForTimeout(ms);
+await page.evaluate(() => { localStorage.clear(); FlowLab.loadExample('animali'); FlowLab.showUml(); }); await wait(200);
+const newMethod = async (cls, vis, ret) => {
+  await page.locator(`.ubox:has(.uname:text-is("${cls}")) .uhit.head`).click({ button: 'right' }); await wait(80);
+  await page.click('#pop button:has-text("Nuovo metodo")'); await wait(80);
+  await page.fill('#f_fname', 'toString');
+  if (vis) await page.click(`.modal .seg label:has-text("${vis}")`);
+  await page.click('.modal button:has-text("Aggiungi valore restituito")'); await page.fill('.modal .rrow input', 'descrizione');
+  await page.selectOption('.modal .rrow select', ret);
+  await page.click('.modal footer .btn.primary'); await wait(120);
+  const err = await page.locator('.modal .formerr').textContent().catch(() => null);
+  if (await page.locator('.modal').count()) await page.click('.modal footer .btn:not(.primary)');
+  await wait(80);
+  return err || 'creato';
+};
+console.log('Gatto, privato:', await newMethod('Gatto', '- privato', 'String'));
+console.log('Gatto, Intero:', await newMethod('Gatto', null, 'Integer'));
+console.log('Gatto, pubblico Stringa:', await newMethod('Gatto', null, 'String'));
+await page.evaluate(() => FlowLab.showUml()); await wait(100);
+const main = await page.evaluate(() => ModelLib.mainClass(FlowLab.state.prog).name);
+console.log(`classe principale ${main}:`, await newMethod(main, null, 'String'));
+console.log('metodi di Gatto:', await page.locator('.ubox:has(.uname:text-is("Gatto")) .urow.method .umem').allTextContents());
+console.log('ERR', errs);
+await browser.close();

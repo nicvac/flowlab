@@ -24,7 +24,8 @@ function buildScope(prog, func) {
   const ooMode = _CM.hasClasses(prog);
   const cls = ooMode ? _CM.classOf(prog, func) : null;
   if (!ooMode) for (const f of prog.functions) funcs.set(f.name.toLowerCase(), { type: f.type, rets: _CM.rets(f), f, name: f.name });
-  else for (const k of _CM.chainOf(prog, cls)) for (const f of _CM.membersOf(prog, k)) if (!f.ctor && !funcs.has(f.name.toLowerCase())) funcs.set(f.name.toLowerCase(), { type: f.type, rets: _CM.rets(f), f, name: f.name, owner: k });
+  // i metodi con il nome di una funzione integrata si chiamano solo con obj.nome() o this.nome()
+  else for (const k of _CM.chainOf(prog, cls)) for (const f of _CM.membersOf(prog, k)) if (!f.ctor && !funcs.has(f.name.toLowerCase()) && !_CE.BUILTINS[f.name.toLowerCase()]) funcs.set(f.name.toLowerCase(), { type: f.type, rets: _CM.rets(f), f, name: f.name, owner: k });
   const sc = { vars, funcs, func, prog, cls, ooMode };
   if (ooMode) ooScope(prog, sc);
   return sc;

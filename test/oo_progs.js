@@ -92,4 +92,13 @@ const getter = () => oo([
   { cls: 'Distributore', name: 'getNome', rets: [['nome', 'String']] },
   { cls: 'Distributore', name: 'getVenduti', static: true, rets: [['venduti', 'Integer']] },
 ]);
-module.exports = { oo, punto, forme, lista, vettore, getter, out, set, decl, call };
+// metodo con il nome di una funzione integrata: g.toString() è il metodo, ToString(eta) la funzione integrata
+const tostring = () => oo([
+  decl('g', 'Gatto'), set('g', 'new Gatto("Micio", 3)'),
+  out('g.toString()'), out('ToString(7) & "!"'),
+], [{ name: 'Gatto', attributes: [{ name: 'nome', type: 'String' }, { name: 'eta', type: 'Integer' }] }], [
+  { cls: 'Gatto', ctor: true, params: [['n', 'String'], ['e', 'Integer']], body: [set('nome', 'n'), set('eta', 'e')] },
+  { cls: 'Gatto', name: 'toString', rets: [['descrizione', 'String']], body: [decl('descrizione', 'String'), set('descrizione', 'nome & " (" & ToString(eta) & " anni) " & this.saluto()')] },
+  { cls: 'Gatto', name: 'saluto', rets: [['s', 'String']], body: [decl('s', 'String'), set('s', '"miao"')] },
+]);
+module.exports = { oo, punto, forme, lista, vettore, getter, tostring, out, set, decl, call };

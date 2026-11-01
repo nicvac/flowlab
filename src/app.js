@@ -664,9 +664,17 @@
         const e1 = nameW._check(); if (e1) return e1;
         const name = ctor ? cls.name : nameW._get().trim();
         if (name.toLowerCase() === 'main') return 'Il nome Main è riservato al programma principale (Inizio)';
-        if (E.BUILTINS[name.toLowerCase()]) return `${name} è già una funzione integrata`;
+        // un metodo può avere il nome di una funzione integrata (si chiama con obj.nome() o this.nome());
+        // le funzioni e i metodi della classe principale no
+        const plainFn = !oo || cls === M.mainClass(st.prog);
+        if (E.BUILTINS[name.toLowerCase()] && plainFn) return `${name} è già una funzione integrata`;
         const isAbs = !!(absW && absW._get());
         const isStatic = !ctor && !isAbs && !!(statW && statW._get());
+        // in Java toString() ridefinisce quello di Object: pubblico, non statico, restituisce una Stringa
+        if (oo && !ctor && name === 'toString' && !params.length) {
+          const vis = visW ? visW._get() : 'public';
+          if (vis !== 'public' || isStatic || rets.length !== 1 || rets[0].type !== 'String') return 'toString() deve essere pubblico, non statico e restituire una Stringa: ridefinisce il toString() che ogni oggetto ha in Java';
+        }
         if (isAbs && visW && visW._get() === 'private') return 'Un metodo astratto non può essere privato: le sottoclassi devono poterlo ridefinire';
         if (oo) {
           const sigOf = (list) => list.map((p) => p.type.toLowerCase() + (p.array ? '[' + (p.dims || 1) : '')).join(',');
