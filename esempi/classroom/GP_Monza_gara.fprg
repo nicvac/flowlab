@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Gran Premio di Monza, la gara"/>
+        <attribute name="authors" value="Nicola Vacca"/>
+        <attribute name="about" value="Antonelli e Russell completano 10 giri con tempi casuali in [810, 825] decimi di secondo: statistiche di ciascun pilota con le stesse funzioni, vincitore, distacco e giro più veloce della gara."/>
+        <attribute name="saved" value="2026-11-04 10:00:00 AM"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Nella gara di Monza, Kimi Antonelli e George Russell completano 10 giri ciascuno. I tempi sono in decimi di secondo (815 = 81,5 s). Due vettori distinti, analizzati con le stesse funzioni, senza duplicare il codice."/>
+            <comment text="COSTANTI"/>
+            <declare name="N_GIRI" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="N_GIRI" expression="10"/>
+            <declare name="T_MIN" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="T_MIN" expression="810"/>
+            <declare name="T_MAX" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="T_MAX" expression="825"/>
+            <declare name="SOGLIA_VELOCE" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="SOGLIA_VELOCE" expression="815"/>
+            <comment text="LAVORO"/>
+            <declare name="vAntonelli" type="Integer" array="True" size="N_GIRI"/>
+            <declare name="vRussell" type="Integer" array="True" size="N_GIRI"/>
+            <declare name="idxMinAntonelli" type="Integer" array="False" size=""/>
+            <declare name="idxMinRussell" type="Integer" array="False" size=""/>
+            <comment text="OUTPUT"/>
+            <declare name="totAntonelli" type="Integer" array="False" size=""/>
+            <declare name="totRussell" type="Integer" array="False" size=""/>
+            <declare name="distacco" type="Integer" array="False" size=""/>
+            <comment text="Caricamento dei tempi dei due piloti"/>
+            <call expression="caricaRandom(vAntonelli, N_GIRI, T_MIN, T_MAX)"/>
+            <call expression="caricaRandom(vRussell, N_GIRI, T_MIN, T_MAX)"/>
+            <output expression="&quot;=== GP di Monza - Gara ===&quot;" newline="True"/>
+            <comment text="Statistiche: la stessa procedura per entrambi i piloti"/>
+            <call expression="analizzaPilota(&quot;Antonelli&quot;, vAntonelli, N_GIRI, SOGLIA_VELOCE)"/>
+            <output expression="&quot;&quot;" newline="True"/>
+            <call expression="analizzaPilota(&quot;Russell&quot;, vRussell, N_GIRI, SOGLIA_VELOCE)"/>
+            <output expression="&quot;&quot;" newline="True"/>
+            <comment text="Il vincitore: vince chi ha il tempo totale minore"/>
+            <assign variable="totAntonelli" expression="somma(vAntonelli, N_GIRI)"/>
+            <assign variable="totRussell" expression="somma(vRussell, N_GIRI)"/>
+            <output expression="&quot;--- Classifica ---&quot;" newline="True"/>
+            <if expression="totAntonelli &lt; totRussell">
+                <then>
+                    <assign variable="distacco" expression="totRussell - totAntonelli"/>
+                    <output expression="&quot;1° Antonelli&quot;" newline="True"/>
+                    <output expression="&quot;2° Russell  (+ &quot; &amp; distacco &amp; &quot; decimi = &quot; &amp; ToFixed(distacco / 10, 1) &amp; &quot; s)&quot;" newline="True"/>
+                </then>
+                <else>
+                    <if expression="totRussell &lt; totAntonelli">
+                        <then>
+                            <assign variable="distacco" expression="totAntonelli - totRussell"/>
+                            <output expression="&quot;1° Russell&quot;" newline="True"/>
+                            <output expression="&quot;2° Antonelli  (+ &quot; &amp; distacco &amp; &quot; decimi = &quot; &amp; ToFixed(distacco / 10, 1) &amp; &quot; s)&quot;" newline="True"/>
+                        </then>
+                        <else>
+                            <output expression="&quot;Antonelli e Russell: pari merito (&quot; &amp; totAntonelli &amp; &quot; decimi)&quot;" newline="True"/>
+                        </else>
+                    </if>
+                </else>
+            </if>
+            <comment text="Giro più veloce della gara: si confrontano i giri migliori dei due piloti"/>
+            <assign variable="idxMinAntonelli" expression="posMin(vAntonelli, N_GIRI)"/>
+            <assign variable="idxMinRussell" expression="posMin(vRussell, N_GIRI)"/>
+            <if expression="vAntonelli[idxMinAntonelli] &lt; vRussell[idxMinRussell]">
+                <then>
+                    <output expression="&quot;Giro più veloce della gara: Antonelli, &quot; &amp; vAntonelli[idxMinAntonelli] &amp; &quot; decimi (giro n. &quot; &amp; (idxMinAntonelli + 1) &amp; &quot;)&quot;" newline="True"/>
+                </then>
+                <else>
+                    <if expression="vRussell[idxMinRussell] &lt; vAntonelli[idxMinAntonelli]">
+                        <then>
+                            <output expression="&quot;Giro più veloce della gara: Russell, &quot; &amp; vRussell[idxMinRussell] &amp; &quot; decimi (giro n. &quot; &amp; (idxMinRussell + 1) &amp; &quot;)&quot;" newline="True"/>
+                        </then>
+                        <else>
+                            <output expression="&quot;Giro più veloce della gara: pari merito, &quot; &amp; vAntonelli[idxMinAntonelli] &amp; &quot; decimi (Antonelli giro n. &quot; &amp; (idxMinAntonelli + 1) &amp; &quot;, Russell giro n. &quot; &amp; (idxMinRussell + 1) &amp; &quot;)&quot;" newline="True"/>
+                        </else>
+                    </if>
+                </else>
+            </if>
+        </body>
+    </function>
+    <function name="analizzaPilota" type="None" variable="">
+        <parameters>
+            <parameter name="nome" type="String" array="False"/>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+            <parameter name="soglia" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Stampa le statistiche di un pilota usando le funzioni sul vettore: si scrive una volta e si chiama per ciascun pilota"/>
+            <declare name="tot, idxMin, idxMax" type="Integer" array="False" size=""/>
+            <declare name="tempoMedio" type="Real" array="False" size=""/>
+            <assign variable="tot" expression="somma(v, n)"/>
+            <assign variable="tempoMedio" expression="media(v, n)"/>
+            <assign variable="idxMin" expression="posMin(v, n)"/>
+            <assign variable="idxMax" expression="posMax(v, n)"/>
+            <output expression="&quot;Pilota: &quot; &amp; nome" newline="True"/>
+            <output expression="&quot;Tempi (decimi): &quot;" newline="False"/>
+            <call expression="stampa(v, n)"/>
+            <output expression="&quot;Giri veloci (&lt; &quot; &amp; soglia &amp; &quot;): &quot; &amp; contaGiriVeloci(v, n, soglia)" newline="True"/>
+            <output expression="&quot;Tempo totale: &quot; &amp; tot &amp; &quot; decimi (&quot; &amp; ToFixed(tot / 10, 1) &amp; &quot; s)&quot;" newline="True"/>
+            <output expression="&quot;Tempo medio: &quot; &amp; ToFixed(tempoMedio, 1) &amp; &quot; decimi (&quot; &amp; ToFixed(tempoMedio / 10, 2) &amp; &quot; s)&quot;" newline="True"/>
+            <comment text="Il tempo del giro si ricava dalla posizione; il numero del giro e' posizione + 1"/>
+            <output expression="&quot;Giro migliore: &quot; &amp; v[idxMin] &amp; &quot; decimi (giro n. &quot; &amp; (idxMin + 1) &amp; &quot;)&quot;" newline="True"/>
+            <output expression="&quot;Giro peggiore: &quot; &amp; v[idxMax] &amp; &quot; decimi (giro n. &quot; &amp; (idxMax + 1) &amp; &quot;)&quot;" newline="True"/>
+            <output expression="&quot;Giri più lenti della media: &quot; &amp; contaSopraMedia(v, n, tempoMedio)" newline="True"/>
+        </body>
+    </function>
+    <function name="caricaRandom" type="None" variable="">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+            <parameter name="a" type="Integer" array="False"/>
+            <parameter name="b" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="1. Caricamento random: riempie il vettore con valori casuali in [a, b] (a + Random(b - a + 1) va da a a b)"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; n">
+                <assign variable="v[i]" expression="a + Random(b - a + 1)"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="stampa" type="None" variable="">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="2. Scansione: mostra gli elementi del vettore su una riga"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; n">
+                <output expression="v[i] &amp; &quot; &quot;" newline="False"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+            <output expression="&quot;&quot;" newline="True"/>
+        </body>
+    </function>
+    <function name="contaGiriVeloci" type="Integer" variable="conta">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+            <parameter name="soglia" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="3. Contatore: quanti elementi sono minori della soglia"/>
+            <declare name="i, conta" type="Integer" array="False" size=""/>
+            <assign variable="conta" expression="0"/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; n">
+                <if expression="v[i] &lt; soglia">
+                    <then>
+                        <assign variable="conta" expression="conta + 1"/>
+                    </then>
+                    <else/>
+                </if>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="somma" type="Integer" variable="tot">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="4. Accumulatore: somma degli elementi del vettore"/>
+            <declare name="i, tot" type="Integer" array="False" size=""/>
+            <assign variable="tot" expression="0"/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; n">
+                <assign variable="tot" expression="tot + v[i]"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="media" type="Real" variable="m">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="5. Media: riusa la funzione somma (la divisione / da' sempre un reale)"/>
+            <declare name="m" type="Real" array="False" size=""/>
+            <assign variable="m" expression="somma(v, n) / n"/>
+        </body>
+    </function>
+    <function name="posMin" type="Integer" variable="idxMin">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="6. Minimo + posizione: restituisce l'indice dell'elemento minimo (in [0, n-1])"/>
+            <declare name="i, idxMin" type="Integer" array="False" size=""/>
+            <assign variable="idxMin" expression="0"/>
+            <assign variable="i" expression="1"/>
+            <while expression="i &lt; n">
+                <if expression="v[i] &lt; v[idxMin]">
+                    <then>
+                        <assign variable="idxMin" expression="i"/>
+                    </then>
+                    <else/>
+                </if>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="posMax" type="Integer" variable="idxMax">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="7. Massimo + posizione: restituisce l'indice dell'elemento massimo (in [0, n-1])"/>
+            <declare name="i, idxMax" type="Integer" array="False" size=""/>
+            <assign variable="idxMax" expression="0"/>
+            <assign variable="i" expression="1"/>
+            <while expression="i &lt; n">
+                <if expression="v[i] &gt; v[idxMax]">
+                    <then>
+                        <assign variable="idxMax" expression="i"/>
+                    </then>
+                    <else/>
+                </if>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="contaSopraMedia" type="Integer" variable="conta">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+            <parameter name="m" type="Real" array="False"/>
+        </parameters>
+        <body>
+            <comment text="8. Contatore: quanti giri sono piu' lenti della media (tempo maggiore di m)"/>
+            <declare name="i, conta" type="Integer" array="False" size=""/>
+            <assign variable="conta" expression="0"/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; n">
+                <if expression="v[i] &gt; m">
+                    <then>
+                        <assign variable="conta" expression="conta + 1"/>
+                    </then>
+                    <else/>
+                </if>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+</flowgorithm>
