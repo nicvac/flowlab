@@ -4,7 +4,7 @@
         <attribute name="name" value="Gran Premio di Monza, la gara"/>
         <attribute name="authors" value="Nicola Vacca"/>
         <attribute name="about" value="Antonelli e Russell completano 10 giri con tempi casuali in [810, 825] decimi di secondo: statistiche di ciascun pilota con le stesse funzioni, vincitore, distacco e giro più veloce della gara."/>
-        <attribute name="saved" value="2026-11-04 10:00:00 AM"/>
+        <attribute name="saved" value="2026-11-04 11:00:00 AM"/>
     </attributes>
     <function name="Main" type="None" variable="">
         <parameters/>
@@ -19,27 +19,55 @@
             <assign variable="T_MAX" expression="825"/>
             <declare name="SOGLIA_VELOCE" type="Integer" array="False" size="" flowlab-const="True"/>
             <assign variable="SOGLIA_VELOCE" expression="815"/>
-            <comment text="LAVORO"/>
+            <comment text="OUTPUT"/>
             <declare name="vAntonelli" type="Integer" array="True" size="N_GIRI"/>
             <declare name="vRussell" type="Integer" array="True" size="N_GIRI"/>
-            <declare name="idxMinAntonelli" type="Integer" array="False" size=""/>
-            <declare name="idxMinRussell" type="Integer" array="False" size=""/>
-            <comment text="OUTPUT"/>
-            <declare name="totAntonelli" type="Integer" array="False" size=""/>
-            <declare name="totRussell" type="Integer" array="False" size=""/>
+            <declare name="giriVelociAntonelli, totAntonelli, idxMinAntonelli, idxMaxAntonelli, sopraMediaAntonelli" type="Integer" array="False" size=""/>
+            <declare name="mediaAntonelli" type="Real" array="False" size=""/>
+            <declare name="giriVelociRussell, totRussell, idxMinRussell, idxMaxRussell, sopraMediaRussell" type="Integer" array="False" size=""/>
+            <declare name="mediaRussell" type="Real" array="False" size=""/>
             <declare name="distacco" type="Integer" array="False" size=""/>
             <comment text="Caricamento dei tempi dei due piloti"/>
             <call expression="caricaRandom(vAntonelli, N_GIRI, T_MIN, T_MAX)"/>
             <call expression="caricaRandom(vRussell, N_GIRI, T_MIN, T_MAX)"/>
             <output expression="&quot;=== GP di Monza - Gara ===&quot;" newline="True"/>
-            <comment text="Statistiche: la stessa procedura per entrambi i piloti"/>
-            <call expression="analizzaPilota(&quot;Antonelli&quot;, vAntonelli, N_GIRI, SOGLIA_VELOCE)"/>
-            <output expression="&quot;&quot;" newline="True"/>
-            <call expression="analizzaPilota(&quot;Russell&quot;, vRussell, N_GIRI, SOGLIA_VELOCE)"/>
-            <output expression="&quot;&quot;" newline="True"/>
-            <comment text="Il vincitore: vince chi ha il tempo totale minore"/>
+            <comment text="Statistiche di Antonelli"/>
+            <assign variable="giriVelociAntonelli" expression="contaGiriVeloci(vAntonelli, N_GIRI, SOGLIA_VELOCE)"/>
             <assign variable="totAntonelli" expression="somma(vAntonelli, N_GIRI)"/>
+            <assign variable="mediaAntonelli" expression="media(vAntonelli, N_GIRI)"/>
+            <assign variable="idxMinAntonelli" expression="posMin(vAntonelli, N_GIRI)"/>
+            <assign variable="idxMaxAntonelli" expression="posMax(vAntonelli, N_GIRI)"/>
+            <assign variable="sopraMediaAntonelli" expression="contaSopraMedia(vAntonelli, N_GIRI, mediaAntonelli)"/>
+            <output expression="&quot;Pilota: Antonelli&quot;" newline="True"/>
+            <output expression="&quot;Tempi (decimi): &quot;" newline="False"/>
+            <call expression="stampa(vAntonelli, N_GIRI)"/>
+            <output expression="&quot;Giri veloci (&lt; &quot; &amp; SOGLIA_VELOCE &amp; &quot;): &quot; &amp; giriVelociAntonelli" newline="True"/>
+            <output expression="&quot;Tempo totale: &quot; &amp; totAntonelli &amp; &quot; decimi (&quot; &amp; ToFixed(totAntonelli / 10, 1) &amp; &quot; s)&quot;" newline="True"/>
+            <output expression="&quot;Tempo medio: &quot; &amp; ToFixed(mediaAntonelli, 1) &amp; &quot; decimi (&quot; &amp; ToFixed(mediaAntonelli / 10, 2) &amp; &quot; s)&quot;" newline="True"/>
+            <comment text="Il tempo del giro si ricava dalla posizione; il numero del giro e' posizione + 1"/>
+            <output expression="&quot;Giro migliore: &quot; &amp; vAntonelli[idxMinAntonelli] &amp; &quot; decimi (giro n. &quot; &amp; (idxMinAntonelli + 1) &amp; &quot;)&quot;" newline="True"/>
+            <output expression="&quot;Giro peggiore: &quot; &amp; vAntonelli[idxMaxAntonelli] &amp; &quot; decimi (giro n. &quot; &amp; (idxMaxAntonelli + 1) &amp; &quot;)&quot;" newline="True"/>
+            <output expression="&quot;Giri più lenti della media: &quot; &amp; sopraMediaAntonelli" newline="True"/>
+            <output expression="&quot;&quot;" newline="True"/>
+            <comment text="Statistiche di Russell"/>
+            <assign variable="giriVelociRussell" expression="contaGiriVeloci(vRussell, N_GIRI, SOGLIA_VELOCE)"/>
             <assign variable="totRussell" expression="somma(vRussell, N_GIRI)"/>
+            <assign variable="mediaRussell" expression="media(vRussell, N_GIRI)"/>
+            <assign variable="idxMinRussell" expression="posMin(vRussell, N_GIRI)"/>
+            <assign variable="idxMaxRussell" expression="posMax(vRussell, N_GIRI)"/>
+            <assign variable="sopraMediaRussell" expression="contaSopraMedia(vRussell, N_GIRI, mediaRussell)"/>
+            <output expression="&quot;Pilota: Russell&quot;" newline="True"/>
+            <output expression="&quot;Tempi (decimi): &quot;" newline="False"/>
+            <call expression="stampa(vRussell, N_GIRI)"/>
+            <output expression="&quot;Giri veloci (&lt; &quot; &amp; SOGLIA_VELOCE &amp; &quot;): &quot; &amp; giriVelociRussell" newline="True"/>
+            <output expression="&quot;Tempo totale: &quot; &amp; totRussell &amp; &quot; decimi (&quot; &amp; ToFixed(totRussell / 10, 1) &amp; &quot; s)&quot;" newline="True"/>
+            <output expression="&quot;Tempo medio: &quot; &amp; ToFixed(mediaRussell, 1) &amp; &quot; decimi (&quot; &amp; ToFixed(mediaRussell / 10, 2) &amp; &quot; s)&quot;" newline="True"/>
+            <comment text="Il tempo del giro si ricava dalla posizione; il numero del giro e' posizione + 1"/>
+            <output expression="&quot;Giro migliore: &quot; &amp; vRussell[idxMinRussell] &amp; &quot; decimi (giro n. &quot; &amp; (idxMinRussell + 1) &amp; &quot;)&quot;" newline="True"/>
+            <output expression="&quot;Giro peggiore: &quot; &amp; vRussell[idxMaxRussell] &amp; &quot; decimi (giro n. &quot; &amp; (idxMaxRussell + 1) &amp; &quot;)&quot;" newline="True"/>
+            <output expression="&quot;Giri più lenti della media: &quot; &amp; sopraMediaRussell" newline="True"/>
+            <output expression="&quot;&quot;" newline="True"/>
+            <comment text="Il vincitore: vince chi ha il tempo totale minore (totali calcolati con somma)"/>
             <output expression="&quot;--- Classifica ---&quot;" newline="True"/>
             <if expression="totAntonelli &lt; totRussell">
                 <then>
@@ -61,8 +89,6 @@
                 </else>
             </if>
             <comment text="Giro più veloce della gara: si confrontano i giri migliori dei due piloti"/>
-            <assign variable="idxMinAntonelli" expression="posMin(vAntonelli, N_GIRI)"/>
-            <assign variable="idxMinRussell" expression="posMin(vRussell, N_GIRI)"/>
             <if expression="vAntonelli[idxMinAntonelli] &lt; vRussell[idxMinRussell]">
                 <then>
                     <output expression="&quot;Giro più veloce della gara: Antonelli, &quot; &amp; vAntonelli[idxMinAntonelli] &amp; &quot; decimi (giro n. &quot; &amp; (idxMinAntonelli + 1) &amp; &quot;)&quot;" newline="True"/>
@@ -78,33 +104,6 @@
                     </if>
                 </else>
             </if>
-        </body>
-    </function>
-    <function name="analizzaPilota" type="None" variable="">
-        <parameters>
-            <parameter name="nome" type="String" array="False"/>
-            <parameter name="v" type="Integer" array="True"/>
-            <parameter name="n" type="Integer" array="False"/>
-            <parameter name="soglia" type="Integer" array="False"/>
-        </parameters>
-        <body>
-            <comment text="Stampa le statistiche di un pilota usando le funzioni sul vettore: si scrive una volta e si chiama per ciascun pilota"/>
-            <declare name="tot, idxMin, idxMax" type="Integer" array="False" size=""/>
-            <declare name="tempoMedio" type="Real" array="False" size=""/>
-            <assign variable="tot" expression="somma(v, n)"/>
-            <assign variable="tempoMedio" expression="media(v, n)"/>
-            <assign variable="idxMin" expression="posMin(v, n)"/>
-            <assign variable="idxMax" expression="posMax(v, n)"/>
-            <output expression="&quot;Pilota: &quot; &amp; nome" newline="True"/>
-            <output expression="&quot;Tempi (decimi): &quot;" newline="False"/>
-            <call expression="stampa(v, n)"/>
-            <output expression="&quot;Giri veloci (&lt; &quot; &amp; soglia &amp; &quot;): &quot; &amp; contaGiriVeloci(v, n, soglia)" newline="True"/>
-            <output expression="&quot;Tempo totale: &quot; &amp; tot &amp; &quot; decimi (&quot; &amp; ToFixed(tot / 10, 1) &amp; &quot; s)&quot;" newline="True"/>
-            <output expression="&quot;Tempo medio: &quot; &amp; ToFixed(tempoMedio, 1) &amp; &quot; decimi (&quot; &amp; ToFixed(tempoMedio / 10, 2) &amp; &quot; s)&quot;" newline="True"/>
-            <comment text="Il tempo del giro si ricava dalla posizione; il numero del giro e' posizione + 1"/>
-            <output expression="&quot;Giro migliore: &quot; &amp; v[idxMin] &amp; &quot; decimi (giro n. &quot; &amp; (idxMin + 1) &amp; &quot;)&quot;" newline="True"/>
-            <output expression="&quot;Giro peggiore: &quot; &amp; v[idxMax] &amp; &quot; decimi (giro n. &quot; &amp; (idxMax + 1) &amp; &quot;)&quot;" newline="True"/>
-            <output expression="&quot;Giri più lenti della media: &quot; &amp; contaSopraMedia(v, n, tempoMedio)" newline="True"/>
         </body>
     </function>
     <function name="caricaRandom" type="None" variable="">
