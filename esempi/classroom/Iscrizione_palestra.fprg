@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Iscrizione in palestra"/>
+        <attribute name="authors" value="Nicola Vacca"/>
+        <attribute name="about" value="Dati etaAnni, numMesi (da leggere in input), calcola e visualizza il costo di iscrizione (€)."/>
+        <attribute name="saved" value="2026-11-06 01:00:00 PM"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="La palestra applica una tariffa mensile standard di 45 euro e una tariffa agevolata di 30 euro al mese per i giovani fino a 20 anni compresi. Per i nuovi iscritti c'e' una quota fissa di iscrizione una tantum di 15 euro."/>
+            <comment text="COSTANTI"/>
+            <declare name="SOGLIA_ETA" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="SOGLIA_ETA" expression="20"/>
+            <declare name="TARIFFA_AGEVOLATA_EURO" type="Real" array="False" size="" flowlab-const="True"/>
+            <assign variable="TARIFFA_AGEVOLATA_EURO" expression="30"/>
+            <declare name="TARIFFA_STANDARD_EURO" type="Real" array="False" size="" flowlab-const="True"/>
+            <assign variable="TARIFFA_STANDARD_EURO" expression="45"/>
+            <declare name="QUOTA_ISCRIZIONE_EURO" type="Real" array="False" size="" flowlab-const="True"/>
+            <assign variable="QUOTA_ISCRIZIONE_EURO" expression="15"/>
+            <comment text="INPUT"/>
+            <declare name="etaAnni" type="Integer" array="False" size=""/>
+            <declare name="numMesi" type="Integer" array="False" size=""/>
+            <comment text="LAVORO"/>
+            <declare name="tariffaEuro" type="Real" array="False" size=""/>
+            <comment text="OUTPUT"/>
+            <declare name="costoEuro" type="Real" array="False" size=""/>
+            <output expression="&quot;Eta' (anni): &quot;" newline="True"/>
+            <input variable="etaAnni"/>
+            <output expression="&quot;Numero di mesi: &quot;" newline="True"/>
+            <input variable="numMesi"/>
+            <if expression="etaAnni &lt;= SOGLIA_ETA">
+                <then>
+                    <assign variable="tariffaEuro" expression="TARIFFA_AGEVOLATA_EURO"/>
+                </then>
+                <else>
+                    <assign variable="tariffaEuro" expression="TARIFFA_STANDARD_EURO"/>
+                </else>
+            </if>
+            <assign variable="costoEuro" expression="QUOTA_ISCRIZIONE_EURO + tariffaEuro * numMesi"/>
+            <output expression="&quot;Costo di iscrizione (€): &quot; &amp; costoEuro" newline="True"/>
+        </body>
+    </function>
+</flowgorithm>
