@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Risparmi per la moto"/>
+        <attribute name="authors" value="Nicola Vacca"/>
+        <attribute name="about" value="Calcola e visualizza se i risparmi sono sufficienti per l'acquisto della moto e l'eventuale importo mancante (€), dati costoMotoEuro, risparmiEuro (da leggere in input)."/>
+        <attribute name="saved" value="2026-11-06 10:00:00 AM"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Luca vuole sapere se la somma messa da parte gli basta per comprare la moto e, se non basta, quanti euro gli mancano."/>
+            <comment text="INPUT"/>
+            <declare name="costoMotoEuro" type="Real" array="False" size=""/>
+            <declare name="risparmiEuro" type="Real" array="False" size=""/>
+            <comment text="OUTPUT"/>
+            <declare name="mancanteEuro" type="Real" array="False" size=""/>
+            <output expression="&quot;Costo della moto (€): &quot;" newline="True"/>
+            <input variable="costoMotoEuro"/>
+            <output expression="&quot;Risparmi messi da parte (€): &quot;" newline="True"/>
+            <input variable="risparmiEuro"/>
+            <if expression="risparmiEuro &gt;= costoMotoEuro">
+                <then>
+                    <output expression="&quot;Risparmi sufficienti per l'acquisto della moto&quot;" newline="True"/>
+                </then>
+                <else>
+                    <assign variable="mancanteEuro" expression="costoMotoEuro - risparmiEuro"/>
+                    <output expression="&quot;Risparmi insufficienti, mancano (€): &quot; &amp; mancanteEuro" newline="True"/>
+                </else>
+            </if>
+        </body>
+    </function>
+</flowgorithm>
