@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Iscrizione in palestra, variante con validazione e sconto fedeltà"/>
+        <attribute name="authors" value="Nicola Vacca"/>
+        <attribute name="about" value="Dati etaAnni, numMesi (da leggere in input), calcola e visualizza il costo di iscrizione (€), con validazione dei mesi e sconto fedeltà."/>
+        <attribute name="saved" value="2026-11-06 02:00:00 PM"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Tariffa mensile standard 45 euro, agevolata 30 euro fino a 20 anni compresi, quota di iscrizione una tantum 15 euro. Variante: mesi minori o uguali a zero non validi; da 6 mesi in su sconto fedelta' del 10% sul totale."/>
+            <comment text="COSTANTI"/>
+            <declare name="SOGLIA_ETA" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="SOGLIA_ETA" expression="20"/>
+            <declare name="TARIFFA_AGEVOLATA_EURO" type="Real" array="False" size="" flowlab-const="True"/>
+            <assign variable="TARIFFA_AGEVOLATA_EURO" expression="30"/>
+            <declare name="TARIFFA_STANDARD_EURO" type="Real" array="False" size="" flowlab-const="True"/>
+            <assign variable="TARIFFA_STANDARD_EURO" expression="45"/>
+            <declare name="QUOTA_ISCRIZIONE_EURO" type="Real" array="False" size="" flowlab-const="True"/>
+            <assign variable="QUOTA_ISCRIZIONE_EURO" expression="15"/>
+            <declare name="MESI_MIN_FEDELTA" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="MESI_MIN_FEDELTA" expression="6"/>
+            <declare name="SCONTO_FEDELTA_PERC" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="SCONTO_FEDELTA_PERC" expression="10"/>
+            <comment text="INPUT"/>
+            <declare name="etaAnni" type="Integer" array="False" size=""/>
+            <declare name="numMesi" type="Integer" array="False" size=""/>
+            <comment text="LAVORO"/>
+            <declare name="tariffaEuro" type="Real" array="False" size=""/>
+            <comment text="OUTPUT"/>
+            <declare name="costoEuro" type="Real" array="False" size=""/>
+            <declare name="scontoEuro" type="Real" array="False" size=""/>
+            <output expression="&quot;Eta' (anni): &quot;" newline="True"/>
+            <input variable="etaAnni"/>
+            <output expression="&quot;Numero di mesi: &quot;" newline="True"/>
+            <input variable="numMesi"/>
+            <comment text="Validazione: con mesi minori o uguali a zero non si calcola il totale"/>
+            <if expression="numMesi &lt;= 0">
+                <then>
+                    <output expression="&quot;Numero di mesi non valido&quot;" newline="True"/>
+                </then>
+                <else>
+                    <if expression="etaAnni &lt;= SOGLIA_ETA">
+                        <then>
+                            <assign variable="tariffaEuro" expression="TARIFFA_AGEVOLATA_EURO"/>
+                        </then>
+                        <else>
+                            <assign variable="tariffaEuro" expression="TARIFFA_STANDARD_EURO"/>
+                        </else>
+                    </if>
+                    <assign variable="costoEuro" expression="QUOTA_ISCRIZIONE_EURO + tariffaEuro * numMesi"/>
+                    <comment text="Sconto fedelta' sul totale finale"/>
+                    <assign variable="scontoEuro" expression="0"/>
+                    <if expression="numMesi &gt;= MESI_MIN_FEDELTA">
+                        <then>
+                            <assign variable="scontoEuro" expression="costoEuro * SCONTO_FEDELTA_PERC / 100"/>
+                        </then>
+                        <else/>
+                    </if>
+                    <assign variable="costoEuro" expression="costoEuro - scontoEuro"/>
+                    <output expression="&quot;Sconto fedeltà (€): &quot; &amp; scontoEuro" newline="True"/>
+                    <output expression="&quot;Costo di iscrizione (€): &quot; &amp; costoEuro" newline="True"/>
+                </else>
+            </if>
+        </body>
+    </function>
+</flowgorithm>
