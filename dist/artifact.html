@@ -3493,7 +3493,7 @@ LANGS.java = cFamily({
   declare: (n, t, arr, D) => (arr ? `${tJava(t)}${'[]'.repeat(D.length)} ${n} = new ${tJava(t)}${D.map((d) => `[${d}]`).join('')};` : `${tJava(t)} ${n} = ${DEF_C[t] || 'null'};`),
   constDecl: (n, t, e) => `final ${tJava(t)} ${n} = ${e};`,
   declareInit: (n, t, e) => `${tJava(t)} ${n} = ${e};`,
-  input: (o, v, t) => { const i = J_PFX + 'input'; o.line(`${v} = ${t === 'Integer' ? `Integer.parseInt(${i}.nextLine().trim())` : t === 'Real' ? `Double.parseDouble(${i}.nextLine().trim())` : t === 'Boolean' ? `Boolean.parseBoolean(${i}.nextLine().trim())` : `${i}.nextLine()`};`); },
+  input: (o, v, t) => { const i = J_PFX + 'input'; o.line(`${v} = ${t === 'Integer' ? `Integer.parseInt(${i}.nextLine())` : t === 'Real' ? `Double.parseDouble(${i}.nextLine())` : t === 'Boolean' ? `Boolean.parseBoolean(${i}.nextLine())` : `${i}.nextLine()`};`); },
   nul: 'null', self: 'this',
   output: (e, nl) => `System.out.${nl ? 'println' : 'print'}(${e})`,
   files(o, s, E, sc, lvInfo, used) {
@@ -3501,7 +3501,7 @@ LANGS.java = cFamily({
     const R = J_PFX + 'fileLettura', W = J_PFX + 'fileScrittura';
     if (s.kind === 'open') o.line(s.mode === 'read' ? `${R} = new Scanner(new java.io.File(${E(s.expression, sc)}));` : `${W} = new java.io.PrintWriter(${E(s.expression, sc)});`);
     if (s.kind === 'close') o.line(s.mode === 'read' ? `${R}.close();` : `${W}.close();`);
-    if (s.kind === 'read') { const t = lvInfo(s.variable, sc).type; o.line(`${E(s.variable, sc)} = ${t === 'Integer' ? `Integer.parseInt(${R}.nextLine().trim())` : t === 'Real' ? `Double.parseDouble(${R}.nextLine().trim())` : t === 'Boolean' ? `Boolean.parseBoolean(${R}.nextLine().trim())` : `${R}.nextLine()`};`); }
+    if (s.kind === 'read') { const t = lvInfo(s.variable, sc).type; o.line(`${E(s.variable, sc)} = ${t === 'Integer' ? `Integer.parseInt(${R}.nextLine())` : t === 'Real' ? `Double.parseDouble(${R}.nextLine())` : t === 'Boolean' ? `Boolean.parseBoolean(${R}.nextLine())` : `${R}.nextLine()`};`); }
     if (s.kind === 'write') o.line(`${W}.println(${E(s.expression, sc)});`);
   },
   multiAssign(o, tg, call, f, sc) {
