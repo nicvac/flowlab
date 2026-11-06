@@ -1,6 +1,6 @@
 # Esempi
 
-I programmi di esempio di FlowLab in formato `.fprg`. Il link nella prima colonna apre l'esempio direttamente in FlowLab.
+I programmi di esempio di FlowLab in formato `.fprg`. Il link nella prima colonna apre l'esempio direttamente in FlowLab. 
 
 | Esempio | Argomenti | File | Formato |
 |---|---|---|---|
