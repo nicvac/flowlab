@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Salto migliore con if nidificati"/>
+        <attribute name="authors" value="Nicola Vacca"/>
+        <attribute name="about" value="Dati salto1M, salto2M, salto3M (da leggere in input), calcola e visualizza la misura massima (m)."/>
+        <attribute name="saved" value="2026-11-06 11:00:00 AM"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Il professore di scienze motorie fa fare un salto in lungo a ciascuno dei tre migliori studenti e vuole conoscere subito la misura del salto migliore, anche quando due salti hanno la stessa misura."/>
+            <comment text="INPUT"/>
+            <declare name="salto1M" type="Real" array="False" size=""/>
+            <declare name="salto2M" type="Real" array="False" size=""/>
+            <declare name="salto3M" type="Real" array="False" size=""/>
+            <comment text="OUTPUT"/>
+            <declare name="maxM" type="Real" array="False" size=""/>
+            <output expression="&quot;Misura del primo salto (m): &quot;" newline="True"/>
+            <input variable="salto1M"/>
+            <output expression="&quot;Misura del secondo salto (m): &quot;" newline="True"/>
+            <input variable="salto2M"/>
+            <output expression="&quot;Misura del terzo salto (m): &quot;" newline="True"/>
+            <input variable="salto3M"/>
+            <comment text="If nidificati: con &gt;= anche i salti di pari misura trovano il massimo"/>
+            <if expression="salto1M &gt;= salto2M">
+                <then>
+                    <if expression="salto1M &gt;= salto3M">
+                        <then>
+                            <assign variable="maxM" expression="salto1M"/>
+                        </then>
+                        <else>
+                            <assign variable="maxM" expression="salto3M"/>
+                        </else>
+                    </if>
+                </then>
+                <else>
+                    <if expression="salto2M &gt;= salto3M">
+                        <then>
+                            <assign variable="maxM" expression="salto2M"/>
+                        </then>
+                        <else>
+                            <assign variable="maxM" expression="salto3M"/>
+                        </else>
+                    </if>
+                </else>
+            </if>
+            <output expression="&quot;Salto migliore (m): &quot; &amp; maxM" newline="True"/>
+        </body>
+    </function>
+</flowgorithm>
