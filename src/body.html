@@ -11,38 +11,38 @@
     <button class="tb icon" id="redoBtn" type="button" title="Ripeti (Ctrl+Y)" aria-label="Ripeti"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
     <span class="sep" aria-hidden="true"></span>
     <div class="viewsw" role="radiogroup" aria-label="Vista del programma">
-      <button type="button" class="vbtn" id="viewFn" role="radio" aria-checked="true" aria-label="Vista funzioni" title="Vista funzioni: il programma è un insieme di funzioni"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h-1.5A3.5 3.5 0 0 0 10 7.5V20M6.5 11H14"/><path d="M15.5 13.5l5 5M20.5 13.5l-5 5"/></svg><span class="lbl">Funzioni</span></button>
-      <button type="button" class="vbtn" id="viewOo" role="radio" aria-checked="false" aria-label="Vista oggetti" title="Vista oggetti: diagramma delle classi UML"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="3" width="9" height="11" rx="1.2"/><path d="M2.5 7h9M2.5 10.5h9"/><rect x="13.5" y="10" width="8" height="11" rx="1.2"/><path d="M13.5 14h8M7 14v3.5h6.5"/></svg><span class="lbl">Oggetti</span></button>
+      <button type="button" class="vbtn" id="viewFn" role="radio" aria-checked="true" aria-label="Vista funzioni" title="Vista funzioni: il programma è un insieme di funzioni (Ctrl+Alt+F)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h-1.5A3.5 3.5 0 0 0 10 7.5V20M6.5 11H14"/><path d="M15.5 13.5l5 5M20.5 13.5l-5 5"/></svg><span class="lbl">Funzioni</span></button>
+      <button type="button" class="vbtn" id="viewOo" role="radio" aria-checked="false" aria-label="Vista oggetti" title="Vista oggetti: diagramma delle classi UML (Ctrl+Alt+O)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="3" width="9" height="11" rx="1.2"/><path d="M2.5 7h9M2.5 10.5h9"/><rect x="13.5" y="10" width="8" height="11" rx="1.2"/><path d="M13.5 14h8M7 14v3.5h6.5"/></svg><span class="lbl">Oggetti</span></button>
     </div>
     <div class="funcbox">
       <label for="funcSel" id="funcLbl">Funzione</label>
       <select id="funcSel" class="fsel"></select>
-      <button class="iconbtn" id="funcAdd" type="button" title="Nuova funzione" aria-label="Nuova funzione"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
-      <button class="iconbtn" id="funcEdit" type="button" title="Modifica funzione o proprietà del programma" aria-label="Modifica funzione"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button>
-      <button class="iconbtn" id="funcDel" type="button" title="Elimina funzione" aria-label="Elimina funzione"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg></button>
+      <button class="iconbtn" id="funcAdd" type="button" title="Nuova funzione (N)" aria-label="Nuova funzione"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button class="iconbtn" id="funcEdit" type="button" title="Modifica funzione o proprietà del programma (F2)" aria-label="Modifica funzione"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button>
+      <button class="iconbtn" id="funcDel" type="button" title="Elimina funzione (Maiusc+Canc)" aria-label="Elimina funzione"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg></button>
     </div>
     <span class="sep" aria-hidden="true"></span>
     <button class="tb run" id="runBtn" type="button" title="Esegui (F5)"><svg viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></svg><span class="lbl">Esegui</span></button>
     <button class="tb" id="stepBtn" type="button" title="Esegui un passo (F10)"><svg viewBox="0 0 24 24"><path d="M5 5v14M10 6l9 6-9 6z"/></svg><span class="lbl">Passo</span></button>
     <button class="tb icon" id="overBtn" type="button" title="Passo sopra (F8): esegue tutta la chiamata del blocco corrente senza entrare nella funzione o nel metodo" aria-label="Passo sopra"><svg viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 15-3.5"/><path d="M20 5v5h-5"/><circle cx="12" cy="18" r="2"/></svg></button>
-    <button class="tb icon" id="pauseBtn" type="button" title="Pausa" aria-label="Pausa" disabled><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
-    <button class="tb icon" id="stopBtn" type="button" title="Ferma" aria-label="Ferma" disabled><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button>
+    <button class="tb icon" id="pauseBtn" type="button" title="Pausa (F6)" aria-label="Pausa" disabled><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
+    <button class="tb icon" id="stopBtn" type="button" title="Ferma (Maiusc+F5)" aria-label="Ferma" disabled><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button>
     <label class="speed" for="speed"><span class="lbl">Velocità</span> <input id="speed" type="range" min="0" max="3" step="1" value="2"><output id="speedVal">Media</output></label>
     <span class="grow"></span>
     <button class="tb" id="exBtn" type="button" aria-haspopup="menu" title="Programmi di esempio"><svg viewBox="0 0 24 24"><path d="M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z"/></svg><span class="lbl">Esempi</span></button>
-    <button class="tb icon" id="helpBtn" type="button" title="Guida rapida" aria-label="Guida rapida"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.6V14M12 17.5v.01"/></svg></button>
+    <button class="tb icon" id="helpBtn" type="button" title="Guida rapida (F1)" aria-label="Guida rapida"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.6V14M12 17.5v.01"/></svg></button>
     <button class="tb icon" id="themeBtn" type="button" title="Tema chiaro/scuro" aria-label="Cambia tema"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor"/></svg></button>
   </header>
 
   <main class="work">
     <section class="canvas-col" aria-label="Diagramma di flusso">
       <div id="canvasWrap"><div id="chart"></div></div>
-      <div id="crumbBar" hidden><button type="button" id="backUml" title="Torna al diagramma delle classi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>Diagramma delle classi</button><span id="crumbWhere"></span></div>
+      <div id="crumbBar" hidden><button type="button" id="backUml" title="Torna al diagramma delle classi (U)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>Diagramma delle classi</button><span id="crumbWhere"></span></div>
       <div class="zoombar" role="group" aria-label="Zoom">
         <button type="button" id="zoomOut" aria-label="Riduci">−</button>
-        <button type="button" id="zoomVal" title="Torna al 100%">100%</button>
+        <button type="button" id="zoomVal" title="Torna al 100% (Ctrl+0)">100%</button>
         <button type="button" id="zoomIn" aria-label="Ingrandisci">+</button>
-        <button type="button" id="zoomFit" title="Adatta alla finestra" aria-label="Adatta alla finestra">⤢</button>
+        <button type="button" id="zoomFit" title="Adatta alla finestra (Maiusc+1)" aria-label="Adatta alla finestra">⤢</button>
       </div>
       <footer class="statusbar">
         <span id="status" class="status" role="status"><span id="statusText">Pronto</span></span>
@@ -50,7 +50,7 @@
         <span class="hint-add">Clic su una freccia per aggiungere un blocco · doppio clic per modificarlo · trascina per spostarlo</span>
       </footer>
     </section>
-    <div id="grip" role="separator" aria-orientation="vertical" aria-label="Ridimensiona pannello" tabindex="0"><button id="sideToggle" type="button" title="Nascondi il pannello" aria-label="Nascondi il pannello" aria-expanded="true"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5L8 6L4.5 9.5"/></svg></button></div>
+    <div id="grip" role="separator" aria-orientation="vertical" aria-label="Ridimensiona pannello" tabindex="0"><button id="sideToggle" type="button" title="Nascondi il pannello (Ctrl+B)" aria-label="Nascondi il pannello" aria-expanded="true"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5L8 6L4.5 9.5"/></svg></button></div>
     <aside id="side" aria-label="Pannelli">
       <div id="tabs" role="tablist" aria-label="Pannelli"></div>
       <section class="pane" id="pane-console" role="tabpanel" aria-label="Console">

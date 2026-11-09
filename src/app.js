@@ -230,15 +230,15 @@
         sel.append(og);
       }
       const cur = !st.uml && M.classOf(st.prog, func());
-      add.title = st.uml ? 'Nuova classe' : `Nuovo metodo nella classe ${cur ? cur.name : ''}`;
-      edit.title = st.uml ? 'Modifica l\'elemento selezionato nel diagramma' : 'Modifica il metodo';
-      del.title = st.uml ? 'Elimina l\'elemento selezionato nel diagramma' : 'Elimina il metodo';
+      add.title = (st.uml ? 'Nuova classe' : `Nuovo metodo nella classe ${cur ? cur.name : ''}`) + ' (N)';
+      edit.title = (st.uml ? 'Modifica l\'elemento selezionato nel diagramma' : 'Modifica il metodo') + ' (F2)';
+      del.title = st.uml ? 'Elimina l\'elemento selezionato nel diagramma (Canc)' : 'Elimina il metodo (Maiusc+Canc)';
       del.disabled = st.uml ? !st.usel : st.fi === 0;
       edit.disabled = st.uml && !st.usel;
       return;
     }
     $('#funcLbl').textContent = 'Funzione';
-    add.title = 'Nuova funzione'; edit.title = 'Modifica funzione o proprietà del programma'; del.title = 'Elimina funzione';
+    add.title = 'Nuova funzione (N)'; edit.title = 'Modifica funzione o proprietà del programma (F2)'; del.title = 'Elimina funzione (Maiusc+Canc)';
     edit.disabled = false;
     st.prog.functions.forEach((f, i) => sel.append(h('option', { value: i, selected: i === st.fi }, i === 0 ? 'Inizio (principale)' : `${f.name}(${f.params.map((p) => p.name).join(', ')})`)));
     del.disabled = st.fi === 0;
@@ -278,6 +278,21 @@
     ['File', ['open', 'read', 'write', 'close']],
   ];
 
+  /* tasti per aggiungere i blocchi: dopo il blocco selezionato, o in fondo al diagramma */
+  const KIND_KEY = {
+    declare: 'D', const: 'K', assign: 'A', input: 'I', output: 'O', call: 'C',
+    if: 'S', while: 'M', for: 'P', do: 'F', comment: '/', breakpoint: 'B',
+    open: 'Maiusc+A', read: 'Maiusc+L', write: 'Maiusc+S', close: 'Maiusc+C',
+  };
+  const KEY_KIND = Object.fromEntries(Object.entries(KIND_KEY).map(([k, v]) => [v, k]));
+  /* il tasto premuto scritto come in KIND_KEY (lettera, con Maiusc+ davanti) */
+  function keyLabel(e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return null;
+    if (e.key === '/') return '/';
+    if (!/^Key[A-Z]$/.test(e.code)) return null;
+    return (e.shiftKey ? 'Maiusc+' : '') + e.code.slice(3);
+  }
+
   /* ------------------------------ Popover -------------------------------- */
   function closePop() { $('#pop').hidden = true; $('#pop').innerHTML = ''; }
   function openPop(x, y, content) {
@@ -292,30 +307,36 @@
   function insertMenu(insIdx, x, y) {
     const target = st.ins[insIdx];
     const box = h('div', { class: 'insmenu', role: 'menu' });
+    box._target = target; // per scegliere il blocco con la tastiera
     box.append(h('div', { class: 'pophead' }, 'Aggiungi un blocco'));
     for (const [g, kinds] of GROUPS) {
       const row = h('div', { class: 'insgroup' }, h('div', { class: 'glabel' }, g));
       const grid = h('div', { class: 'insgrid' });
       for (const k of kinds) {
         grid.append(h('button', { class: 'insbtn', type: 'button', role: 'menuitem', title: RenderLib.KIND_IT[k], onclick: () => { closePop(); addStmt(target, k); } },
-          h('span', { html: icon(k) }), h('span', { class: 'ilabel' }, RenderLib.KIND_IT[k])));
+          h('span', { html: icon(k) }), h('span', { class: 'ilabel' }, RenderLib.KIND_IT[k]), h('kbd', { class: 'ikey' }, KIND_KEY[k])));
       }
       row.append(grid); box.append(row);
     }
-    if (st.clip) box.append(h('button', { class: 'pastebtn', type: 'button', onclick: () => { closePop(); paste(target); } }, `Incolla qui (${RenderLib.KIND_IT[st.clip.kind]})`));
+    if (st.clip) box.append(h('button', { class: 'pastebtn', type: 'button', onclick: () => { closePop(); paste(target); } }, `Incolla qui (${RenderLib.KIND_IT[st.clip.kind]})  ·  Ctrl+V`));
     openPop(x, y, box);
   }
   function shapeMenu(id, x, y) {
     if (id.startsWith('start:') || id.startsWith('end:')) {
       const box = h('div', { class: 'ctxmenu' },
-        h('button', { type: 'button', onclick: () => { closePop(); st.fi === 0 ? editProgram() : editFunction(st.fi); } }, st.fi === 0 ? 'Proprietà del programma…' : 'Modifica funzione…'));
+        h('button', { type: 'button', onclick: () => { closePop(); st.fi === 0 ? editProgram() : editFunction(st.fi); } }, h('span', null, st.fi === 0 ? 'Proprietà del programma…' : isOO() ? 'Modifica il metodo…' : 'Modifica la funzione…'), h('kbd', null, 'F2')));
       openPop(x, y, box); return;
     }
     const box = h('div', { class: 'ctxmenu' },
       h('button', { type: 'button', onclick: () => { closePop(); editStmt(id); } }, h('span', null, 'Modifica…'), h('kbd', null, 'Invio')),
       h('button', { type: 'button', onclick: () => { closePop(); copySel(false); } }, h('span', null, 'Copia'), h('kbd', null, 'Ctrl+C')),
       h('button', { type: 'button', onclick: () => { closePop(); copySel(true); } }, h('span', null, 'Taglia'), h('kbd', null, 'Ctrl+X')),
+      st.clip ? h('button', { type: 'button', onclick: () => { closePop(); paste(); } }, h('span', null, 'Incolla dopo'), h('kbd', null, 'Ctrl+V')) : null,
       h('button', { type: 'button', onclick: () => { closePop(); duplicate(); } }, h('span', null, 'Duplica'), h('kbd', null, 'Ctrl+D')),
+      h('hr'),
+      h('button', { type: 'button', onclick: () => { closePop(); shiftSel(-1); } }, h('span', null, 'Sposta su'), h('kbd', null, 'Alt+↑')),
+      h('button', { type: 'button', onclick: () => { closePop(); shiftSel(1); } }, h('span', null, 'Sposta giù'), h('kbd', null, 'Alt+↓')),
+      h('hr'),
       h('button', { type: 'button', class: 'danger', onclick: () => { closePop(); deleteSel(); } }, h('span', null, 'Elimina'), h('kbd', null, 'Canc')));
     openPop(x, y, box);
   }
@@ -351,6 +372,20 @@
       target = f ? { arr: f.arr, idx: f.index + 1 } : { arr: func().body, idx: func().body.length };
     }
     mutate(() => { target.arr.splice(target.idx, 0, c); st.sel = c.id; });
+  }
+  /* sposta il blocco selezionato di un posto (dir -1 su, +1 giù) nella stessa sequenza */
+  function shiftSel(dir) {
+    if (!st.sel) return;
+    if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; }
+    const f = M.findStmt(st.prog, st.sel); if (!f) return;
+    const j = f.index + dir; if (j < 0 || j >= f.arr.length) return;
+    mutate(() => { f.arr.splice(f.index, 1); f.arr.splice(j, 0, f.stmt); });
+  }
+  /* nuovo blocco dalla tastiera: dopo il blocco selezionato o in fondo al diagramma */
+  function addByKey(kind) {
+    if (isUml() || func().abstract) return;
+    const f = st.sel && M.findStmt(st.prog, st.sel);
+    addStmt(f ? { arr: f.arr, idx: f.index + 1 } : { arr: func().body, idx: func().body.length }, kind);
   }
   function duplicate() {
     if (!st.sel) return;
@@ -895,36 +930,36 @@
   }
   function memberMenu(c, x, y) {
     const box = h('div', { class: 'ctxmenu' },
-      h('button', { type: 'button', onclick: () => { closePop(); editFunction(null, { cls: c, ctor: false }); } }, h('span', null, 'Nuovo metodo…')),
-      h('button', { type: 'button', onclick: () => { closePop(); editFunction(null, { cls: c, ctor: true }); } }, h('span', null, 'Nuovo costruttore…')));
+      h('button', { type: 'button', onclick: () => { closePop(); editFunction(null, { cls: c, ctor: false }); } }, h('span', null, 'Nuovo metodo…'), h('kbd', null, 'M')),
+      h('button', { type: 'button', onclick: () => { closePop(); editFunction(null, { cls: c, ctor: true }); } }, h('span', null, 'Nuovo costruttore…'), h('kbd', null, 'C')));
     openPop(x, y, box);
   }
   function umlMenu(e) {
     const box = e.target.closest('.ubox'), row = e.target.closest('.urow');
     const c = box && M.classById(st.prog, box.dataset.cls);
-    const B = (label, fn, cls) => h('button', { type: 'button', class: cls || '', onclick: () => { closePop(); fn(); } }, h('span', null, label));
+    const B = (label, fn, cls, key) => h('button', { type: 'button', class: cls || '', onclick: () => { closePop(); fn(); } }, h('span', null, label), key ? h('kbd', null, key) : null);
     let menuBox;
     if (!c) {
       const pt = svgPoint(e);
-      menuBox = h('div', { class: 'ctxmenu' }, B('Nuova classe…', () => classDialog(null, pt)));
+      menuBox = h('div', { class: 'ctxmenu' }, B('Nuova classe…', () => classDialog(null, pt), '', 'N'));
     } else if (row && row.dataset.kind === 'method') {
       const f = st.prog.functions.find((x) => x.id === row.dataset.fid);
       menuBox = h('div', { class: 'ctxmenu' },
-        B('Apri il diagramma di flusso', () => openMethod(f.id)),
-        B(f === st.prog.functions[0] ? 'Proprietà del programma…' : f.ctor ? 'Modifica il costruttore…' : 'Modifica la firma del metodo…', () => editMethodSig(f)),
+        B('Apri il diagramma di flusso', () => openMethod(f.id), '', 'Invio'),
+        B(f === st.prog.functions[0] ? 'Proprietà del programma…' : f.ctor ? 'Modifica il costruttore…' : 'Modifica la firma del metodo…', () => editMethodSig(f), '', 'F2'),
         f === st.prog.functions[0] ? null : h('hr'),
-        f === st.prog.functions[0] ? null : B(f.ctor ? 'Elimina il costruttore' : 'Elimina il metodo', () => deleteFunction(f), 'danger'));
+        f === st.prog.functions[0] ? null : B(f.ctor ? 'Elimina il costruttore' : 'Elimina il metodo', () => deleteFunction(f), 'danger', 'Canc'));
     } else if (row && row.dataset.kind === 'attr') {
       const i = +row.dataset.i;
-      menuBox = h('div', { class: 'ctxmenu' }, B('Modifica l\'attributo…', () => attrDialog(c, i)), h('hr'), B('Elimina l\'attributo', () => deleteAttr(c, i), 'danger'));
+      menuBox = h('div', { class: 'ctxmenu' }, B('Modifica l\'attributo…', () => attrDialog(c, i), '', 'Invio'), h('hr'), B('Elimina l\'attributo', () => deleteAttr(c, i), 'danger', 'Canc'));
     } else {
       menuBox = h('div', { class: 'ctxmenu' },
-        B('Nuovo attributo…', () => attrDialog(c, null)),
-        B('Nuovo metodo…', () => editFunction(null, { cls: c, ctor: false })),
-        B('Nuovo costruttore…', () => editFunction(null, { cls: c, ctor: true })),
+        B('Nuovo attributo…', () => attrDialog(c, null), '', 'A'),
+        B('Nuovo metodo…', () => editFunction(null, { cls: c, ctor: false }), '', 'M'),
+        B('Nuovo costruttore…', () => editFunction(null, { cls: c, ctor: true }), '', 'C'),
         h('hr'),
-        B('Modifica la classe…', () => classDialog(c)),
-        B('Elimina la classe', () => deleteClass(c), 'danger'));
+        B('Modifica la classe…', () => classDialog(c), '', 'Invio'),
+        B('Elimina la classe', () => deleteClass(c), 'danger', 'Canc'));
     }
     openPop(e.clientX, e.clientY, menuBox);
   }
@@ -1776,7 +1811,7 @@
   function setSideHidden(hidden) {
     document.body.classList.toggle('side-hidden', hidden);
     const b = $('#sideToggle');
-    b.title = hidden ? 'Mostra il pannello' : 'Nascondi il pannello';
+    b.title = (hidden ? 'Mostra il pannello' : 'Nascondi il pannello') + ' (Ctrl+B)';
     b.setAttribute('aria-label', b.title);
     b.setAttribute('aria-expanded', String(!hidden));
     store.set('sideHidden', hidden);
@@ -2145,19 +2180,21 @@
     menu(btn, [
       { label: 'Nuovo programma', key: 'Ctrl+Alt+N', do: newProgram },
       { label: 'Apri file .fprg…', key: 'Ctrl+O', do: openFile },
-      { label: 'Apri da indirizzo web…', do: openUrlDialog },
+      { label: 'Apri da indirizzo web…', key: 'Ctrl+Maiusc+O', do: openUrlDialog },
       { label: 'Salva come .fprg', key: 'Ctrl+S', do: saveFile },
-      { label: 'Copia XML negli appunti', do: copyXml },
-      { label: 'Copia il link a questo programma', do: copyShareLink },
+      { label: 'Copia XML negli appunti', key: 'Ctrl+Maiusc+X', do: copyXml },
+      { label: 'Copia il link a questo programma', key: 'Ctrl+Maiusc+L', do: copyShareLink },
       '-',
-      { label: 'Esporta diagramma SVG', do: () => download(safeName(st.prog.attrs.name) + '_' + (isUml() ? 'classi' : safeName(fname(func()))) + '.svg', exportSvg(), 'image/svg+xml') },
-      { label: 'Esporta diagramma PNG', do: exportPng },
-      { label: 'Esporta tutto il progetto in PDF', do: exportPdf },
-      { label: 'Scarica codice sorgente', do: () => download(safeName(st.prog.attrs.name) + '.' + CodeGen.LANGS[st.lang].ext, CodeGen.generate(st.prog, st.lang), 'text/plain') },
+      { label: 'Esporta diagramma SVG', key: 'Ctrl+Maiusc+G', do: exportSvgFile },
+      { label: 'Esporta diagramma PNG', key: 'Ctrl+Maiusc+E', do: exportPng },
+      { label: 'Esporta tutto il progetto in PDF', key: 'Ctrl+P', do: exportPdf },
+      { label: 'Scarica codice sorgente', key: 'Ctrl+Maiusc+S', do: downloadCode },
       '-',
-      { label: 'Proprietà del programma…', do: editProgram },
+      { label: 'Proprietà del programma…', key: 'Alt+Invio', do: editProgram },
     ]);
   }
+  function exportSvgFile() { download(safeName(st.prog.attrs.name) + '_' + (isUml() ? 'classi' : safeName(fname(func()))) + '.svg', exportSvg(), 'image/svg+xml'); }
+  function downloadCode() { download(safeName(st.prog.attrs.name) + '.' + CodeGen.LANGS[st.lang].ext, CodeGen.generate(st.prog, st.lang), 'text/plain'); }
   function examplesMenu(btn) {
     const r = btn.getBoundingClientRect();
     const box = h('div', { class: 'ctxmenu examples' }, h('div', { class: 'pophead' }, 'Programmi di esempio'));
@@ -2177,8 +2214,7 @@
       ['super(nome)', 'Blocco Chiamata, primo blocco del costruttore: esegue il costruttore della classe madre'], ['super.descrivi()', 'Esegue la versione del metodo della classe madre'],
       ['null   p = null', 'Nessun oggetto: si può assegnare e confrontare'], ['«abstract»', 'Classe astratta: non si creano oggetti. Un metodo astratto non ha corpo e lo definiscono le sottoclassi'], ['+  -  #', 'Accesso pubblico, privato, protetto (controllato durante l\'esecuzione)'],
     ].map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
-    const keys = [['F5  ·  Ctrl+Invio', 'Esegui / continua'], ['F10', 'Passo successivo (entra nelle funzioni chiamate)'], ['F8', 'Passo sopra (esegue la chiamata senza entrarci)'], ['Esc', 'Chiudi finestre e menu'], ['Invio  ·  doppio clic', 'Modifica il blocco selezionato'], ['Canc', 'Elimina il blocco selezionato'], ['Ctrl+C  X  V  D', 'Copia, taglia, incolla, duplica'], ['Ctrl+Z  ·  Ctrl+Y', 'Annulla, ripeti'], ['Ctrl+rotella', 'Zoom']]
-      .map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
+    const keys = SHORTCUTS.flatMap(([g, rows]) => [h('tr', { class: 'kgroup' }, h('td', { colspan: 2 }, g)), ...rows.map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)))]);
     const body = h('div', { class: 'help-body' },
       h('p', null, 'Fai clic su una freccia del diagramma per aggiungere un blocco. Trascina un blocco su un\'altra freccia per spostarlo. I file .fprg si aprono e si salvano con lo stesso formato XML usato dagli editor di diagrammi di flusso più diffusi a scuola.'),
       h('h3', null, 'Operatori'), h('table', { class: 'ref' }, h('tbody', null, ops)),
@@ -2189,43 +2225,137 @@
   }
 
   /* ------------------------------ Tastiera ------------------------------- */
+  /* elenco delle scorciatoie (Guida rapida) */
+  const SHORTCUTS = [
+    ['File', [
+      ['Ctrl+Alt+N', 'Nuovo programma'], ['Ctrl+O', 'Apri file .fprg'], ['Ctrl+Maiusc+O', 'Apri da indirizzo web'], ['Ctrl+S', 'Salva come .fprg'],
+      ['Ctrl+Maiusc+X', 'Copia XML negli appunti'], ['Ctrl+Maiusc+L', 'Copia il link al programma'],
+      ['Ctrl+Maiusc+G  ·  Ctrl+Maiusc+E', 'Esporta il diagramma in SVG, in PNG'], ['Ctrl+P', 'Esporta tutto il progetto in PDF'], ['Ctrl+Maiusc+S', 'Scarica il codice sorgente'],
+      ['Alt+Invio', 'Proprietà del programma'],
+    ]],
+    ['Esecuzione', [
+      ['F5  ·  Ctrl+Invio', 'Esegui / continua'], ['F10', 'Passo successivo (entra nelle funzioni chiamate)'], ['F8', 'Passo sopra (esegue la chiamata senza entrarci)'],
+      ['F6', 'Pausa'], ['Maiusc+F5', 'Ferma'],
+    ]],
+    ['Modifica', [
+      ['Ctrl+Z  ·  Ctrl+Y', 'Annulla, ripeti'], ['Ctrl+C  X  V  D', 'Copia, taglia, incolla (dopo il blocco selezionato), duplica'],
+      ['Invio  ·  doppio clic', 'Modifica il blocco selezionato'], ['Canc', 'Elimina il blocco selezionato'],
+      ['↑  ↓', 'Seleziona il blocco precedente, successivo'], ['Alt+↑  Alt+↓', 'Sposta il blocco selezionato su, giù'],
+    ]],
+    ['Aggiungi un blocco (dopo quello selezionato o in fondo; anche nel menu «Aggiungi un blocco»)', [
+      ['D  K  A', 'Dichiara, Costante, Assegna'], ['I  O  C', 'Input, Output, Chiama'], ['S  M  P  F', 'Se, Mentre, Per, Fai-mentre'], ['/  B', 'Commento, Interruzione'],
+      ['Maiusc+A  L  S  C', 'Apri file, Leggi da file, Scrivi su file, Chiudi file'],
+    ]],
+    ['Funzioni, metodi e classi', [
+      ['N', 'Nuova funzione o nuovo metodo (nel diagramma delle classi: nuova classe)'], ['F2', 'Modifica la funzione o il metodo (nel diagramma delle classi: l\'elemento selezionato)'],
+      ['Maiusc+Canc', 'Elimina la funzione o il metodo'], ['Pag↑  Pag↓', 'Diagramma precedente, successivo'], ['U', 'Diagramma delle classi'],
+      ['A  M  C', 'Diagramma delle classi: nuovo attributo, metodo, costruttore della classe selezionata'],
+      ['Invio  ·  Canc', 'Diagramma delle classi: apri o modifica, elimina l\'elemento selezionato'],
+    ]],
+    ['Vista', [
+      ['Ctrl+Alt+F  ·  Ctrl+Alt+O', 'Vista Funzioni, vista Oggetti'], ['Alt+1  2  3  4', 'Schede Console, Variabili, Codice, File'], ['Ctrl+B', 'Mostra o nascondi il pannello'],
+      ['Ctrl++  Ctrl+-  Ctrl+0', 'Zoom avanti, indietro, 100%'], ['Maiusc+1', 'Adatta alla finestra'], ['Ctrl+rotella', 'Zoom'],
+      ['F1', 'Guida rapida'], ['Esc', 'Chiudi finestre e menu'],
+    ]],
+  ];
+  /* diagramma precedente o successivo nel selettore */
+  function navDiagram(dir) {
+    const sel = $('#funcSel'), n = sel.options.length;
+    if (n < 2) return;
+    sel.selectedIndex = (sel.selectedIndex + dir + n) % n;
+    sel.dispatchEvent(new Event('change'));
+  }
   function bindKeys() {
     document.addEventListener('keydown', (e) => {
       if (e.defaultPrevented) return;
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-      const ctrl = e.ctrlKey || e.metaKey;
+      const ctrl = e.ctrlKey || e.metaKey, shift = e.shiftKey, alt = e.altKey;
+      const k = e.key.toLowerCase();
+      const go = (fn) => { e.preventDefault(); fn(); };
       if (e.key === 'Escape') {
         if (!$('#pop').hidden) { closePop(); e.preventDefault(); return; }
         if (modalStack.length) { modalStack[modalStack.length - 1](); e.preventDefault(); return; }
         if (drag && drag.on) { drag.ghost.remove(); drag = null; document.body.classList.remove('dragging'); }
         return;
       }
-      if (modalStack.length) return;
-      if (e.key === 'F5' || (ctrl && e.key === 'Enter')) { e.preventDefault(); onRunBtn(); return; }
-      if (e.key === 'F10') { e.preventDefault(); onStepBtn(); return; }
-      if (e.key === 'F8') { e.preventDefault(); onOverBtn(); return; }
-      if (ctrl && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(); return; }
-      if (ctrl && e.key.toLowerCase() === 'o') { e.preventDefault(); openFile(); return; }
+      // menu «Aggiungi un blocco» aperto: il tasto sceglie il blocco
+      const insBox = !$('#pop').hidden && $('#pop .insmenu');
+      if (insBox) {
+        const kind = KEY_KIND[keyLabel(e)];
+        if (kind) go(() => { const t = insBox._target; closePop(); addStmt(t, kind); });
+        else if (ctrl && k === 'v' && st.clip) go(() => { const t = insBox._target; closePop(); paste(t); });
+        return;
+      }
+      if (modalStack.length || !$('#pop').hidden) return;
+      const busy = () => { if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return true; } return false; };
+      // esecuzione
+      if (e.key === 'F1') return go(helpDialog);
+      if (e.key === 'F5' && shift) return go(() => { if (!$('#stopBtn').disabled) stopRun(); });
+      if (e.key === 'F5' || (ctrl && e.key === 'Enter')) return go(onRunBtn);
+      if (e.key === 'F6') return go(() => { if (!$('#pauseBtn').disabled) onPauseBtn(); });
+      if (e.key === 'F10') return go(onStepBtn);
+      if (e.key === 'F8') return go(onOverBtn);
+      // file
+      if (ctrl && !alt) {
+        if (k === 's') return go(shift ? downloadCode : saveFile);
+        if (k === 'o') return go(shift ? openUrlDialog : openFile);
+        if (k === 'p' && !shift) return go(exportPdf);
+        if (shift && k === 'e') return go(exportPng);
+        if (shift && k === 'g') return go(exportSvgFile);
+        if (shift && k === 'x' && !typing) return go(copyXml);
+        if (shift && k === 'l') return go(copyShareLink);
+      }
+      if (alt && !ctrl && e.key === 'Enter') return go(() => { if (!busy()) editProgram(); });
       if (typing) return;
-      if (ctrl && e.altKey && e.key.toLowerCase() === 'n') { e.preventDefault(); newProgram(); return; }
-      if (ctrl && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
-      if (ctrl && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
-      if (ctrl && e.key.toLowerCase() === 'c') { if (st.sel) { e.preventDefault(); copySel(false); } return; }
-      if (ctrl && e.key.toLowerCase() === 'x') { if (st.sel) { e.preventDefault(); copySel(true); } return; }
-      if (ctrl && e.key.toLowerCase() === 'v') { if (st.clip) { e.preventDefault(); paste(); } return; }
-      if (ctrl && e.key.toLowerCase() === 'd') { if (st.sel) { e.preventDefault(); duplicate(); } return; }
+      // vista
+      if (ctrl && alt) {
+        if (e.code === 'KeyN') return go(newProgram);
+        if (e.code === 'KeyF') return go(() => setView('functions'));
+        if (e.code === 'KeyO') return go(() => setView('objects'));
+      }
+      if (ctrl && !alt && k === 'b') return go(() => $('#sideToggle').click());
+      if (alt && !ctrl && /^Digit[1-4]$/.test(e.code)) return go(() => setTab(['console', 'vars', 'code', 'files'][+e.code.slice(5) - 1]));
+      if (ctrl && !alt && (e.key === '+' || e.key === '=')) return go(() => setZoom(st.zoom * 1.15));
+      if (ctrl && !alt && e.key === '-') return go(() => setZoom(st.zoom / 1.15));
+      if (ctrl && !alt && e.key === '0') return go(() => setZoom(1));
+      if (shift && !ctrl && !alt && e.code === 'Digit1') return go(fitZoom);
+      // modifica
+      if (ctrl && k === 'z' && !shift) return go(undo);
+      if (ctrl && (k === 'y' || (k === 'z' && shift))) return go(redo);
+      if (ctrl && !shift && k === 'c') { if (st.sel) go(() => copySel(false)); return; }
+      if (ctrl && !shift && k === 'x') { if (st.sel) go(() => copySel(true)); return; }
+      if (ctrl && !shift && k === 'v') { if (st.clip) go(() => paste()); return; }
+      if (ctrl && !shift && k === 'd') { if (st.sel) go(duplicate); return; }
+      // funzioni, metodi e classi
+      if (e.key === 'PageDown' || e.key === 'PageUp') { if (!ctrl && !alt) go(() => navDiagram(e.key === 'PageDown' ? 1 : -1)); return; }
+      if (e.key === 'F2') return go(() => $('#funcEdit').click());
+      if (shift && (e.key === 'Delete' || e.key === 'Backspace') && !isUml()) return go(() => $('#funcDel').click());
+      const lab = keyLabel(e);
+      if (lab === 'N') return go(() => $('#funcAdd').click());
+      if (lab === 'U' && isOO() && !isUml()) return go(showUml);
       if (isUml()) {
         if ((e.key === 'Delete' || e.key === 'Backspace') && st.usel && !isRunning()) { e.preventDefault(); deleteUmlSel(); }
         else if (e.key === 'Enter' && st.usel) { e.preventDefault(); if (st.usel.kind === 'method') openMethod(st.usel.fid); else if (!isRunning()) editUmlSel(); }
+        else if (lab === 'A' || lab === 'M' || lab === 'C') {
+          e.preventDefault();
+          if (busy()) return;
+          const c = uselClass(); if (!c) { toast('Seleziona prima una classe', 'warn'); return; }
+          if (lab === 'A') attrDialog(c, null); else editFunction(null, { cls: c, ctor: lab === 'C' });
+        }
         return;
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && st.sel) { e.preventDefault(); deleteSel(); return; }
-      if (e.key === 'Enter' && st.sel) { e.preventDefault(); editStmt(st.sel); return; }
+      // diagramma di flusso
+      if ((e.key === 'Delete' || e.key === 'Backspace') && st.sel) return go(deleteSel);
+      if (e.key === 'Enter' && st.sel) return go(() => editStmt(st.sel));
       if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && st.sel) {
+        if (alt) return go(() => shiftSel(e.key === 'ArrowDown' ? 1 : -1));
         const f = M.findStmt(st.prog, st.sel); if (!f) return;
         const n = f.arr[f.index + (e.key === 'ArrowDown' ? 1 : -1)];
         if (n) { e.preventDefault(); st.sel = n.id; decorate(); const el = $(`#chart .shape[data-id="${n.id}"]`); if (el) scrollIntoViewIfNeeded(el); }
+        return;
       }
+      const kind = KEY_KIND[lab];
+      if (kind) go(() => addByKey(kind));
     });
   }
 
