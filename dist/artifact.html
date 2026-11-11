@@ -686,6 +686,17 @@ details.modtopic > .modbar { padding: 6px 10px; }
 .uml .umod { cursor: grab; }
 body.udragging .uml .umod { cursor: grabbing; }
 .modtopicbody > .modrow + .modrow { margin-top: 0; }
+/* schermi da 1280 px: la barra resta su una riga */
+@media (max-width: 1340px) {
+  .bar { gap: 2px; }
+  .sep { margin: 2px 2px; }
+  select.fsel { max-width: 130px; }
+  .speed input { width: 64px; }
+  .speed output { min-width: 54px; }
+  .brand button { max-width: 120px; }
+  .tb { padding: 0 8px; }
+  .tb.icon { padding: 0 6px; }
+}
 
 </style>
 <div id="app">
@@ -715,6 +726,7 @@ body.udragging .uml .umod { cursor: grabbing; }
     <button class="tb run" id="runBtn" type="button" title="Esegui (F5)"><svg viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></svg><span class="lbl">Esegui</span></button>
     <button class="tb" id="stepBtn" type="button" title="Esegui un passo (F10)"><svg viewBox="0 0 24 24"><path d="M5 5v14M10 6l9 6-9 6z"/></svg><span class="lbl">Passo</span></button>
     <button class="tb icon" id="overBtn" type="button" title="Passo sopra (F8): esegue tutta la chiamata del blocco corrente senza entrare nella funzione o nel metodo" aria-label="Passo sopra"><svg viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 15-3.5"/><path d="M20 5v5h-5"/><circle cx="12" cy="18" r="2"/></svg></button>
+    <button class="tb icon" id="outBtn" type="button" title="Esci dalla funzione (Maiusc+F8): esegue il resto della funzione o del metodo in corso e si ferma sul blocco successivo di chi l'ha chiamata" aria-label="Esci dalla funzione"><svg viewBox="0 0 24 24"><path d="M5 4v16h6"/><path d="M12 12h8M16 8l4 4-4 4"/></svg></button>
     <button class="tb icon" id="pauseBtn" type="button" title="Pausa (F6)" aria-label="Pausa" disabled><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
     <button class="tb icon" id="stopBtn" type="button" title="Ferma (Maiusc+F5)" aria-label="Ferma" disabled><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button>
     <label class="speed" for="speed"><span class="lbl">Velocità</span> <input id="speed" type="range" min="0" max="3" step="1" value="2"><output id="speedVal">Media</output></label>
@@ -7224,6 +7236,16 @@ const ArrayView = (() => {
     run.mode = 'over'; run.state = 'running';
     pumpOver();
   }
+  /* Esci dalla funzione: esegue il resto della funzione (o del metodo) in corso e si ferma
+     sul blocco successivo di chi l'ha chiamata; nel Main esegue fino alla fine */
+  function onOutBtn() {
+    if (run.state === 'input') return;
+    if (run.state === 'running') { onStepBtn(); return; }
+    if (run.state !== 'paused') { run.errId = null; startRun('step'); return; }
+    run.overDepth = (run.curFrame ? run.curFrame.depth : 0) - 1;
+    run.mode = 'over'; run.state = 'running';
+    pumpOver();
+  }
   function pumpOver() {
     run.timer = null;
     if (run.state !== 'running') return;
@@ -8486,7 +8508,7 @@ const ArrayView = (() => {
       ['Alt+Invio', 'Proprietà del programma'],
     ]],
     ['Esecuzione', [
-      ['F5  ·  Ctrl+Invio', 'Esegui / continua'], ['F10', 'Passo successivo (entra nelle funzioni chiamate)'], ['F8', 'Passo sopra (esegue la chiamata senza entrarci)'],
+      ['F5  ·  Ctrl+Invio', 'Esegui / continua'], ['F10', 'Passo successivo (entra nelle funzioni chiamate)'], ['F8', 'Passo sopra (esegue la chiamata senza entrarci)'], ['Maiusc+F8', 'Esci dalla funzione (esegue il resto e si ferma dopo la chiamata)'],
       ['F6', 'Pausa'], ['Maiusc+F5', 'Ferma'],
     ]],
     ['Modifica', [
@@ -8547,6 +8569,7 @@ const ArrayView = (() => {
       if (e.key === 'F5' || (ctrl && e.key === 'Enter')) return go(onRunBtn);
       if (e.key === 'F6') return go(() => { if (!$('#pauseBtn').disabled) onPauseBtn(); });
       if (e.key === 'F10') return go(onStepBtn);
+      if (e.key === 'F8' && shift) return go(onOutBtn);
       if (e.key === 'F8') return go(onOverBtn);
       // file
       if (ctrl && !alt) {
@@ -8638,6 +8661,7 @@ const ArrayView = (() => {
     $('#runBtn').addEventListener('click', onRunBtn);
     $('#stepBtn').addEventListener('click', onStepBtn);
     $('#overBtn').addEventListener('click', onOverBtn);
+    $('#outBtn').addEventListener('click', onOutBtn);
     $('#pauseBtn').addEventListener('click', onPauseBtn);
     $('#stopBtn').addEventListener('click', stopRun);
     const sp = $('#speed');

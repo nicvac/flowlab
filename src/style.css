@@ -682,3 +682,14 @@ details.modtopic > .modbar { padding: 6px 10px; }
 .uml .umod { cursor: grab; }
 body.udragging .uml .umod { cursor: grabbing; }
 .modtopicbody > .modrow + .modrow { margin-top: 0; }
+/* schermi da 1280 px: la barra resta su una riga */
+@media (max-width: 1340px) {
+  .bar { gap: 2px; }
+  .sep { margin: 2px 2px; }
+  select.fsel { max-width: 130px; }
+  .speed input { width: 64px; }
+  .speed output { min-width: 54px; }
+  .brand button { max-width: 120px; }
+  .tb { padding: 0 8px; }
+  .tb.icon { padding: 0 6px; }
+}

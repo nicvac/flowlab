@@ -1390,6 +1390,16 @@
     run.mode = 'over'; run.state = 'running';
     pumpOver();
   }
+  /* Esci dalla funzione: esegue il resto della funzione (o del metodo) in corso e si ferma
+     sul blocco successivo di chi l'ha chiamata; nel Main esegue fino alla fine */
+  function onOutBtn() {
+    if (run.state === 'input') return;
+    if (run.state === 'running') { onStepBtn(); return; }
+    if (run.state !== 'paused') { run.errId = null; startRun('step'); return; }
+    run.overDepth = (run.curFrame ? run.curFrame.depth : 0) - 1;
+    run.mode = 'over'; run.state = 'running';
+    pumpOver();
+  }
   function pumpOver() {
     run.timer = null;
     if (run.state !== 'running') return;
@@ -2652,7 +2662,7 @@
       ['Alt+Invio', 'Proprietà del programma'],
     ]],
     ['Esecuzione', [
-      ['F5  ·  Ctrl+Invio', 'Esegui / continua'], ['F10', 'Passo successivo (entra nelle funzioni chiamate)'], ['F8', 'Passo sopra (esegue la chiamata senza entrarci)'],
+      ['F5  ·  Ctrl+Invio', 'Esegui / continua'], ['F10', 'Passo successivo (entra nelle funzioni chiamate)'], ['F8', 'Passo sopra (esegue la chiamata senza entrarci)'], ['Maiusc+F8', 'Esci dalla funzione (esegue il resto e si ferma dopo la chiamata)'],
       ['F6', 'Pausa'], ['Maiusc+F5', 'Ferma'],
     ]],
     ['Modifica', [
@@ -2713,6 +2723,7 @@
       if (e.key === 'F5' || (ctrl && e.key === 'Enter')) return go(onRunBtn);
       if (e.key === 'F6') return go(() => { if (!$('#pauseBtn').disabled) onPauseBtn(); });
       if (e.key === 'F10') return go(onStepBtn);
+      if (e.key === 'F8' && shift) return go(onOutBtn);
       if (e.key === 'F8') return go(onOverBtn);
       // file
       if (ctrl && !alt) {
@@ -2804,6 +2815,7 @@
     $('#runBtn').addEventListener('click', onRunBtn);
     $('#stepBtn').addEventListener('click', onStepBtn);
     $('#overBtn').addEventListener('click', onOverBtn);
+    $('#outBtn').addEventListener('click', onOutBtn);
     $('#pauseBtn').addEventListener('click', onPauseBtn);
     $('#stopBtn').addEventListener('click', stopRun);
     const sp = $('#speed');
