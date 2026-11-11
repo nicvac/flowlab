@@ -693,3 +693,17 @@ body.udragging .uml .umod { cursor: grabbing; }
   .tb { padding: 0 8px; }
   .tb.icon { padding: 0 6px; }
 }
+
+/* autocompletamento dopo il punto */
+.acpop { position: fixed; z-index: 80; min-width: 240px; max-width: min(560px, calc(100vw - 16px)); max-height: 300px; overflow: auto; background: var(--panel); border: 1px solid var(--accent); border-radius: 9px; box-shadow: var(--shadow); padding: 4px; font-size: 13px; }
+.acpop[hidden] { display: none; }
+.achead, .acfoot { font-size: 11.5px; color: var(--muted); padding: 4px 8px; }
+.achead { font-weight: 700; border-bottom: 1px solid var(--line-soft); margin-bottom: 2px; }
+.acfoot { border-top: 1px solid var(--line-soft); margin-top: 2px; }
+.acitem { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; cursor: pointer; }
+.acitem.sel, .acitem:hover { background: var(--accent-soft); }
+.ackind { flex: none; width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center; font: 700 11px var(--font-mono); color: #fff; }
+.ackind.m { background: var(--s-call); }
+.ackind.a { background: var(--s-decl); }
+.aclabel { font-family: var(--font-mono); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acowner { margin-left: auto; font-size: 11px; color: var(--faint); white-space: nowrap; }

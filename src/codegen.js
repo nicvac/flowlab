@@ -1452,6 +1452,8 @@ LANGS.javascript = cFamily({
 // Le dichiarazioni del ciclo "per" in C++/Java/C#/JS usano variabili già dichiarate.
 const CodeGen = {
   LANGS,
+  /* variabili e tipi visibili in una funzione (serve all'autocompletamento dell'editor) */
+  scopeFor: (prog, f) => buildScope(prog, f),
   generate(prog, lang) {
     try { setupGen(prog, lang); return LANGS[lang].generate(prog); } catch (e) { return `// Impossibile generare il codice: ${e.message}\n`; }
   },

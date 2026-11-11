@@ -703,6 +703,20 @@ body.udragging .uml .umod { cursor: grabbing; }
   .tb.icon { padding: 0 6px; }
 }
 
+/* autocompletamento dopo il punto */
+.acpop { position: fixed; z-index: 80; min-width: 240px; max-width: min(560px, calc(100vw - 16px)); max-height: 300px; overflow: auto; background: var(--panel); border: 1px solid var(--accent); border-radius: 9px; box-shadow: var(--shadow); padding: 4px; font-size: 13px; }
+.acpop[hidden] { display: none; }
+.achead, .acfoot { font-size: 11.5px; color: var(--muted); padding: 4px 8px; }
+.achead { font-weight: 700; border-bottom: 1px solid var(--line-soft); margin-bottom: 2px; }
+.acfoot { border-top: 1px solid var(--line-soft); margin-top: 2px; }
+.acitem { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; cursor: pointer; }
+.acitem.sel, .acitem:hover { background: var(--accent-soft); }
+.ackind { flex: none; width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center; font: 700 11px var(--font-mono); color: #fff; }
+.ackind.m { background: var(--s-call); }
+.ackind.a { background: var(--s-decl); }
+.aclabel { font-family: var(--font-mono); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acowner { margin-left: auto; font-size: 11px; color: var(--faint); white-space: nowrap; }
+
 </style>
 </head>
 <body>
@@ -4283,6 +4297,8 @@ LANGS.javascript = cFamily({
 // Le dichiarazioni del ciclo "per" in C++/Java/C#/JS usano variabili già dichiarate.
 const CodeGen = {
   LANGS,
+  /* variabili e tipi visibili in una funzione (serve all'autocompletamento dell'editor) */
+  scopeFor: (prog, f) => buildScope(prog, f),
   generate(prog, lang) {
     try { setupGen(prog, lang); return LANGS[lang].generate(prog); } catch (e) { return `// Impossibile generare il codice: ${e.message}\n`; }
   },
@@ -6359,7 +6375,7 @@ const ArrayView = (() => {
       e.preventDefault(); e.stopPropagation(); submit();
     });
     back.addEventListener('mousedown', (e) => { if (e.target === back) close(); });
-    function close() { back.remove(); modalStack.pop(); }
+    function close() { back.remove(); modalStack.pop(); acHide(); }
     modalStack.push(close);
     document.body.append(back);
     setTimeout(() => { const f = form.querySelector('input:not([type=checkbox]):not([type=radio]), textarea, select'); (f || ok).focus(); if (f && f.select) f.select(); }, 0);
@@ -6370,6 +6386,114 @@ const ArrayView = (() => {
   }
 
   /* Campi */
+  /* ---- autocompletamento dopo il punto: metodi e attributi dell'oggetto (o della classe) ---- */
+  /* testo prima del cursore -> { from, typed, items } oppure null */
+  function memberSuggestions(before, lvalueOnly) {
+    if (!M.hasClasses(st.prog) || isUml()) return null;
+    const mm = /\.([\p{L}_][\p{L}\p{N}_]*)?$/u.exec(before);
+    if (!mm) return null;
+    const dot = mm.index, typed = mm[1] || '';
+    // espressione a sinistra del punto: nomi, punti e parentesi bilanciate (es. lista.get(0).nome)
+    let i = dot - 1, depth = 0;
+    for (; i >= 0; i--) {
+      const ch = before[i];
+      if (ch === ')' || ch === ']') depth++;
+      else if (ch === '(' || ch === '[') { if (!depth) break; depth--; }
+      else if (!depth && !/[\p{L}\p{N}_.]/u.test(ch)) break;
+    }
+    const objText = before.slice(i + 1, dot).trim();
+    if (!objText || /^\d/.test(objText)) return null;
+    let node; try { node = E.parseExpr(objText); } catch (e) { return null; }
+    const f = func(), here = M.classOf(st.prog, f);
+    let sc; try { sc = CodeGen.scopeFor(st.prog, f); } catch (e) { return null; }
+    // NomeClasse. -> membri statici; oggetto. -> membri d'istanza
+    let c = null, statics = false, map = null;
+    if (node.k === 'var' && !node.indices && !sc.vars.has(node.name.toLowerCase()) && !(sc.implicitField && sc.implicitField(node.name)) && M.classByName(st.prog, node.name)) { c = M.classByName(st.prog, node.name); statics = true; }
+    else {
+      let t; try { t = E.inferType(node, sc); } catch (e) { return null; }
+      const g = E.splitType(t);
+      c = M.classByName(st.prog, g.base);
+      if (c && (c.tparams || []).length && g.args.length) { map = {}; c.tparams.forEach((p, k) => { map[p.toLowerCase()] = g.args[k]; }); }
+    }
+    if (!c) return null;
+    const T = (x) => E.typeName(map ? E.substType(x, map) : x);
+    const canSee = (vis, owner) => (vis || 'public') === 'public' || (vis === 'private' ? here === owner : !!here && M.isSubclass(st.prog, here, owner));
+    const items = [], seen = new Set();
+    for (const k of M.chainOf(st.prog, c)) {
+      for (const a of k.attributes) {
+        if (!!a.static !== statics || !canSee(a.visibility, k) || seen.has('a:' + a.name.toLowerCase())) continue;
+        seen.add('a:' + a.name.toLowerCase());
+        items.push({ kind: 'a', name: a.name, label: `${a.name}: ${T(a.type)}${a.array ? '[]' : ''}`, insert: a.name, owner: k });
+      }
+      if (lvalueOnly) continue;
+      for (const m of M.membersOf(st.prog, k)) {
+        if (m.ctor || m === st.prog.functions[0] || !!m.static !== statics || !canSee(m.visibility, k)) continue;
+        const sig = m.name.toLowerCase() + '(' + m.params.map((p) => p.type.toLowerCase()).join(',');
+        if (seen.has(sig)) continue; // ridefinito in una sottoclasse
+        seen.add(sig);
+        const rl = M.rets(m);
+        items.push({ kind: 'm', name: m.name, label: `${m.name}(${m.params.map((p) => `${p.name}: ${T(p.type)}${p.array ? '[]' : ''}`).join(', ')})${rl.length ? ': ' + rl.map((r) => T(r.type)).join(', ') : ''}`, insert: m.name + (m.params.length ? '(' : '()'), owner: k });
+      }
+    }
+    const lo = typed.toLowerCase();
+    const list = items.filter((x) => x.name.toLowerCase().startsWith(lo)).sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'm' ? -1 : 1) || a.name.localeCompare(b.name));
+    // attributo già scritto per intero: niente elenco, così Invio conferma il dialogo
+    if (list.length === 1 && list[0].kind === 'a' && list[0].name.toLowerCase() === lo) return null;
+    return list.length ? { from: dot + 1, typed, items: list, cls: c, statics } : null;
+  }
+  let acCur = null; // { input, sug, sel }
+  const acPop = () => $('#acPop') || document.body.appendChild(h('div', { id: 'acPop', class: 'acpop', role: 'listbox', hidden: true }));
+  function acHide() { const p = $('#acPop'); if (p) p.hidden = true; acCur = null; }
+  function acShow(input, sug) {
+    const pop = acPop();
+    acCur = { input, sug, sel: Math.min(acCur && acCur.input === input ? acCur.sel : 0, sug.items.length - 1) };
+    pop.innerHTML = '';
+    pop.append(h('div', { class: 'achead' }, `${sug.statics ? 'Statici di' : 'Membri di'} ${M.classTitle(sug.cls)}${sug.cls.module ? ' · modulo ' + sug.cls.module.name : ''}`));
+    sug.items.slice(0, 40).forEach((it, k) => pop.append(h('div', { class: 'acitem' + (k === acCur.sel ? ' sel' : ''), role: 'option', 'aria-selected': String(k === acCur.sel),
+      onmousedown: (e) => { e.preventDefault(); acCur.sel = k; acApply(); } },
+      h('span', { class: 'ackind ' + it.kind }, it.kind === 'm' ? 'm' : 'a'), h('span', { class: 'aclabel' }, it.label),
+      it.owner !== sug.cls ? h('span', { class: 'acowner' }, 'da ' + it.owner.name) : null)));
+    pop.append(h('div', { class: 'acfoot' }, '↑ ↓ per scegliere · Invio o Tab per inserire · Esc per chiudere'));
+    // sotto il cursore nel campo
+    const r = input.getBoundingClientRect(), cs = getComputedStyle(input);
+    const cv = acPop._cv || (acPop._cv = document.createElement('canvas').getContext('2d'));
+    cv.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const x = r.left + parseFloat(cs.paddingLeft) + cv.measureText(input.value.slice(0, sug.from)).width - input.scrollLeft;
+    pop.hidden = false;
+    pop.style.left = Math.max(8, Math.min(x - 8, window.innerWidth - pop.offsetWidth - 8)) + 'px';
+    pop.style.top = (r.bottom + 4 + pop.offsetHeight > window.innerHeight ? r.top - pop.offsetHeight - 4 : r.bottom + 4) + 'px';
+    const s = pop.querySelector('.acitem.sel'); if (s) s.scrollIntoView({ block: 'nearest' });
+  }
+  function acUpdate(input, lvalueOnly) {
+    const caret = input.selectionStart ?? input.value.length;
+    if (input.selectionEnd !== caret) { acHide(); return; }
+    const sug = memberSuggestions(input.value.slice(0, caret), lvalueOnly);
+    if (sug) acShow(input, sug); else acHide();
+  }
+  function acApply() {
+    if (!acCur) return;
+    const { input, sug, sel } = acCur, it = sug.items[sel];
+    const caret = input.selectionStart ?? input.value.length;
+    input.value = input.value.slice(0, sug.from) + it.insert + input.value.slice(caret);
+    const pos = sug.from + it.insert.length;
+    input.focus(); input.setSelectionRange(pos, pos);
+    acHide();
+    input.dispatchEvent(new Event('input'));
+  }
+  /* collega l'autocompletamento a un campo di testo */
+  function attachMemberAC(input, lvalueOnly) {
+    input.addEventListener('input', () => acUpdate(input, lvalueOnly));
+    input.addEventListener('click', () => acUpdate(input, lvalueOnly));
+    input.addEventListener('blur', () => setTimeout(() => { if (acCur && acCur.input === input) acHide(); }, 120));
+    input.addEventListener('keydown', (e) => {
+      if (!acCur || acCur.input !== input) return;
+      const n = acCur.sug.items.length;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); acCur.sel = (acCur.sel + (e.key === 'ArrowDown' ? 1 : n - 1)) % n; acShow(input, acCur.sug); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); acApply(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); acHide(); }
+    });
+    input.addEventListener('keyup', (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') acUpdate(input, lvalueOnly); });
+  }
   function field(spec, val, vars) {
     const id = 'f_' + spec.key;
     const wrap = h('div', { class: 'field' + (spec.inline ? ' inline' : '') });
@@ -6407,6 +6531,7 @@ const ArrayView = (() => {
     wrap.append(h('label', { class: 'flabel', for: id }, spec.label), input);
     const msg = h('div', { class: 'fmsg' }, spec.hint || '');
     wrap.append(msg);
+    if (['expr', 'exprlist', 'lvalue', 'lvalues'].includes(spec.type)) attachMemberAC(input, spec.type === 'lvalue' || spec.type === 'lvalues');
     if (['expr', 'exprlist', 'lvalue', 'lvalues'].includes(spec.type) && vars && vars.length) {
       const chips = h('div', { class: 'chips', 'aria-label': 'Variabili disponibili' });
       vars.slice(0, 24).forEach((v) => chips.append(h('button', { type: 'button', class: 'chip', tabindex: '-1', onclick: () => {
@@ -8493,7 +8618,7 @@ const ArrayView = (() => {
       ['super(nome)', 'Blocco Chiamata, primo blocco del costruttore: esegue il costruttore della classe madre'], ['super.descrivi()', 'Esegue la versione del metodo della classe madre'],
       ['null   p = null', 'Nessun oggetto: si può assegnare e confrontare'], ['«abstract»', 'Classe astratta: non si creano oggetti. Un metodo astratto non ha corpo e lo definiscono le sottoclassi'], ['+  -  #', 'Accesso pubblico, privato, protetto (controllato durante l\'esecuzione)'],
       ['ArrayList<T>', 'Classe generica: T è un tipo scelto da chi la usa (parametri di tipo nel dialogo della classe)'], ['l ← new ArrayList<Intero>()', 'Oggetto di una classe generica; con new ArrayList<>() il tipo si ricava dalla variabile'],
-      ['a ← b', 'Con due array: a diventa lo stesso array di b (come in Java)'], ['Ctrl+I', 'Importa un modulo: classi già pronte (ArrayList, Stack, Queue, ordinamento…) da riusare in sola lettura'],
+      ['a ← b', 'Con due array: a diventa lo stesso array di b (come in Java)'], ['Ctrl+I', 'Importa un modulo: classi già pronte (ArrayList, Stack, Queue, ordinamento…) da riusare in sola lettura'], ['p.   Punto.', 'Scrivendo il punto dopo un oggetto o una classe compare l\'elenco dei metodi e degli attributi utilizzabili'],
     ].map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
     const keys = SHORTCUTS.flatMap(([g, rows]) => [h('tr', { class: 'kgroup' }, h('td', { colspan: 2 }, g)), ...rows.map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)))]);
     const body = h('div', { class: 'help-body' },
