@@ -12,8 +12,52 @@ class FlowError extends Error {
 
 const TYPES = ['Integer', 'Real', 'String', 'Boolean'];
 const TYPE_IT = { Integer: 'Intero', Real: 'Reale', String: 'Stringa', Boolean: 'Booleano', None: 'Nessuno', Object: 'Oggetto' };
+/* ---- tipi generici: "ArrayList<Integer>", "Coppia<String, Punto>"; "T" è un parametro di tipo ---- */
+const BASE_OF = { intero: 'Integer', reale: 'Real', stringa: 'String', booleano: 'Boolean', integer: 'Integer', real: 'Real', string: 'String', boolean: 'Boolean' };
+/* divide al primo livello sulle virgole: "String, Coppia<A, B>" -> ["String", "Coppia<A, B>"] */
+function splitTypeList(s) {
+  const out = []; let d = 0, cur = '';
+  for (const ch of String(s)) {
+    if (ch === '<') d++;
+    if (ch === '>') d--;
+    if (ch === ',' && d === 0) { out.push(cur.trim()); cur = ''; continue; }
+    cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+/* { base, args }: "ArrayList<Integer>" -> { base: "ArrayList", args: ["Integer"] } */
+function splitType(t) {
+  const s = String(t == null ? '' : t).trim(), i = s.indexOf('<');
+  if (i < 0 || !s.endsWith('>')) return { base: s, args: [] };
+  return { base: s.slice(0, i).trim(), args: splitTypeList(s.slice(i + 1, -1)) };
+}
+const joinType = (base, args) => (args && args.length ? `${base}<${args.join(', ')}>` : base);
+const isGenericType = (t) => splitType(t).args.length > 0;
 /* nome leggibile di un tipo: i tipi base in italiano, le classi con il loro nome */
-const typeName = (t) => TYPE_IT[t] || t;
+function typeName(t) {
+  const { base, args } = splitType(t);
+  const b = TYPE_IT[base] || base;
+  return args.length ? `${b}<${args.map(typeName).join(', ')}>` : b;
+}
+/* tipo scritto dall'utente (anche in italiano) -> forma interna: "ArrayList<intero>" -> "ArrayList<Integer>" */
+function normTypeText(t) {
+  const { base, args } = splitType(t);
+  return joinType(BASE_OF[base.toLowerCase()] || base, args.map(normTypeText));
+}
+/* sostituisce i parametri di tipo: subst("T[]"...) con map { t: "Integer" } (chiavi minuscole) */
+function substType(t, map) {
+  if (!map) return t;
+  const { base, args } = splitType(t);
+  if (!args.length) { const v = map[base.toLowerCase()]; return v !== undefined && v !== null ? v : t; }
+  return joinType(base, args.map((a) => substType(a, map)));
+}
+/* stesso tipo (maiuscole e minuscole non contano) */
+function sameType(a, b) {
+  const x = splitType(a), y = splitType(b);
+  if (x.base.toLowerCase() !== y.base.toLowerCase() || x.args.length !== y.args.length) return false;
+  return x.args.every((t, i) => sameType(t, y.args[i]));
+}
 const isBaseType = (t) => TYPES.includes(t);
 
 /* ---------------------------- Lessico ---------------------------------- */
@@ -171,6 +215,21 @@ function parseExpr(src) {
     }
     return indices;
   }
+  /* argomenti di tipo dopo "<": Intero, Coppia<Stringa, Punto> ... fino a ">" */
+  function typeArg() {
+    const t = peek();
+    if (t.k !== 'id') throw new FlowError('Tra < e > servono dei tipi, es. new ArrayList<Intero>()', { pos: t.pos });
+    p++;
+    let s = BASE_OF[t.v.toLowerCase()] || t.v;
+    if (isOp('<')) { p++; s = joinType(s, typeArgs()); }
+    return s;
+  }
+  function typeArgs() {
+    const out = [typeArg()];
+    while (isOp(',')) { p++; out.push(typeArg()); }
+    eat('>');
+    return out;
+  }
   /* atomo seguito da accessi con il punto: p.x  p.sposta(1, 2)  v[i].nome  this.dati[k] */
   function primary() {
     let e = atom();
@@ -200,7 +259,10 @@ function parseExpr(src) {
       if (low === 'this') return node({ k: 'this' }, t);
       if (low === 'new' && peek().k === 'id') {
         const c = toks[p++];
-        return node({ k: 'new', cls: c.v, args: isOp('(') ? args() : [] }, t);
+        // new ArrayList<Intero>()  ·  new ArrayList<>() (tipo ricavato dalla variabile)
+        let targs = null;
+        if (isOp('<')) { p++; targs = typeArgs(); } else if (isOp('!=') && toks[p].text === '<>') { p++; targs = []; }
+        return node({ k: 'new', cls: c.v, targs, args: isOp('(') ? args() : [] }, t);
       }
       if (low === 'super') {
         if (isOp('(')) return node({ k: 'supercall', args: args() }, t);
@@ -587,5 +649,5 @@ function inferType(node, scope) {
   return 'Unknown';
 }
 
-const ExprLib = { FlowError, TYPES, TYPE_IT, typeName, isBaseType, tokenize, parseExpr, parseLValue, splitTop, parseLValueList, arrOffset, validIdent, RESERVED, V, isNum, fmtValue, fmtReal, literalOf, checkInt, coerce, parseInputText, BUILTINS, BUILTIN_NAMES, evalE, arrIndex, inferType };
+const ExprLib = { FlowError, TYPES, TYPE_IT, typeName, splitType, splitTypeList, joinType, isGenericType, normTypeText, substType, sameType, isBaseType, tokenize, parseExpr, parseLValue, splitTop, parseLValueList, arrOffset, validIdent, RESERVED, V, isNum, fmtValue, fmtReal, literalOf, checkInt, coerce, parseInputText, BUILTINS, BUILTIN_NAMES, evalE, arrIndex, inferType };
 if (typeof module !== 'undefined') module.exports = ExprLib;

@@ -430,8 +430,8 @@ table.vars .avlink:hover, table.vars .avlink:focus-visible { color: var(--ink); 
 .chip { border: 1px solid var(--line); background: var(--paper); border-radius: 20px; padding: 1px 9px; font: 12px var(--font-mono); cursor: pointer; color: var(--muted); }
 .chip:hover { border-color: var(--accent); color: var(--ink); }
 .params { display: flex; flex-direction: column; gap: 6px; }
-.prow { display: grid; grid-template-columns: minmax(0, 1fr) 110px auto 30px 30px; gap: 6px; align-items: center; }
-.prow.rrow { grid-template-columns: minmax(0, 1fr) 110px 30px 30px; }
+.prow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(110px, max-content) auto 30px 30px; gap: 6px; align-items: center; }
+.prow.rrow { grid-template-columns: minmax(0, 1fr) minmax(110px, max-content) 30px 30px; }
 .prow input[type=text], .prow select { border: 1px solid var(--line); background: var(--paper); border-radius: 7px; padding: 6px 8px; min-width: 0; height: 34px; }
 .confirm { margin: 4px 0 8px; }
 .help-body { font-size: 13.5px; }
@@ -450,14 +450,14 @@ body.filedrag #canvasWrap { outline: 3px dashed var(--accent); outline-offset: -
 
 /* ---------- Schermi stretti ---------- */
 @media (max-width: 1700px) {
-  .funcbox label, .speed .lbl, #exBtn .lbl { display: none; }
+  .funcbox label, .speed .lbl, #exBtn .lbl, #modBtn .lbl { display: none; }
   select.fsel { max-width: 170px; }
 }
 @media (max-width: 1480px) {
   .funcbox label, .speed .lbl { display: none; }
   .bar { gap: 4px; }
   select.fsel { max-width: 150px; }
-  #exBtn .lbl { display: none; }
+  #exBtn .lbl, #modBtn .lbl { display: none; }
 }
 @media (max-width: 1400px) {
   #stepBtn .lbl { display: none; }
@@ -467,7 +467,7 @@ body.filedrag #canvasWrap { outline: 3px dashed var(--accent); outline-offset: -
   .viewsw .vbtn { padding: 0 7px; }
 }
 @media (max-width: 1120px) {
-  #stepBtn .lbl, #exBtn .lbl, #fileBtn .lbl { display: none; }
+  #stepBtn .lbl, #exBtn .lbl, #modBtn .lbl, #fileBtn .lbl { display: none; }
 }
 @media (max-width: 900px) {
   body { overflow: auto; }
@@ -605,6 +605,88 @@ svg.wlinks { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1
 .insbtn:hover .ikey, .insbtn:focus-visible .ikey { color: var(--ink); border-color: var(--accent); }
 table.ref tr.kgroup td { font-weight: 700; color: var(--muted); padding-top: 12px; border-bottom-color: var(--line); }
 
+/* ---------- Moduli importati ---------- */
+.uml .umodbg { fill: var(--f-inc); fill-opacity: 0.45; stroke: var(--s-inc); stroke-width: 1.4; stroke-dasharray: 7 4; }
+.uml .umodtab { fill: var(--s-inc); }
+.uml .umodlab { font: 700 11.5px var(--font-ui); fill: var(--paper); letter-spacing: 0.02em; pointer-events: none; }
+.uml .ubox.mod .ubg { stroke: var(--s-inc); }
+.uml .ubox.mod .uheadbg { fill: var(--f-inc); }
+.uml .ubox.mod .usep { stroke: var(--s-inc); }
+body.readonly .chart .ins { display: none; }
+body.readonly #crumbWhere { color: var(--s-inc); }
+.modlib { display: flex; flex-direction: column; gap: 4px; }
+.modtopic h3, .modh { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 12px 0 4px; }
+.modrow { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--paper); }
+.modrow + .modrow { margin-top: 6px; }
+.modinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.modinfo p { margin: 2px 0 0; }
+.modcls { font-size: 12px; color: var(--s-call); }
+.modother { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.modother .field { align-self: stretch; }
+
+.modsrc { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 10px; background: var(--panel); }
+.modsrc + .modsrc { margin-top: 10px; }
+.modsrchead { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.modsrchead .grow { flex: 1; }
+.modtopic h4 { font-size: 12.5px; margin: 10px 0 6px; color: var(--ink); }
+.modadd { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; margin-top: 10px; }
+.modadd .field { align-self: stretch; }
+#crumbBar button[hidden] { display: none; }
+
+/* scelta del tipo: i parametri delle classi generiche sotto, rientrati (ad albero) */
+.tpick { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+.tpargs { display: flex; flex-direction: column; gap: 5px; margin-left: 8px; padding-left: 10px; border-left: 2px solid var(--line); }
+.tpargs:empty { display: none; }
+.tparg { display: flex; align-items: flex-start; gap: 6px; }
+.tpname { font: 600 12px var(--font-mono); color: var(--s-call); min-width: 18px; padding-top: 9px; }
+.field .tpick select, .prow .tpick select { width: auto; min-width: 110px; max-width: 100%; }
+.prow .tpick select { min-height: 34px; }
+.prow .tpname { padding-top: 8px; }
+.prow { align-items: start; }
+
+/* moduli condensati e pulsante per condensarli/espanderli */
+.uml .umodtog { cursor: pointer; }
+.uml .umodtog circle { fill: var(--paper); stroke: var(--paper); }
+.uml .umodtog path { stroke: var(--s-inc); stroke-width: 1.8; stroke-linecap: round; fill: none; }
+.uml .umodtog:hover circle { fill: var(--accent); stroke: var(--accent); }
+.uml .umodtog:hover path { stroke: var(--accent-ink); }
+.uml .umodc { cursor: pointer; }
+.uml .umodc .umodbg { fill-opacity: 0.9; }
+.uml .umodcls { font: 700 13px var(--font-ui); fill: var(--sh-text); pointer-events: none; }
+#modBar { position: absolute; left: 12px; top: 10px; z-index: 3; }
+#modBar[hidden] { display: none; }
+#modBar button { height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font-weight: 700; font-size: 12.5px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+#modBar button:hover { border-color: var(--accent); color: var(--accent); }
+body.umlmode.hasmods #canvasWrap { padding-top: 34px; }
+
+/* libreria dei moduli ad albero: ogni livello è una barra cliccabile con freccia, icona e conteggio */
+details.modsrc { border: 0; padding: 0; background: none; }
+details.modsrc + details.modsrc { margin-top: 10px; }
+.modbar { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); cursor: pointer; list-style: none; user-select: none; transition: background .12s, border-color .12s; }
+.modbar::-webkit-details-marker { display: none; }
+.modbar:hover, .modbar:focus-visible { background: var(--accent-soft); border-color: var(--accent); outline: none; }
+details[open] > .modbar { border-color: var(--accent); }
+.modchev { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); }
+.modchev svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .15s; }
+details[open] > .modbar .modchev svg { transform: rotate(90deg); }
+.modicon { flex: none; display: grid; place-items: center; color: var(--s-call); }
+.modicon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.modicon .dir-open, details[open] > .modbar .modicon .dir-closed { display: none; }
+details[open] > .modbar .modicon .dir-open { display: block; }
+.modsname { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.modtname { font-size: 14px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.modlist { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+details[open] > .modbar .modlist { display: none; }
+.modcount { flex: none; font: 700 11.5px var(--font-ui); color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 9px; }
+.modcount[hidden] { display: none; }
+.modbar .grow { flex: 1; }
+.modsrcbody, .modtopicbody { margin: 8px 0 4px 22px; padding-left: 12px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+details.modtopic { margin: 0; }
+details.modtopic > .modbar { padding: 6px 10px; }
+.uml .umod { cursor: grab; }
+body.udragging .uml .umod { cursor: grabbing; }
+.modtopicbody > .modrow + .modrow { margin-top: 0; }
+
 </style>
 <div id="app">
   <header class="bar" role="toolbar" aria-label="Strumenti">
@@ -638,6 +720,7 @@ table.ref tr.kgroup td { font-weight: 700; color: var(--muted); padding-top: 12p
     <label class="speed" for="speed"><span class="lbl">Velocità</span> <input id="speed" type="range" min="0" max="3" step="1" value="2"><output id="speedVal">Media</output></label>
     <span class="grow"></span>
     <button class="tb" id="exBtn" type="button" aria-haspopup="menu" title="Programmi di esempio"><svg viewBox="0 0 24 24"><path d="M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z"/></svg><span class="lbl">Esempi</span></button>
+    <button class="tb" id="modBtn" type="button" title="Importa un modulo: classi e funzioni già pronte da riusare (Ctrl+I)"><svg viewBox="0 0 24 24"><path d="M9 3h6v3a2 2 0 1 0 4 0V5h2v6h-3a2 2 0 1 0 0 4h3v6h-6v-3a2 2 0 1 0-4 0v3H5v-6h1a2 2 0 1 0 0-4H5V5h4z"/></svg><span class="lbl">Importa modulo</span></button>
     <button class="tb icon" id="helpBtn" type="button" title="Guida rapida (F1)" aria-label="Guida rapida"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.6V14M12 17.5v.01"/></svg></button>
     <button class="tb icon" id="themeBtn" type="button" title="Tema chiaro/scuro" aria-label="Cambia tema"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor"/></svg></button>
   </header>
@@ -645,7 +728,7 @@ table.ref tr.kgroup td { font-weight: 700; color: var(--muted); padding-top: 12p
   <main class="work">
     <section class="canvas-col" aria-label="Diagramma di flusso">
       <div id="canvasWrap"><div id="chart"></div></div>
-      <div id="crumbBar" hidden><button type="button" id="backUml" title="Torna al diagramma delle classi (U)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>Diagramma delle classi</button><span id="crumbWhere"></span></div>
+      <div id="modBar" hidden><button type="button" id="modToggle">⊟ Condensa i moduli</button></div><div id="crumbBar" hidden><button type="button" id="backUml" title="Torna al diagramma delle classi (U)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>Diagramma delle classi</button><span id="crumbWhere"></span></div>
       <div class="zoombar" role="group" aria-label="Zoom">
         <button type="button" id="zoomOut" aria-label="Riduci">−</button>
         <button type="button" id="zoomVal" title="Torna al 100% (Ctrl+0)">100%</button>
@@ -692,6 +775,7 @@ table.ref tr.kgroup td { font-weight: 700; color: var(--muted); padding-top: 12p
 </div>
 
 <script>
+const ModuleLibrary = [{"topic": "algoritmi_di_ordinamento", "topicTitle": "Algoritmi di ordinamento", "id": "Ordinamento", "text": "<?xml version=\"1.0\"?>\n<flowgorithm fileversion=\"4.2\">\n    <attributes>\n        <attribute name=\"name\" value=\"Ordinamento\"/>\n        <attribute name=\"authors\" value=\"FlowLab\"/>\n        <attribute name=\"about\" value=\"Funzioni per ordinare in modo crescente un array di interi: bubbleSort(v, n), selectionSort(v, n) e insertionSort(v, n), dove n è il numero di elementi da ordinare.\"/>\n        <attribute name=\"saved\" value=\"2026-11-11 08:00:00 AM\"/>\n        <attribute name=\"created\" value=\"Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx\"/>\n        <attribute name=\"edited\" value=\"Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx\"/>\n    <\/attributes>\n    <function name=\"Main\" type=\"None\" variable=\"\">\n        <parameters/>\n        <body>\n            <comment text=\"Prova del modulo: questo Main non viene importato\"/>\n            <declare name=\"v\" type=\"Integer\" array=\"True\" size=\"8\"/>\n            <declare name=\"i\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <for variable=\"i\" start=\"0\" end=\"7\" direction=\"inc\" step=\"1\">\n                <assign variable=\"v[i]\" expression=\"(i * 37 + 11) mod 50\"/>\n            <\/for>\n            <call expression=\"insertionSort(v, 8)\"/>\n            <for variable=\"i\" start=\"0\" end=\"7\" direction=\"inc\" step=\"1\">\n                <output expression=\"v[i] &amp; &quot; &quot;\" newline=\"False\"/>\n            <\/for>\n            <output expression=\"&quot;&quot;\" newline=\"True\"/>\n        <\/body>\n    <\/function>\n    <function name=\"bubbleSort\" type=\"None\" variable=\"\">\n        <parameters>\n            <parameter name=\"v\" type=\"Integer\" array=\"True\"/>\n            <parameter name=\"n\" type=\"Integer\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <comment text=\"Confronta gli elementi vicini e li scambia: a ogni passata il più grande va in fondo\"/>\n            <declare name=\"i, j, t\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <for variable=\"i\" start=\"0\" end=\"n - 2\" direction=\"inc\" step=\"1\">\n                <for variable=\"j\" start=\"0\" end=\"n - 2 - i\" direction=\"inc\" step=\"1\">\n                    <if expression=\"v[j] &gt; v[j + 1]\">\n                        <then>\n                            <assign variable=\"t\" expression=\"v[j]\"/>\n                            <assign variable=\"v[j]\" expression=\"v[j + 1]\"/>\n                            <assign variable=\"v[j + 1]\" expression=\"t\"/>\n                        <\/then>\n                        <else/>\n                    <\/if>\n                <\/for>\n            <\/for>\n        <\/body>\n    <\/function>\n    <function name=\"selectionSort\" type=\"None\" variable=\"\">\n        <parameters>\n            <parameter name=\"v\" type=\"Integer\" array=\"True\"/>\n            <parameter name=\"n\" type=\"Integer\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <comment text=\"Cerca il minimo della parte non ordinata e lo mette al suo posto\"/>\n            <declare name=\"i, j, m, t\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <for variable=\"i\" start=\"0\" end=\"n - 2\" direction=\"inc\" step=\"1\">\n                <assign variable=\"m\" expression=\"i\"/>\n                <for variable=\"j\" start=\"i + 1\" end=\"n - 1\" direction=\"inc\" step=\"1\">\n                    <if expression=\"v[j] &lt; v[m]\">\n                        <then>\n                            <assign variable=\"m\" expression=\"j\"/>\n                        <\/then>\n                        <else/>\n                    <\/if>\n                <\/for>\n                <assign variable=\"t\" expression=\"v[i]\"/>\n                <assign variable=\"v[i]\" expression=\"v[m]\"/>\n                <assign variable=\"v[m]\" expression=\"t\"/>\n            <\/for>\n        <\/body>\n    <\/function>\n    <function name=\"insertionSort\" type=\"None\" variable=\"\">\n        <parameters>\n            <parameter name=\"v\" type=\"Integer\" array=\"True\"/>\n            <parameter name=\"n\" type=\"Integer\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <comment text=\"Inserisce ogni elemento al suo posto nella parte già ordinata, spostando avanti quelli più grandi\"/>\n            <declare name=\"i, j, x\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <for variable=\"i\" start=\"1\" end=\"n - 1\" direction=\"inc\" step=\"1\">\n                <assign variable=\"x\" expression=\"v[i]\"/>\n                <assign variable=\"j\" expression=\"i - 1\"/>\n                <while expression=\"j &gt;= 0 and v[j] &gt; x\">\n                    <assign variable=\"v[j + 1]\" expression=\"v[j]\"/>\n                    <assign variable=\"j\" expression=\"j - 1\"/>\n                <\/while>\n                <assign variable=\"v[j + 1]\" expression=\"x\"/>\n            <\/for>\n        <\/body>\n    <\/function>\n<\/flowgorithm>\n"}, {"topic": "algoritmi_di_ricerca", "topicTitle": "Algoritmi di ricerca", "id": "Ricerca", "text": "<?xml version=\"1.0\"?>\n<flowgorithm fileversion=\"4.2\">\n    <attributes>\n        <attribute name=\"name\" value=\"Ricerca\"/>\n        <attribute name=\"authors\" value=\"FlowLab\"/>\n        <attribute name=\"about\" value=\"Funzioni per cercare un valore x in un array di interi: ricercaLineare(v, n, x) per un array qualsiasi e ricercaBinaria(v, n, x) per un array ordinato. Restituiscono la posizione del valore oppure -1 se non c'è.\"/>\n        <attribute name=\"saved\" value=\"2026-11-11 08:00:00 AM\"/>\n        <attribute name=\"created\" value=\"Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx\"/>\n        <attribute name=\"edited\" value=\"Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx\"/>\n    <\/attributes>\n    <function name=\"Main\" type=\"None\" variable=\"\">\n        <parameters/>\n        <body>\n            <comment text=\"Prova del modulo: questo Main non viene importato\"/>\n            <declare name=\"v\" type=\"Integer\" array=\"True\" size=\"6\"/>\n            <declare name=\"i\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <for variable=\"i\" start=\"0\" end=\"5\" direction=\"inc\" step=\"1\">\n                <assign variable=\"v[i]\" expression=\"i * 3\"/>\n            <\/for>\n            <output expression=\"&quot;15 è in posizione &quot; &amp; ricercaBinaria(v, 6, 15) &amp; &quot;, 7 in posizione &quot; &amp; ricercaLineare(v, 6, 7)\" newline=\"True\"/>\n        <\/body>\n    <\/function>\n    <function name=\"ricercaLineare\" type=\"Integer\" variable=\"posizione\">\n        <parameters>\n            <parameter name=\"v\" type=\"Integer\" array=\"True\"/>\n            <parameter name=\"n\" type=\"Integer\" array=\"False\"/>\n            <parameter name=\"x\" type=\"Integer\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <comment text=\"Controlla gli elementi uno dopo l'altro\"/>\n            <declare name=\"posizione, i\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <assign variable=\"posizione\" expression=\"-1\"/>\n            <assign variable=\"i\" expression=\"0\"/>\n            <while expression=\"posizione = -1 and i &lt; n\">\n                <if expression=\"v[i] = x\">\n                    <then>\n                        <assign variable=\"posizione\" expression=\"i\"/>\n                    <\/then>\n                    <else/>\n                <\/if>\n                <assign variable=\"i\" expression=\"i + 1\"/>\n            <\/while>\n        <\/body>\n    <\/function>\n    <function name=\"ricercaBinaria\" type=\"Integer\" variable=\"posizione\">\n        <parameters>\n            <parameter name=\"v\" type=\"Integer\" array=\"True\"/>\n            <parameter name=\"n\" type=\"Integer\" array=\"False\"/>\n            <parameter name=\"x\" type=\"Integer\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <comment text=\"L'array deve essere ordinato: a ogni passo si dimezza la parte in cui cercare\"/>\n            <declare name=\"posizione, inizio, fine, medio\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <assign variable=\"posizione\" expression=\"-1\"/>\n            <assign variable=\"inizio\" expression=\"0\"/>\n            <assign variable=\"fine\" expression=\"n - 1\"/>\n            <while expression=\"posizione = -1 and inizio &lt;= fine\">\n                <assign variable=\"medio\" expression=\"Int((inizio + fine) / 2)\"/>\n                <if expression=\"v[medio] = x\">\n                    <then>\n                        <assign variable=\"posizione\" expression=\"medio\"/>\n                    <\/then>\n                    <else>\n                        <if expression=\"v[medio] &lt; x\">\n                            <then>\n                                <assign variable=\"inizio\" expression=\"medio + 1\"/>\n                            <\/then>\n                            <else>\n                                <assign variable=\"fine\" expression=\"medio - 1\"/>\n                            <\/else>\n                        <\/if>\n                    <\/else>\n                <\/if>\n            <\/while>\n        <\/body>\n    <\/function>\n<\/flowgorithm>\n"}, {"topic": "strutture_dati", "topicTitle": "Strutture dati", "id": "ArrayList", "text": "<?xml version=\"1.0\"?>\n<flowgorithm fileversion=\"4.2\">\n    <attributes>\n        <attribute name=\"name\" value=\"ArrayList\"/>\n        <attribute name=\"authors\" value=\"FlowLab\"/>\n        <attribute name=\"about\" value=\"Lista di elementi di tipo T che cresce da sola, come java.util.ArrayList. Internamente usa un array: quando è pieno ne crea uno una volta e mezza più grande e copia gli elementi.\"/>\n        <attribute name=\"saved\" value=\"2026-11-11 08:00:00 AM\"/>\n        <attribute name=\"created\" value=\"Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx\"/>\n        <attribute name=\"edited\" value=\"Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx\"/>\n    <\/attributes>\n    <flowlab-classes>\n        <class name=\"ProvaArrayList\" parent=\"\" x=\"40\" y=\"360\"/>\n        <class name=\"ArrayList\" parent=\"\" tparams=\"T\" x=\"40\" y=\"40\">\n            <attribute name=\"elementi\" type=\"T\" array=\"True\" size=\"10\" visibility=\"private\" static=\"False\" init=\"\"/>\n            <attribute name=\"quanti\" type=\"Integer\" array=\"False\" size=\"\" visibility=\"private\" static=\"False\" init=\"0\"/>\n        <\/class>\n    <\/flowlab-classes>\n    <function name=\"Main\" type=\"None\" variable=\"\" flowlab-class=\"ProvaArrayList\" flowlab-visibility=\"public\" flowlab-static=\"True\">\n        <parameters/>\n        <body>\n            <comment text=\"Prova del modulo: questo Main non viene importato\"/>\n            <declare name=\"quadrati\" type=\"ArrayList&lt;Integer&gt;\" array=\"False\" size=\"\"/>\n            <declare name=\"i\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <assign variable=\"quadrati\" expression=\"new ArrayList&lt;Integer&gt;()\"/>\n            <for variable=\"i\" start=\"1\" end=\"15\" direction=\"inc\" step=\"1\">\n                <call expression=\"quadrati.add(i * i)\"/>\n            <\/for>\n            <output expression=\"&quot;Elementi: &quot; &amp; quadrati.size() &amp; &quot;, il terzo è &quot; &amp; quadrati.get(2)\" newline=\"True\"/>\n            <call expression=\"quadrati.remove(0)\"/>\n            <call expression=\"quadrati.add(0, 100)\"/>\n            <output expression=\"&quot;Ora il primo è &quot; &amp; quadrati.get(0) &amp; &quot;, il secondo &quot; &amp; quadrati.get(1)\" newline=\"True\"/>\n            <output expression=\"&quot;Contiene 49? &quot; &amp; quadrati.contains(49) &amp; &quot; in posizione &quot; &amp; quadrati.indexOf(49)\" newline=\"True\"/>\n            <declare name=\"nomi\" type=\"ArrayList&lt;String&gt;\" array=\"False\" size=\"\"/>\n            <assign variable=\"nomi\" expression=\"new ArrayList&lt;String&gt;(0)\"/>\n            <call expression=\"nomi.add(&quot;Ada&quot;)\"/>\n            <call expression=\"nomi.add(&quot;Alan&quot;)\"/>\n            <output expression=\"&quot;Nomi: &quot; &amp; nomi.get(0) &amp; &quot; e &quot; &amp; nomi.get(1)\" newline=\"True\"/>\n            <declare name=\"copia\" type=\"ArrayList&lt;Integer&gt;\" array=\"False\" size=\"\"/>\n            <assign variable=\"copia\" expression=\"new ArrayList&lt;Integer&gt;(quadrati)\"/>\n            <call expression=\"copia.set(0, -1)\"/>\n            <output expression=\"&quot;Copia: &quot; &amp; copia.get(0) &amp; &quot; &quot; &amp; copia.get(1) &amp; &quot;, originale: &quot; &amp; quadrati.get(0) &amp; &quot;, elementi &quot; &amp; copia.size()\" newline=\"True\"/>\n        <\/body>\n    <\/function>\n    <function name=\"ArrayList\" type=\"None\" variable=\"\" flowlab-class=\"ArrayList\" flowlab-visibility=\"public\" flowlab-static=\"False\" flowlab-ctor=\"True\">\n        <parameters/>\n        <body>\n            <comment text=\"Lista vuota con capacità iniziale 10, come new ArrayList&lt;&gt;() in Java\"/>\n        <\/body>\n    <\/function>\n    <function name=\"ArrayList\" type=\"None\" variable=\"\" flowlab-class=\"ArrayList\" flowlab-visibility=\"public\" flowlab-static=\"False\" flowlab-ctor=\"True\">\n        <parameters>\n            <parameter name=\"capacitaIniziale\" type=\"Integer\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <comment text=\"Lista vuota con un array interno di capacitaIniziale posti, come new ArrayList&lt;&gt;(n) in Java\"/>\n            <declare name=\"nuovo\" type=\"T\" array=\"True\" size=\"capacitaIniziale\"/>\n            <assign variable=\"elementi\" expression=\"nuovo\"/>\n        <\/body>\n    <\/function>\n    <function name=\"ArrayList\" type=\"None\" variable=\"\" flowlab-class=\"ArrayList\" flowlab-visibility=\"public\" flowlab-static=\"False\" flowlab-ctor=\"True\">\n        <parameters>\n            <parameter name=\"altra\" type=\"ArrayList&lt;T&gt;\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <comment text=\"Copia degli elementi di un'altra lista, come new ArrayList&lt;&gt;(altra) in Java\"/>\n            <declare name=\"k\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <declare name=\"nuovo\" type=\"T\" array=\"True\" size=\"altra.quanti\"/>\n            <for variable=\"k\" start=\"0\" end=\"altra.quanti - 1\" direction=\"inc\" step=\"1\">\n                <assign variable=\"nuovo[k]\" expression=\"altra.elementi[k]\"/>\n            <\/for>\n            <assign variable=\"elementi\" expression=\"nuovo\"/>\n            <assign variable=\"quanti\" expression=\"altra.quanti\"/>\n        <\/body>\n    <\/function>\n    <function name=\"add\" type=\"None\" variable=\"\" flowlab-class=\"ArrayList\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters>\n            <parameter name=\"x\" type=\"T\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <if expression=\"quanti = Size(elementi)\">\n                <then>\n                    <call expression=\"cresci()\"/>\n                <\/then>\n                <else/>\n            <\/if>\n            <assign variable=\"elementi[quanti]\" expression=\"x\"/>\n            <assign variable=\"quanti\" expression=\"quanti + 1\"/>\n        <\/body>\n    <\/function>\n    <function name=\"add\" type=\"None\" variable=\"\" flowlab-class=\"ArrayList\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters>\n            <parameter name=\"i\" type=\"Integer\" array=\"False\"/>\n            <parameter name=\"x\" type=\"T\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <comment text=\"Inserisce x in posizione i: gli elementi da i in poi si spostano di un posto\"/>\n            <declare name=\"k\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <if expression=\"quanti = Size(elementi)\">\n                <then>\n                    <call expression=\"cresci()\"/>\n                <\/then>\n                <else/>\n            <\/if>\n            <for variable=\"k\" start=\"quanti - 1\" end=\"i\" direction=\"dec\" step=\"1\">\n                <assign variable=\"elementi[k + 1]\" expression=\"elementi[k]\"/>\n            <\/for>\n            <assign variable=\"elementi[i]\" expression=\"x\"/>\n            <assign variable=\"quanti\" expression=\"quanti + 1\"/>\n        <\/body>\n    <\/function>\n    <function name=\"get\" type=\"T\" variable=\"elemento\" flowlab-class=\"ArrayList\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters>\n            <parameter name=\"i\" type=\"Integer\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <declare name=\"elemento\" type=\"T\" array=\"False\" size=\"\"/>\n            <assign variable=\"elemento\" expression=\"elementi[i]\"/>\n        <\/body>\n    <\/function>\n    <function name=\"set\" type=\"None\" variable=\"\" flowlab-class=\"ArrayList\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters>\n            <parameter name=\"i\" type=\"Integer\" array=\"False\"/>\n            <parameter name=\"x\" type=\"T\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <assign variable=\"elementi[i]\" expression=\"x\"/>\n        <\/body>\n    <\/function>\n    <function name=\"remove\" type=\"T\" variable=\"tolto\" flowlab-class=\"ArrayList\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters>\n            <parameter name=\"i\" type=\"Integer\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <comment text=\"Toglie l'elemento in posizione i: quelli dopo si spostano indietro di un posto\"/>\n            <declare name=\"tolto\" type=\"T\" array=\"False\" size=\"\"/>\n            <declare name=\"k\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <assign variable=\"tolto\" expression=\"elementi[i]\"/>\n            <for variable=\"k\" start=\"i\" end=\"quanti - 2\" direction=\"inc\" step=\"1\">\n                <assign variable=\"elementi[k]\" expression=\"elementi[k + 1]\"/>\n            <\/for>\n            <assign variable=\"quanti\" expression=\"quanti - 1\"/>\n        <\/body>\n    <\/function>\n    <function name=\"size\" type=\"Integer\" variable=\"n\" flowlab-class=\"ArrayList\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters/>\n        <body>\n            <declare name=\"n\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <assign variable=\"n\" expression=\"quanti\"/>\n        <\/body>\n    <\/function>\n    <function name=\"isEmpty\" type=\"Boolean\" variable=\"vuota\" flowlab-class=\"ArrayList\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters/>\n        <body>\n            <declare name=\"vuota\" type=\"Boolean\" array=\"False\" size=\"\"/>\n            <assign variable=\"vuota\" expression=\"quanti = 0\"/>\n        <\/body>\n    <\/function>\n    <function name=\"indexOf\" type=\"Integer\" variable=\"posizione\" flowlab-class=\"ArrayList\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters>\n            <parameter name=\"x\" type=\"T\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <declare name=\"posizione, k\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <assign variable=\"posizione\" expression=\"-1\"/>\n            <assign variable=\"k\" expression=\"0\"/>\n            <while expression=\"posizione = -1 and k &lt; quanti\">\n                <if expression=\"elementi[k] = x\">\n                    <then>\n                        <assign variable=\"posizione\" expression=\"k\"/>\n                    <\/then>\n                    <else/>\n                <\/if>\n                <assign variable=\"k\" expression=\"k + 1\"/>\n            <\/while>\n        <\/body>\n    <\/function>\n    <function name=\"contains\" type=\"Boolean\" variable=\"trovato\" flowlab-class=\"ArrayList\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters>\n            <parameter name=\"x\" type=\"T\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <declare name=\"trovato\" type=\"Boolean\" array=\"False\" size=\"\"/>\n            <assign variable=\"trovato\" expression=\"indexOf(x) &gt;= 0\"/>\n        <\/body>\n    <\/function>\n    <function name=\"clear\" type=\"None\" variable=\"\" flowlab-class=\"ArrayList\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters/>\n        <body>\n            <assign variable=\"quanti\" expression=\"0\"/>\n        <\/body>\n    <\/function>\n    <function name=\"cresci\" type=\"None\" variable=\"\" flowlab-class=\"ArrayList\" flowlab-visibility=\"private\" flowlab-static=\"False\">\n        <parameters/>\n        <body>\n            <comment text=\"Array pieno: se ne crea uno più grande (una volta e mezza, come ArrayList di Java) e si copiano gli elementi\"/>\n            <declare name=\"nuovaCapacita, k\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <assign variable=\"nuovaCapacita\" expression=\"Size(elementi) + Int(Size(elementi) / 2)\"/>\n            <if expression=\"nuovaCapacita &lt; Size(elementi) + 1\">\n                <then>\n                    <assign variable=\"nuovaCapacita\" expression=\"Size(elementi) + 1\"/>\n                <\/then>\n                <else/>\n            <\/if>\n            <declare name=\"nuovo\" type=\"T\" array=\"True\" size=\"nuovaCapacita\"/>\n            <for variable=\"k\" start=\"0\" end=\"quanti - 1\" direction=\"inc\" step=\"1\">\n                <assign variable=\"nuovo[k]\" expression=\"elementi[k]\"/>\n            <\/for>\n            <assign variable=\"elementi\" expression=\"nuovo\"/>\n        <\/body>\n    <\/function>\n<\/flowgorithm>\n"}, {"topic": "strutture_dati", "topicTitle": "Strutture dati", "id": "Queue", "text": "<?xml version=\"1.0\"?>\n<flowgorithm fileversion=\"4.2\">\n    <attributes>\n        <attribute name=\"name\" value=\"Queue\"/>\n        <attribute name=\"authors\" value=\"FlowLab\"/>\n        <attribute name=\"about\" value=\"Coda (FIFO) di elementi di tipo T, come java.util.Queue: gli elementi escono nell'ordine in cui sono entrati. È una lista collegata di nodi Nodo&lt;T&gt;.\"/>\n        <attribute name=\"saved\" value=\"2026-11-11 08:00:00 AM\"/>\n        <attribute name=\"created\" value=\"Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx\"/>\n        <attribute name=\"edited\" value=\"Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx\"/>\n    <\/attributes>\n    <flowlab-classes>\n        <class name=\"ProvaQueue\" parent=\"\" x=\"40\" y=\"360\"/>\n        <class name=\"Queue\" parent=\"\" tparams=\"T\" x=\"40\" y=\"40\">\n            <attribute name=\"testa\" type=\"Nodo&lt;T&gt;\" array=\"False\" size=\"\" visibility=\"private\" static=\"False\" init=\"\"/>\n            <attribute name=\"ultimo\" type=\"Nodo&lt;T&gt;\" array=\"False\" size=\"\" visibility=\"private\" static=\"False\" init=\"\"/>\n            <attribute name=\"quanti\" type=\"Integer\" array=\"False\" size=\"\" visibility=\"private\" static=\"False\" init=\"0\"/>\n        <\/class>\n        <class name=\"Nodo\" parent=\"\" tparams=\"T\" x=\"40\" y=\"330\">\n            <attribute name=\"valore\" type=\"T\" array=\"False\" size=\"\" visibility=\"public\" static=\"False\" init=\"\"/>\n            <attribute name=\"successivo\" type=\"Nodo&lt;T&gt;\" array=\"False\" size=\"\" visibility=\"public\" static=\"False\" init=\"\"/>\n        <\/class>\n    <\/flowlab-classes>\n    <function name=\"Main\" type=\"None\" variable=\"\" flowlab-class=\"ProvaQueue\" flowlab-visibility=\"public\" flowlab-static=\"True\">\n        <parameters/>\n        <body>\n            <comment text=\"Prova del modulo: questo Main non viene importato\"/>\n            <declare name=\"fila\" type=\"Queue&lt;Integer&gt;\" array=\"False\" size=\"\"/>\n            <declare name=\"i\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <assign variable=\"fila\" expression=\"new Queue&lt;Integer&gt;()\"/>\n            <for variable=\"i\" start=\"1\" end=\"5\" direction=\"inc\" step=\"1\">\n                <call expression=\"fila.add(i * 10)\"/>\n            <\/for>\n            <output expression=\"&quot;Primo in fila: &quot; &amp; fila.peek() &amp; &quot; su &quot; &amp; fila.size()\" newline=\"True\"/>\n            <declare name=\"copia\" type=\"Queue&lt;Integer&gt;\" array=\"False\" size=\"\"/>\n            <assign variable=\"copia\" expression=\"new Queue&lt;Integer&gt;(fila)\"/>\n            <call expression=\"copia.remove()\"/>\n            <output expression=\"&quot;La copia ha &quot; &amp; copia.size() &amp; &quot; elementi, la coda &quot; &amp; fila.size()\" newline=\"True\"/>\n            <while expression=\"not fila.isEmpty()\">\n                <output expression=\"fila.remove() &amp; &quot; &quot;\" newline=\"False\"/>\n            <\/while>\n            <output expression=\"&quot;&quot;\" newline=\"True\"/>\n        <\/body>\n    <\/function>\n    <function name=\"Nodo\" type=\"None\" variable=\"\" flowlab-class=\"Nodo\" flowlab-visibility=\"public\" flowlab-static=\"False\" flowlab-ctor=\"True\">\n        <parameters>\n            <parameter name=\"v\" type=\"T\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <assign variable=\"valore\" expression=\"v\"/>\n            <assign variable=\"successivo\" expression=\"null\"/>\n        <\/body>\n    <\/function>\n    <function name=\"Queue\" type=\"None\" variable=\"\" flowlab-class=\"Queue\" flowlab-visibility=\"public\" flowlab-static=\"False\" flowlab-ctor=\"True\">\n        <parameters/>\n        <body>\n            <comment text=\"Coda vuota, come new LinkedList&lt;&gt;() in Java\"/>\n        <\/body>\n    <\/function>\n    <function name=\"Queue\" type=\"None\" variable=\"\" flowlab-class=\"Queue\" flowlab-visibility=\"public\" flowlab-static=\"False\" flowlab-ctor=\"True\">\n        <parameters>\n            <parameter name=\"altra\" type=\"Queue&lt;T&gt;\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <comment text=\"Copia degli elementi di un'altra coda, nello stesso ordine, come new LinkedList&lt;&gt;(altra) in Java\"/>\n            <declare name=\"n\" type=\"Nodo&lt;T&gt;\" array=\"False\" size=\"\"/>\n            <assign variable=\"n\" expression=\"altra.testa\"/>\n            <while expression=\"n != null\">\n                <call expression=\"add(n.valore)\"/>\n                <assign variable=\"n\" expression=\"n.successivo\"/>\n            <\/while>\n        <\/body>\n    <\/function>\n    <function name=\"add\" type=\"None\" variable=\"\" flowlab-class=\"Queue\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters>\n            <parameter name=\"x\" type=\"T\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <declare name=\"n\" type=\"Nodo&lt;T&gt;\" array=\"False\" size=\"\"/>\n            <assign variable=\"n\" expression=\"new Nodo&lt;T&gt;(x)\"/>\n            <if expression=\"ultimo = null\">\n                <then>\n                    <assign variable=\"testa\" expression=\"n\"/>\n                <\/then>\n                <else>\n                    <assign variable=\"ultimo.successivo\" expression=\"n\"/>\n                <\/else>\n            <\/if>\n            <assign variable=\"ultimo\" expression=\"n\"/>\n            <assign variable=\"quanti\" expression=\"quanti + 1\"/>\n        <\/body>\n    <\/function>\n    <function name=\"remove\" type=\"T\" variable=\"primo\" flowlab-class=\"Queue\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters/>\n        <body>\n            <comment text=\"Toglie e restituisce il primo elemento della coda\"/>\n            <declare name=\"primo\" type=\"T\" array=\"False\" size=\"\"/>\n            <assign variable=\"primo\" expression=\"testa.valore\"/>\n            <assign variable=\"testa\" expression=\"testa.successivo\"/>\n            <if expression=\"testa = null\">\n                <then>\n                    <assign variable=\"ultimo\" expression=\"null\"/>\n                <\/then>\n                <else/>\n            <\/if>\n            <assign variable=\"quanti\" expression=\"quanti - 1\"/>\n        <\/body>\n    <\/function>\n    <function name=\"peek\" type=\"T\" variable=\"primo\" flowlab-class=\"Queue\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters/>\n        <body>\n            <declare name=\"primo\" type=\"T\" array=\"False\" size=\"\"/>\n            <assign variable=\"primo\" expression=\"testa.valore\"/>\n        <\/body>\n    <\/function>\n    <function name=\"size\" type=\"Integer\" variable=\"n\" flowlab-class=\"Queue\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters/>\n        <body>\n            <declare name=\"n\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <assign variable=\"n\" expression=\"quanti\"/>\n        <\/body>\n    <\/function>\n    <function name=\"isEmpty\" type=\"Boolean\" variable=\"vuota\" flowlab-class=\"Queue\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters/>\n        <body>\n            <declare name=\"vuota\" type=\"Boolean\" array=\"False\" size=\"\"/>\n            <assign variable=\"vuota\" expression=\"quanti = 0\"/>\n        <\/body>\n    <\/function>\n<\/flowgorithm>\n"}, {"topic": "strutture_dati", "topicTitle": "Strutture dati", "id": "Stack", "text": "<?xml version=\"1.0\"?>\n<flowgorithm fileversion=\"4.2\">\n    <attributes>\n        <attribute name=\"name\" value=\"Stack\"/>\n        <attribute name=\"authors\" value=\"FlowLab\"/>\n        <attribute name=\"about\" value=\"Pila (LIFO) di elementi di tipo T, come java.util.Stack: l'ultimo elemento inserito con push è il primo tolto con pop. Usa un array che cresce quando è pieno.\"/>\n        <attribute name=\"saved\" value=\"2026-11-11 08:00:00 AM\"/>\n        <attribute name=\"created\" value=\"Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx\"/>\n        <attribute name=\"edited\" value=\"Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx\"/>\n    <\/attributes>\n    <flowlab-classes>\n        <class name=\"ProvaStack\" parent=\"\" x=\"40\" y=\"360\"/>\n        <class name=\"Stack\" parent=\"\" tparams=\"T\" x=\"40\" y=\"40\">\n            <attribute name=\"elementi\" type=\"T\" array=\"True\" size=\"10\" visibility=\"private\" static=\"False\" init=\"\"/>\n            <attribute name=\"quanti\" type=\"Integer\" array=\"False\" size=\"\" visibility=\"private\" static=\"False\" init=\"0\"/>\n        <\/class>\n    <\/flowlab-classes>\n    <function name=\"Main\" type=\"None\" variable=\"\" flowlab-class=\"ProvaStack\" flowlab-visibility=\"public\" flowlab-static=\"True\">\n        <parameters/>\n        <body>\n            <comment text=\"Prova del modulo: questo Main non viene importato\"/>\n            <declare name=\"pila\" type=\"Stack&lt;String&gt;\" array=\"False\" size=\"\"/>\n            <assign variable=\"pila\" expression=\"new Stack&lt;String&gt;()\"/>\n            <call expression=\"pila.push(&quot;primo&quot;)\"/>\n            <call expression=\"pila.push(&quot;secondo&quot;)\"/>\n            <call expression=\"pila.push(&quot;terzo&quot;)\"/>\n            <output expression=\"&quot;In cima: &quot; &amp; pila.peek()\" newline=\"True\"/>\n            <while expression=\"not pila.isEmpty()\">\n                <output expression=\"pila.pop()\" newline=\"True\"/>\n            <\/while>\n        <\/body>\n    <\/function>\n    <function name=\"Stack\" type=\"None\" variable=\"\" flowlab-class=\"Stack\" flowlab-visibility=\"public\" flowlab-static=\"False\" flowlab-ctor=\"True\">\n        <parameters/>\n        <body>\n            <comment text=\"Pila vuota, come new Stack&lt;&gt;() in Java\"/>\n        <\/body>\n    <\/function>\n    <function name=\"push\" type=\"None\" variable=\"\" flowlab-class=\"Stack\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters>\n            <parameter name=\"x\" type=\"T\" array=\"False\"/>\n        <\/parameters>\n        <body>\n            <if expression=\"quanti = Size(elementi)\">\n                <then>\n                    <call expression=\"cresci()\"/>\n                <\/then>\n                <else/>\n            <\/if>\n            <assign variable=\"elementi[quanti]\" expression=\"x\"/>\n            <assign variable=\"quanti\" expression=\"quanti + 1\"/>\n        <\/body>\n    <\/function>\n    <function name=\"pop\" type=\"T\" variable=\"cima\" flowlab-class=\"Stack\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters/>\n        <body>\n            <declare name=\"cima\" type=\"T\" array=\"False\" size=\"\"/>\n            <assign variable=\"quanti\" expression=\"quanti - 1\"/>\n            <assign variable=\"cima\" expression=\"elementi[quanti]\"/>\n        <\/body>\n    <\/function>\n    <function name=\"peek\" type=\"T\" variable=\"cima\" flowlab-class=\"Stack\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters/>\n        <body>\n            <declare name=\"cima\" type=\"T\" array=\"False\" size=\"\"/>\n            <assign variable=\"cima\" expression=\"elementi[quanti - 1]\"/>\n        <\/body>\n    <\/function>\n    <function name=\"size\" type=\"Integer\" variable=\"n\" flowlab-class=\"Stack\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters/>\n        <body>\n            <declare name=\"n\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <assign variable=\"n\" expression=\"quanti\"/>\n        <\/body>\n    <\/function>\n    <function name=\"isEmpty\" type=\"Boolean\" variable=\"vuota\" flowlab-class=\"Stack\" flowlab-visibility=\"public\" flowlab-static=\"False\">\n        <parameters/>\n        <body>\n            <declare name=\"vuota\" type=\"Boolean\" array=\"False\" size=\"\"/>\n            <assign variable=\"vuota\" expression=\"quanti = 0\"/>\n        <\/body>\n    <\/function>\n    <function name=\"cresci\" type=\"None\" variable=\"\" flowlab-class=\"Stack\" flowlab-visibility=\"private\" flowlab-static=\"False\">\n        <parameters/>\n        <body>\n            <comment text=\"Array pieno: se ne crea uno più grande (una volta e mezza, come ArrayList di Java) e si copiano gli elementi\"/>\n            <declare name=\"nuovaCapacita, k\" type=\"Integer\" array=\"False\" size=\"\"/>\n            <assign variable=\"nuovaCapacita\" expression=\"Size(elementi) + Int(Size(elementi) / 2)\"/>\n            <if expression=\"nuovaCapacita &lt; Size(elementi) + 1\">\n                <then>\n                    <assign variable=\"nuovaCapacita\" expression=\"Size(elementi) + 1\"/>\n                <\/then>\n                <else/>\n            <\/if>\n            <declare name=\"nuovo\" type=\"T\" array=\"True\" size=\"nuovaCapacita\"/>\n            <for variable=\"k\" start=\"0\" end=\"quanti - 1\" direction=\"inc\" step=\"1\">\n                <assign variable=\"nuovo[k]\" expression=\"elementi[k]\"/>\n            <\/for>\n            <assign variable=\"elementi\" expression=\"nuovo\"/>\n        <\/body>\n    <\/function>\n<\/flowgorithm>\n"}];
 /* ==========================================================================
    FlowLab — motore delle espressioni
    Lessico, parser (precedenze compatibili con i file .fprg), valori tipizzati,
@@ -706,8 +790,52 @@ class FlowError extends Error {
 
 const TYPES = ['Integer', 'Real', 'String', 'Boolean'];
 const TYPE_IT = { Integer: 'Intero', Real: 'Reale', String: 'Stringa', Boolean: 'Booleano', None: 'Nessuno', Object: 'Oggetto' };
+/* ---- tipi generici: "ArrayList<Integer>", "Coppia<String, Punto>"; "T" è un parametro di tipo ---- */
+const BASE_OF = { intero: 'Integer', reale: 'Real', stringa: 'String', booleano: 'Boolean', integer: 'Integer', real: 'Real', string: 'String', boolean: 'Boolean' };
+/* divide al primo livello sulle virgole: "String, Coppia<A, B>" -> ["String", "Coppia<A, B>"] */
+function splitTypeList(s) {
+  const out = []; let d = 0, cur = '';
+  for (const ch of String(s)) {
+    if (ch === '<') d++;
+    if (ch === '>') d--;
+    if (ch === ',' && d === 0) { out.push(cur.trim()); cur = ''; continue; }
+    cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+/* { base, args }: "ArrayList<Integer>" -> { base: "ArrayList", args: ["Integer"] } */
+function splitType(t) {
+  const s = String(t == null ? '' : t).trim(), i = s.indexOf('<');
+  if (i < 0 || !s.endsWith('>')) return { base: s, args: [] };
+  return { base: s.slice(0, i).trim(), args: splitTypeList(s.slice(i + 1, -1)) };
+}
+const joinType = (base, args) => (args && args.length ? `${base}<${args.join(', ')}>` : base);
+const isGenericType = (t) => splitType(t).args.length > 0;
 /* nome leggibile di un tipo: i tipi base in italiano, le classi con il loro nome */
-const typeName = (t) => TYPE_IT[t] || t;
+function typeName(t) {
+  const { base, args } = splitType(t);
+  const b = TYPE_IT[base] || base;
+  return args.length ? `${b}<${args.map(typeName).join(', ')}>` : b;
+}
+/* tipo scritto dall'utente (anche in italiano) -> forma interna: "ArrayList<intero>" -> "ArrayList<Integer>" */
+function normTypeText(t) {
+  const { base, args } = splitType(t);
+  return joinType(BASE_OF[base.toLowerCase()] || base, args.map(normTypeText));
+}
+/* sostituisce i parametri di tipo: subst("T[]"...) con map { t: "Integer" } (chiavi minuscole) */
+function substType(t, map) {
+  if (!map) return t;
+  const { base, args } = splitType(t);
+  if (!args.length) { const v = map[base.toLowerCase()]; return v !== undefined && v !== null ? v : t; }
+  return joinType(base, args.map((a) => substType(a, map)));
+}
+/* stesso tipo (maiuscole e minuscole non contano) */
+function sameType(a, b) {
+  const x = splitType(a), y = splitType(b);
+  if (x.base.toLowerCase() !== y.base.toLowerCase() || x.args.length !== y.args.length) return false;
+  return x.args.every((t, i) => sameType(t, y.args[i]));
+}
 const isBaseType = (t) => TYPES.includes(t);
 
 /* ---------------------------- Lessico ---------------------------------- */
@@ -865,6 +993,21 @@ function parseExpr(src) {
     }
     return indices;
   }
+  /* argomenti di tipo dopo "<": Intero, Coppia<Stringa, Punto> ... fino a ">" */
+  function typeArg() {
+    const t = peek();
+    if (t.k !== 'id') throw new FlowError('Tra < e > servono dei tipi, es. new ArrayList<Intero>()', { pos: t.pos });
+    p++;
+    let s = BASE_OF[t.v.toLowerCase()] || t.v;
+    if (isOp('<')) { p++; s = joinType(s, typeArgs()); }
+    return s;
+  }
+  function typeArgs() {
+    const out = [typeArg()];
+    while (isOp(',')) { p++; out.push(typeArg()); }
+    eat('>');
+    return out;
+  }
   /* atomo seguito da accessi con il punto: p.x  p.sposta(1, 2)  v[i].nome  this.dati[k] */
   function primary() {
     let e = atom();
@@ -894,7 +1037,10 @@ function parseExpr(src) {
       if (low === 'this') return node({ k: 'this' }, t);
       if (low === 'new' && peek().k === 'id') {
         const c = toks[p++];
-        return node({ k: 'new', cls: c.v, args: isOp('(') ? args() : [] }, t);
+        // new ArrayList<Intero>()  ·  new ArrayList<>() (tipo ricavato dalla variabile)
+        let targs = null;
+        if (isOp('<')) { p++; targs = typeArgs(); } else if (isOp('!=') && toks[p].text === '<>') { p++; targs = []; }
+        return node({ k: 'new', cls: c.v, targs, args: isOp('(') ? args() : [] }, t);
       }
       if (low === 'super') {
         if (isOp('(')) return node({ k: 'supercall', args: args() }, t);
@@ -1281,7 +1427,7 @@ function inferType(node, scope) {
   return 'Unknown';
 }
 
-const ExprLib = { FlowError, TYPES, TYPE_IT, typeName, isBaseType, tokenize, parseExpr, parseLValue, splitTop, parseLValueList, arrOffset, validIdent, RESERVED, V, isNum, fmtValue, fmtReal, literalOf, checkInt, coerce, parseInputText, BUILTINS, BUILTIN_NAMES, evalE, arrIndex, inferType };
+const ExprLib = { FlowError, TYPES, TYPE_IT, typeName, splitType, splitTypeList, joinType, isGenericType, normTypeText, substType, sameType, isBaseType, tokenize, parseExpr, parseLValue, splitTop, parseLValueList, arrOffset, validIdent, RESERVED, V, isNum, fmtValue, fmtReal, literalOf, checkInt, coerce, parseInputText, BUILTINS, BUILTIN_NAMES, evalE, arrIndex, inferType };
 if (typeof module !== 'undefined') module.exports = ExprLib;
 
 /* ==========================================================================
@@ -1349,9 +1495,26 @@ function setRets(f, list) {
 const VISIBILITY = { public: '+', private: '-', protected: '#' };
 const VIS_IT = { public: 'pubblico', private: 'privato', protected: 'protetto' };
 
+/* tparams: parametri di tipo di una classe generica (es. ["T"]);
+   module: { name, src } se la classe viene da un modulo importato (sola lettura) */
 function makeClass(name, props) {
-  return Object.assign({ id: newId(), name, parent: '', abstract: false, attributes: [], x: 40, y: 40 }, props || {});
+  return Object.assign({ id: newId(), name, parent: '', abstract: false, tparams: [], module: null, attributes: [], x: 40, y: 40 }, props || {});
 }
+/* "T" è un parametro di tipo della classe c? */
+const isTypeParam = (c, t) => !!c && (c.tparams || []).some((p) => p.toLowerCase() === String(t).toLowerCase());
+/* nome della classe con i parametri di tipo: ArrayList<T> */
+const classTitle = (c) => (c.tparams && c.tparams.length ? `${c.name}<${c.tparams.join(', ')}>` : c.name);
+/* moduli importati: { name, src, classes: [...], funcs: [...] } (un modulo di sole funzioni ha solo funcs) */
+function modulesOf(prog) {
+  const out = new Map();
+  const get = (m) => { if (!out.has(m.name)) out.set(m.name, { name: m.name, src: m.src, classes: [], funcs: [] }); return out.get(m.name); };
+  for (const c of prog.classes || []) if (c.module) get(c.module).classes.push(c);
+  for (const f of prog.functions) if (f.module) get(f.module).funcs.push(f);
+  return [...out.values()];
+}
+/* modulo da cui viene una funzione o un metodo (null se è del programma) */
+const moduleOfFunc = (prog, f) => { if (!f) return null; if (f.module) return f.module; const c = classOf(prog, f); return c && c.module ? c.module : null; };
+const isModuleFunc = (prog, f) => !!moduleOfFunc(prog, f);
 function makeAttribute(props) {
   return Object.assign({ name: '', type: 'Integer', array: false, size: '', visibility: 'private', static: false, init: '' }, props || {});
 }
@@ -1391,7 +1554,7 @@ function isTrivialOO(prog) {
   if (!hasClasses(prog)) return true;
   if (prog.classes.length !== 1) return false;
   const c = prog.classes[0];
-  if (c.parent || c.abstract || c.attributes.length) return false;
+  if (c.parent || c.abstract || c.attributes.length || (c.tparams || []).length || c.module) return false;
   return prog.functions.every((f) => f.cls === c.id && f.static && !f.ctor && (f.visibility || 'public') === 'public');
 }
 /* come sopra e con il nome predefinito: si salva nel formato standard senza perdere nulla */
@@ -1455,14 +1618,17 @@ function parseFprg(text) {
   const root = doc.documentElement;
   if (root.nodeName.toLowerCase() !== FPRG_ROOT) throw new Error('Il file non è un programma .fprg valido (elemento principale mancante).');
   _skipped = [];
-  _classNames = new Map();
+  _classNames = new Map(); _typeParams = new Set();
   const prog = { attrs: { name: '', authors: '', about: '', created: '', edited: '' }, functions: [], fileversion: root.getAttribute('fileversion') || '' };
   // estensione FlowLab: classi (lette per prime, perché i tipi le possono nominare)
   const clsEl = [...root.children].find((el) => el.nodeName.toLowerCase() === 'flowlab-classes');
   if (clsEl) {
     prog.classes = [];
     for (const c of clsEl.children) if (c.nodeName.toLowerCase() === 'class') {
-      const cl = makeClass((c.getAttribute('name') || '').trim(), { parent: (c.getAttribute('parent') || '').trim(), abstract: boolAttr(c.getAttribute('abstract'), false), x: +c.getAttribute('x') || 40, y: +c.getAttribute('y') || 40 });
+      const tp = (c.getAttribute('tparams') || '').split(',').map((x) => x.trim()).filter((x) => /^[A-Za-z_]\w*$/.test(x));
+      const mod = (c.getAttribute('module') || '').trim();
+      const cl = makeClass((c.getAttribute('name') || '').trim(), { parent: (c.getAttribute('parent') || '').trim(), abstract: boolAttr(c.getAttribute('abstract'), false), tparams: tp, module: mod ? { name: mod, src: c.getAttribute('module-src') || '' } : null, x: +c.getAttribute('x') || 40, y: +c.getAttribute('y') || 40 });
+      for (const t of tp) _typeParams.add(t.toLowerCase());
       if (!cl.name || _classNames.has(cl.name.toLowerCase())) continue;
       _classNames.set(cl.name.toLowerCase(), cl.name);
       prog.classes.push(cl);
@@ -1491,6 +1657,9 @@ function parseFprg(text) {
         type: normType(el.getAttribute('type'), true),
         variable: el.getAttribute('variable') || '',
       });
+      // funzione importata da un modulo di sole funzioni
+      const fm = (el.getAttribute('flowlab-module') || '').trim();
+      if (fm) f.module = { name: fm, src: el.getAttribute('flowlab-module-src') || '' };
       if (prog.classes) {
         const owner = classByName(prog, el.getAttribute('flowlab-class'));
         if (owner) f.cls = owner.id;
@@ -1532,12 +1701,18 @@ function parseFprg(text) {
     Object.assign(prog.functions[0], { static: true, ctor: false, visibility: 'public' });
   }
   _classNames = new Map();
+  _typeParams = new Set();
   return prog;
 }
 
 let _classNames = new Map();
+let _typeParams = new Set(); // parametri di tipo delle classi generiche del file
 function normType(t, allowNone) {
-  const l = String(t || '').toLowerCase();
+  // tipo generico: ArrayList<Integer>, Coppia<T, String>
+  const g = _MX.splitType(t);
+  if (g.args.length) return _MX.joinType(normType(g.base), g.args.map((a) => normType(a)));
+  const l = String(t || '').trim().toLowerCase();
+  if (_typeParams.has(l)) return String(t).trim();
   if (_classNames.has(l)) return _classNames.get(l);
   if (l === 'integer') return 'Integer';
   if (l === 'real') return 'Real';
@@ -1660,7 +1835,9 @@ function serializeFprg(prog) {
   if (oo) {
     L.push('    <flowlab-classes>');
     for (const c of prog.classes) {
-      const head = `        <class name="${xmlEsc(c.name)}" parent="${xmlEsc(c.parent || '')}"${c.abstract ? ' abstract="True"' : ''} x="${Math.round(c.x || 0)}" y="${Math.round(c.y || 0)}"`;
+      const gen = (c.tparams || []).length ? ` tparams="${xmlEsc(c.tparams.join(','))}"` : '';
+      const mod = c.module ? ` module="${xmlEsc(c.module.name)}" module-src="${xmlEsc(c.module.src || '')}"` : '';
+      const head = `        <class name="${xmlEsc(c.name)}" parent="${xmlEsc(c.parent || '')}"${c.abstract ? ' abstract="True"' : ''}${gen}${mod} x="${Math.round(c.x || 0)}" y="${Math.round(c.y || 0)}"`;
       if (!c.attributes.length) { L.push(head + '/>'); continue; }
       L.push(head + '>');
       for (const a of c.attributes) L.push(`            <attribute name="${xmlEsc(a.name)}" type="${xmlEsc(a.type)}" array="${TF(a.array)}" size="${xmlEsc(a.array ? fgExpr(a.size) : '')}" visibility="${a.visibility}" static="${TF(a.static)}" init="${xmlEsc(fgExpr(a.init || ''))}"/>`);
@@ -1671,12 +1848,13 @@ function serializeFprg(prog) {
   for (const f of prog.functions) {
     const rs = rets(f);
     let extra = rs.length > 1 ? ` flowlab-returns="${xmlEsc(rs.map((r) => r.name + ':' + r.type).join(';'))}"` : '';
+    if (f.module) extra += ` flowlab-module="${xmlEsc(f.module.name)}" flowlab-module-src="${xmlEsc(f.module.src || '')}"`;
     if (oo) { const c = classOf(prog, f); extra += ` flowlab-class="${xmlEsc(c ? c.name : '')}" flowlab-visibility="${f.visibility || 'public'}" flowlab-static="${TF(!!f.static)}"${f.ctor ? ' flowlab-ctor="True"' : ''}${f.abstract ? ' flowlab-abstract="True"' : ''}`; }
     // per le procedure si conserva il nome eventualmente lasciato in "variable" da altri editor
-    L.push(`    <function name="${xmlEsc(f.name)}" type="${rs.length ? rs[0].type : 'None'}" variable="${xmlEsc(rs.length ? rs[0].name : (f.variable || ''))}"${extra}>`);
+    L.push(`    <function name="${xmlEsc(f.name)}" type="${xmlEsc(rs.length ? rs[0].type : 'None')}" variable="${xmlEsc(rs.length ? rs[0].name : (f.variable || ''))}"${extra}>`);
     if (f.params.length) {
       L.push('        <parameters>');
-      for (const p of f.params) L.push(`            <parameter name="${xmlEsc(p.name)}" type="${p.type}" array="${TF(p.array)}"${p.array && (p.dims || 1) > 1 ? ` flowlab-dims="${p.dims}"` : ''}/>`);
+      for (const p of f.params) L.push(`            <parameter name="${xmlEsc(p.name)}" type="${xmlEsc(p.type)}" array="${TF(p.array)}"${p.array && (p.dims || 1) > 1 ? ` flowlab-dims="${p.dims}"` : ''}/>`);
       L.push('        </parameters>');
     } else L.push('        <parameters/>');
     if (f.body.length) {
@@ -1743,6 +1921,8 @@ function writeBlock(stmts, L, depth) {
 function extendedFeatures(prog) {
   const out = new Set();
   if (!isPlainOO(prog)) out.add('classi e oggetti');
+  if ((prog.classes || []).some((c) => (c.tparams || []).length)) out.add('classi generiche');
+  if ((prog.classes || []).some((c) => c.module) || prog.functions.some((f) => f.module)) out.add('moduli importati');
   for (const f of prog.functions) {
     if (rets(f).length > 1) out.add('funzioni con più valori restituiti');
     if (f.params.some((p) => p.array && (p.dims || 1) > 1)) out.add('array a più dimensioni');
@@ -1774,7 +1954,7 @@ function isIncomplete(s) {
   }
 }
 
-const ModelLib = { FPRG_ROOT, KINDS, VISIBILITY, VIS_IT, makeClass, makeAttribute, hasClasses, classById, classByName, classOf, mainClass, membersOf, chainOf, isSubclass, defaultClassName, wrapInClass, isTrivialOO, isPlainOO, missingAbstract, unwrapClasses, typeList, extendedFeatures, rets, setRets, fgExpr, newId, makeStmt, makeFunction, newProgram, cloneStmt, reId, walk, findStmt, parseFprg, serializeFprg, isIncomplete, normType };
+const ModelLib = { FPRG_ROOT, KINDS, VISIBILITY, VIS_IT, makeClass, isTypeParam, classTitle, modulesOf, isModuleFunc, moduleOfFunc, makeAttribute, hasClasses, classById, classByName, classOf, mainClass, membersOf, chainOf, isSubclass, defaultClassName, wrapInClass, isTrivialOO, isPlainOO, missingAbstract, unwrapClasses, typeList, extendedFeatures, rets, setRets, fgExpr, newId, makeStmt, makeFunction, newProgram, cloneStmt, reId, walk, findStmt, parseFprg, serializeFprg, isIncomplete, normType };
 if (typeof module !== 'undefined') module.exports = ModelLib;
 
 /* ==========================================================================
@@ -1808,6 +1988,7 @@ class Interpreter {
     this.superFirst = new Map();
     if (this.oo) {
       for (const c of prog.classes) { this.byName.set(c.name.toLowerCase(), c); this.methods.set(c.id, []); this.ctors.set(c.id, []); }
+      this.tparamNames = new Set(prog.classes.flatMap((c) => (c.tparams || []).map((t) => t.toLowerCase())));
       for (const f of prog.functions) {
         if (!this.methods.has(f.cls)) continue;
         (f.ctor ? this.ctors : this.methods).get(f.cls).push(f);
@@ -1831,9 +2012,32 @@ class Interpreter {
   parentOf(c) { return c && c.parent ? this.byName.get(c.parent.toLowerCase()) || null : null; }
   chain(c) { const out = []; while (c && !out.includes(c)) { out.push(c); c = this.parentOf(c); } return out; }
   isA(c, of) { return this.chain(c).includes(of); }
-  coerceTo(val, type, what) {
-    return _E.coerce(val, type, what, (oc, tn) => { const t = this.byName.get(String(tn).toLowerCase()); return !!t && this.isA(oc, t); });
+  /* ---- generici: un oggetto di una classe generica ha i suoi argomenti di tipo (obj.targs) ---- */
+  /* tipo con i parametri sostituiti da quelli dell'oggetto: "T" -> "Integer" per un ArrayList<Integer> */
+  resolve(type, obj) {
+    if (!obj || !obj.targs || !(obj.cls.tparams || []).length) return type;
+    if (!obj._tmap) { obj._tmap = {}; obj.cls.tparams.forEach((p, i) => { obj._tmap[p.toLowerCase()] = obj.targs[i]; }); }
+    return _E.substType(type, obj._tmap);
   }
+  /* parametro di tipo non ancora noto (oggetto creato senza indicare il tipo) */
+  unresolved(t) { return !!this.tparamNames && this.tparamNames.has(_E.splitType(t).base.toLowerCase()); }
+  /* conversione per assegnamenti e parametri; ctx = oggetto che dà il significato a T (di solito this) */
+  coerceTo(val, type, what, ctx) {
+    const t = this.resolve(type, ctx === undefined ? (this.frame ? this.frame.self : null) : ctx);
+    if (this.unresolved(t)) return val;
+    const isA = (oc, tn) => { const k = this.byName.get(String(tn).toLowerCase()); return !!k && this.isA(oc, k); };
+    const g = _E.splitType(t);
+    if (!g.args.length) return _E.coerce(val, t, what, isA);
+    const v = _E.coerce(val, g.base, what, isA);
+    const o = v.v;
+    if (o && (o.cls.tparams || []).length) {
+      if (!o.targs) { if (!g.args.some((a) => this.unresolved(a))) { o.targs = g.args.slice(); delete o._tmap; } } // new C<>(): il tipo si ricava dalla variabile
+      else if (g.args.some((a, i) => !this.unresolved(a) && !_E.sameType(a, o.targs[i]))) throw new _E.FlowError(`Tipi incompatibili: ${what || 'il valore'} è un ${_E.typeName(_E.joinType(o.cls.name, o.targs))}, ma serve ${_E.typeName(t)}`);
+    }
+    return v;
+  }
+  /* tipo da mostrare per una cella (T sostituito, se noto) */
+  cellType(cell) { return this.resolve(cell.type, cell.ctx); }
   /* attributo cercato nella classe e nelle classi madri: { attr, owner } */
   fieldLookup(c, low) {
     for (const k of this.chain(c)) { const a = k.attributes.find((x) => x.name.toLowerCase() === low); if (a) return { attr: a, owner: k }; }
@@ -1872,6 +2076,7 @@ class Interpreter {
     return 'l\'espressione';
   }
   defaultOf(t) {
+    if (this.unresolved(t)) return undefined;
     switch (t) {
       case 'Integer': return _E.V.int(0);
       case 'Real': return _E.V.real(0);
@@ -1880,8 +2085,20 @@ class Interpreter {
     }
     return _E.V.obj(null);
   }
-  checkType(t) {
-    if (this.oo && !_E.isBaseType(t) && !this.byName.has(String(t).toLowerCase())) throw new _E.FlowError(`Il tipo "${t}" non esiste: crea la classe ${t} nel diagramma delle classi`);
+  /* il tipo esiste? cls = classe in cui si usa (per i parametri di tipo come T) */
+  checkType(t, cls) {
+    if (!this.oo) return;
+    const g = _E.splitType(t);
+    if (!g.args.length && (_E.isBaseType(g.base) || _M.isTypeParam(cls, g.base))) return;
+    const c = this.byName.get(g.base.toLowerCase());
+    if (!c) throw new _E.FlowError(`Il tipo "${_E.typeName(t)}" non esiste: crea la classe ${g.base} nel diagramma delle classi`);
+    const np = (c.tparams || []).length;
+    if (np !== g.args.length) {
+      if (np && !g.args.length) throw new _E.FlowError(`${c.name} è una classe generica: indica il tipo, es. ${c.name}<${c.tparams.map(() => 'Intero').join(', ')}>`);
+      if (!np) throw new _E.FlowError(`${c.name} non è una classe generica: si usa senza < >`);
+      throw new _E.FlowError(`${_M.classTitle(c)} vuole ${np} tipi tra < >`);
+    }
+    for (const a of g.args) this.checkType(a, cls);
   }
   /* esegue fn in una chiamata "di servizio" per inizializzare gli attributi di una classe */
   *withInit(c, obj, fn) {
@@ -1891,8 +2108,10 @@ class Interpreter {
   }
   /* cella di un attributo: valore iniziale come in Java (0, "", false, null) oppure quello indicato */
   *attrCell(a, owner) {
-    this.checkType(a.type);
-    const cell = { name: a.name, type: a.type, array: !!a.array, field: true, owner, visibility: a.visibility, static: !!a.static };
+    this.checkType(a.type, owner);
+    const self = a.static ? null : this.frame.self;
+    const cell = { name: a.name, type: a.type, array: !!a.array, field: true, owner, visibility: a.visibility, static: !!a.static, ctx: self };
+    const dt = this.resolve(a.type, self);
     try {
       if (a.array) {
         const dims = [];
@@ -1903,9 +2122,9 @@ class Interpreter {
         }
         const n = dims.reduce((x, y) => x * y, 1);
         if (n > 1e7) throw new _E.FlowError('array troppo grande');
-        cell.dims = dims; cell.items = new Array(n).fill(this.defaultOf(a.type));
+        cell.dims = dims; cell.items = new Array(n).fill(this.defaultOf(dt));
       } else {
-        cell.value = this.defaultOf(a.type);
+        cell.value = this.defaultOf(dt);
         if (String(a.init || '').trim()) cell.value = this.coerceTo(yield* _E.evalE(this.parse(a.init, 'e'), this.ctx), a.type, `il valore iniziale di ${owner.name}.${a.name}`);
       }
     } catch (e) {
@@ -2028,26 +2247,30 @@ class Interpreter {
     return out;
   }
   /* overloading: sceglie la versione più adatta agli argomenti */
-  pick(cands, pre, name, node) {
+  pick(cands, pre, name, node, self) {
     if (cands.length === 1) return cands[0];
     const score = (f) => {
       if (f.params.length !== pre.length) return -1;
       let tot = 0;
       for (let i = 0; i < pre.length; i++) {
         const p = f.params[i], a = pre[i];
+        const pt = this.resolve(p.type, self);
         if (p.array) {
-          if (!a.cell || a.cell.type.toLowerCase() !== p.type.toLowerCase() || (a.cell.dims || [0]).length !== (p.dims || 1)) return -1;
+          if (!a.cell || (a.cell.dims || [0]).length !== (p.dims || 1)) return -1;
+          const at = this.cellType(a.cell);
+          if (!this.unresolved(pt) && !this.unresolved(at) && !_E.sameType(at, pt)) return -1;
           tot += 3; continue;
         }
         if (a.cell) return -1;
         const v = a.val;
-        if (_E.isBaseType(p.type)) {
-          if (v.t === p.type) tot += 3;
-          else if (p.type === 'Real' && v.t === 'Integer') tot += 2;
-          else if (p.type === 'Integer' && v.t === 'Real') tot += 1;
+        if (this.unresolved(pt)) { tot += 2; continue; }
+        if (_E.isBaseType(pt)) {
+          if (v.t === pt) tot += 3;
+          else if (pt === 'Real' && v.t === 'Integer') tot += 2;
+          else if (pt === 'Integer' && v.t === 'Real') tot += 1;
           else return -1;
         } else {
-          const t = this.byName.get(p.type.toLowerCase());
+          const t = this.byName.get(_E.splitType(pt).base.toLowerCase());
           if (v.t !== 'Object' || !t) return -1;
           if (v.v === null) tot += 2;
           else if (v.v.cls === t) tot += 3;
@@ -2061,10 +2284,10 @@ class Interpreter {
     for (const f of cands) { const sc = score(f); if (sc > bs) { bs = sc; best = f; } }
     if (best) return best;
     const got = pre.map((a) => (a.cell ? `array di ${_E.typeName(a.cell.type)}` : a.val.t === 'Object' ? (a.val.v ? a.val.v.cls.name : 'null') : _E.typeName(a.val.t))).join(', ');
-    const vers = cands.map((f) => `${f.name}(${f.params.map((p) => _E.typeName(p.type) + (p.array ? '[]' : '')).join(', ')})`).join(' · ');
+    const vers = cands.map((f) => `${f.name}(${f.params.map((p) => _E.typeName(this.resolve(p.type, self)) + (p.array ? '[]' : '')).join(', ')})`).join(' · ');
     throw new _E.FlowError(`Nessuna versione di ${name} accetta questi argomenti (${got || 'nessuno'}). Versioni disponibili: ${vers}`, { node });
   }
-  bindArgs(func, pre, node) {
+  bindArgs(func, pre, node, self) {
     const args = [];
     for (let i = 0; i < pre.length; i++) {
       const p = func.params[i], a = pre[i];
@@ -2075,13 +2298,14 @@ class Interpreter {
           throw new _E.FlowError(`Il parametro "${p.name}" di ${func.name} è un array: passa il nome di un array`, { node });
         }
         const cell = a.cell;
-        if (cell.type !== p.type) throw new _E.FlowError(`L'array "${cell.name}" è di tipo ${_E.typeName(cell.type)}, ma il parametro "${p.name}" è ${_E.typeName(p.type)}`, { node });
+        const ct = this.cellType(cell), pt = this.resolve(p.type, self);
+        if (!this.unresolved(ct) && !this.unresolved(pt) && !_E.sameType(ct, pt)) throw new _E.FlowError(`L'array "${cell.name}" è di tipo ${_E.typeName(ct)}, ma il parametro "${p.name}" è ${_E.typeName(pt)}`, { node });
         const nd = (cell.dims || [0]).length, pd = p.dims || 1;
         if (nd !== pd) throw new _E.FlowError(`L'array "${cell.name}" ha ${nd} ${nd === 1 ? 'dimensione' : 'dimensioni'}, ma il parametro "${p.name}" ne vuole ${pd}`, { node });
         args.push(cell);
       } else {
         if (a.cell) throw new _E.FlowError(`"${a.cell.name}" è un array: il parametro "${p.name}" di ${func.name} vuole un singolo valore`, { node });
-        args.push(this.coerceTo(a.val, p.type, `l'argomento "${p.name}" di ${func.name}`));
+        args.push(this.coerceTo(a.val, p.type, `l'argomento "${p.name}" di ${func.name}`, self));
       }
     }
     return args;
@@ -2107,7 +2331,7 @@ class Interpreter {
       if (argNodes.length !== f.params.length) throw new _E.FlowError(`${f.name} richiede ${f.params.length} argomenti, ne sono stati passati ${argNodes.length}`, { node });
     }
     const pre = yield* this.prepArgs(argNodes);
-    const f = this.pick(cands, pre, name, node);
+    const f = this.pick(cands, pre, name, node, opts.self);
     this.checkRetUse(f, opts, node);
     if (f.abstract) throw new _E.FlowError(`${f.name} è un metodo astratto di ${this.classById(f.cls).name}: non ha un corpo da eseguire, lo definiscono le sottoclassi`, { node });
     let self = null;
@@ -2119,7 +2343,7 @@ class Interpreter {
         self = opts.self;
       }
     }
-    return yield* this.invoke(f, this.bindArgs(f, pre, node), node, { self });
+    return yield* this.invoke(f, this.bindArgs(f, pre, node, self), node, { self });
   }
   *mcall(node, opts) {
     const low = node.name.toLowerCase();
@@ -2151,9 +2375,19 @@ class Interpreter {
     }
     const missing = _M.missingAbstract(this.prog, cls);
     if (missing.length) throw new _E.FlowError(`${cls.name} non definisce ${missing.map((m) => m.f.name + '()').join(', ')}, ${missing.length === 1 ? 'metodo astratto' : 'metodi astratti'} di ${[...new Set(missing.map((m) => m.owner.name))].join(', ')}: definisci${missing.length === 1 ? 'lo' : 'li'} in ${cls.name} oppure rendi astratta ${cls.name}`, { node });
+    // argomenti di tipo: new ArrayList<Intero>() (dentro una classe generica anche new Nodo<T>(x))
+    let targs = null;
+    const np = (cls.tparams || []).length;
+    if (node.targs && node.targs.length) {
+      if (!np) throw new _E.FlowError(`${cls.name} non è una classe generica: si crea senza < >, es. new ${cls.name}(...)`, { node });
+      if (node.targs.length !== np) throw new _E.FlowError(`${_M.classTitle(cls)} vuole ${np} tipi tra < >`, { node });
+      targs = node.targs.map((t) => this.resolve(t, this.frame.self));
+      for (const t of targs) this.checkType(t, this.frame.cls);
+      if (targs.some((t) => this.unresolved(t))) targs = null;
+    }
     const n = (this.classCount.get(cls.id) || 0) + 1;
     this.classCount.set(cls.id, n);
-    const obj = { id: n, uid: ++this.objCount, cls, fields: new Map() };
+    const obj = { id: n, uid: ++this.objCount, cls, fields: new Map(), targs };
     for (const c of this.chain(cls).reverse()) {
       const attrs = c.attributes.filter((a) => !a.static);
       if (!attrs.length) continue;
@@ -2181,9 +2415,9 @@ class Interpreter {
       }
     }
     const pre = yield* this.prepArgs(argNodes);
-    const f = this.pick(cands, pre, cls.name, node);
+    const f = this.pick(cands, pre, cls.name, node, obj);
     this.checkAccess(f.visibility, cls, 'Il costruttore', cls.name);
-    yield* this.invoke(f, this.bindArgs(f, pre, node), node, { self: obj });
+    yield* this.invoke(f, this.bindArgs(f, pre, node, obj), node, { self: obj });
   }
   /* il primo blocco eseguibile del costruttore è super(...)? */
   startsWithSuper(func) {
@@ -2251,8 +2485,8 @@ class Interpreter {
     const cls = this.oo ? this.classById(func.cls) : null;
     const frame = { func, vars: new Map(), depth: this.stack.length, cls, self: (opts && opts.self) || null, executed: 0 };
     func.params.forEach((p, i) => {
-      if (p.array) frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: true, dims: args[i].dims || [args[i].items.length], items: args[i].items, param: true });
-      else frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: false, value: args[i], param: true });
+      if (p.array) frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: true, dims: args[i].dims || [args[i].items.length], items: args[i].items, param: true, ctx: frame.self });
+      else frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: false, value: args[i], param: true, ctx: frame.self });
     });
     this.stack.push(frame);
     yield { type: 'stmt', stmt: { id: 'start:' + func.id, kind: 'start' }, frame };
@@ -2352,15 +2586,15 @@ class Interpreter {
           size = dims.reduce((a, b) => a * b, 1);
           if (size > 1e7) throw new _E.FlowError('Array troppo grande (massimo 10 milioni di elementi)');
         }
-        this.checkType(s.type);
+        this.checkType(s.type, frame.cls);
         for (const n of names) {
           if (!_E.validIdent(n)) throw new _E.FlowError(`"${n}" non è un nome di variabile valido`);
           if (_E.RESERVED.has(n.toLowerCase())) throw new _E.FlowError(`"${n}" è una parola riservata`);
           const key = n.toLowerCase();
           if (frame.vars.has(key) && frame.vars.get(key).constant) throw new _E.FlowError(`Il nome "${n}" è già usato dalla costante "${frame.vars.get(key).name}"`);
           if (frame.vars.has(key)) throw new _E.FlowError(frame.vars.get(key).name === n ? `La variabile "${n}" è già stata dichiarata` : `La variabile "${n}" è già stata dichiarata come "${frame.vars.get(key).name}" (maiuscole e minuscole non contano)`);
-          if (s.array) frame.vars.set(key, { name: n, type: s.type, array: true, dims: dims.slice(), items: new Array(size).fill(undefined) });
-          else frame.vars.set(key, { name: n, type: s.type, array: false, value: undefined });
+          if (s.array) frame.vars.set(key, { name: n, type: s.type, array: true, dims: dims.slice(), items: new Array(size).fill(undefined), ctx: frame.self });
+          else frame.vars.set(key, { name: n, type: s.type, array: false, value: undefined, ctx: frame.self });
         }
         // valore iniziale: vale per tutte le variabili del blocco
         if (!s.array && String(s.init || '').trim()) for (const n of names) yield* this.store({ k: 'var', name: n }, yield* ev(s.init));
@@ -2374,7 +2608,7 @@ class Interpreter {
         const key = n.toLowerCase();
         if (frame.vars.has(key)) throw new _E.FlowError(`Il nome "${n}" è già usato da ${frame.vars.get(key).constant ? 'un\'altra costante' : 'una variabile'}`);
         const v = yield* ev(s.expression);
-        frame.vars.set(key, { name: n, type: s.type, array: false, value: this.coerceTo(v, s.type, `il valore della costante "${n}"`), constant: true });
+        frame.vars.set(key, { name: n, type: s.type, array: false, value: this.coerceTo(v, s.type, `il valore della costante "${n}"`), constant: true, ctx: frame.self });
         return;
       }
       case 'assign': {
@@ -2391,6 +2625,13 @@ class Interpreter {
           return;
         }
         const lv = this.parse(s.variable, 'lv');
+        // array ← altroArray: l'array a sinistra diventa lo stesso array (come in Java)
+        let rx = this.parse(s.expression, 'e');
+        while (rx.k === 'par') rx = rx.e;
+        if (!lv.indices && (rx.k === 'var' || rx.k === 'member') && !rx.indices) {
+          const tcell = yield* this.cellOf(lv);
+          if (tcell.array) { yield* this.storeArray(tcell, lv, rx); return; }
+        }
         const val = yield* ev(s.expression);
         yield* this.store(lv, val);
         return;
@@ -2534,6 +2775,19 @@ class Interpreter {
     }
   }
 
+  *storeArray(tcell, lv, rx) {
+    const nm = lv.k === 'var' ? lv.name : this.label(lv);
+    if (tcell.constant) throw new _E.FlowError(`"${tcell.name}" è una costante: il suo valore non si può modificare`);
+    const src = yield* this.cellOf(rx);
+    if (!src.array) throw new _E.FlowError(`"${nm}" è un array: a destra serve un array dello stesso tipo, oppure indica l'elemento da modificare, es. ${nm}[i]`);
+    const tt = this.cellType(tcell), st = this.cellType(src);
+    if (!this.unresolved(tt) && !this.unresolved(st) && !_E.sameType(tt, st)) throw new _E.FlowError(`Tipi incompatibili: "${this.label(rx)}" è un array di ${_E.typeName(st)}, ma "${nm}" è un array di ${_E.typeName(tt)}`);
+    const sd = src.dims || [src.items.length], td = tcell.dims || [tcell.items.length];
+    if (sd.length !== td.length) throw new _E.FlowError(`"${this.label(rx)}" ha ${sd.length} ${sd.length === 1 ? 'dimensione' : 'dimensioni'}, "${nm}" ne ha ${td.length}`);
+    tcell.items = src.items; tcell.dims = sd.slice();
+    tcell.lastWrite = undefined;
+    tcell.writes = (tcell.writes || 0) + 1;
+  }
   *store(lv, val) {
     const cell = yield* this.cellOf(lv);
     const nm = lv.k === 'var' ? lv.name : this.label(lv).replace(/\[…\]$/, '');
@@ -2543,12 +2797,12 @@ class Interpreter {
       const ivs = [];
       for (const ix of lv.indices) ivs.push(yield* _E.evalE(ix, this.ctx));
       const off = _E.arrOffset(ivs, cell, { name: nm });
-      cell.items[off] = this.coerceTo(val, cell.type, `il valore assegnato a ${nm}[${ivs.map((x) => x.v).join(', ')}]`);
+      cell.items[off] = this.coerceTo(val, cell.type, `il valore assegnato a ${nm}[${ivs.map((x) => x.v).join(', ')}]`, cell.ctx);
       cell.lastWrite = off;
       cell.writes = (cell.writes || 0) + 1;
     } else {
       if (lv.index) throw new _E.FlowError(`"${nm}" non è un array`);
-      cell.value = this.coerceTo(val, cell.type, `il valore assegnato a "${nm}"`);
+      cell.value = this.coerceTo(val, cell.type, `il valore assegnato a "${nm}"`, cell.ctx);
       cell.writes = (cell.writes || 0) + 1;
     }
   }
@@ -2571,6 +2825,83 @@ const _CM = (typeof module !== 'undefined') ? require('./model.js') : ModelLib;
 const P = { or: 1, and: 2, notLow: 3, rel: 4, add: 5, mul: 6, un: 7, pow: 8, atom: 10 };
 const REL = ['==', '!=', '<', '<=', '>', '>='];
 
+/* ------------------- Generici e classi native dei moduli -------------------
+   GEN si imposta a ogni generazione: le classi dei moduli della libreria che
+   hanno un equivalente nel linguaggio (native) non si scrivono nel codice, si
+   usano quelle del linguaggio; i parametri di tipo (T) restano tipi. */
+let GEN = { native: new Map(), skip: new Set(), tparams: new Set(), helpers: new Set() };
+const isTP = (t) => GEN.tparams.has(String(t).toLowerCase());
+const nativeOf = (base) => GEN.native.get(String(base).toLowerCase()) || null;
+const need = (h) => GEN.helpers.add(h);
+const Wp = (x) => (x.p < P.atom ? `(${x.s})` : x.s);
+/* *altra in C++ (l'oggetto puntato) */
+const deref = (a) => (/^[\w.>-]+$/.test(a) ? '*' + a : `*(${a})`);
+/* costruttore con un intero: capacità iniziale; con un oggetto: copia */
+const isCap = (ty) => ty[0] === 'Integer';
+const rel = (s) => ({ s, p: P.rel });
+/* per ogni modulo: tipo, costruttore e metodi nei vari linguaggi (o = oggetto, a = argomenti {s, p}) */
+const NATIVE = {
+  'strutture_dati/ArrayList': {
+    cls: 'ArrayList',
+    java: { type: (t) => `ArrayList<${t[0]}>`, ctor: (t, a) => `new ArrayList<>(${a})` },
+    python: { ctor: (t, a, ty) => (!a || isCap(ty) ? '[]' : `list(${a})`), m: {
+      add: (o, a) => (a.length === 2 ? `${o}.insert(${a[0].s}, ${a[1].s})` : `${o}.append(${a[0].s})`),
+      get: (o, a) => `${o}[${a[0].s}]`, set: (o, a) => `${o}[${a[0].s}] = ${a[1].s}`, remove: (o, a) => `${o}.pop(${a[0].s})`,
+      size: (o) => `len(${o})`, isEmpty: (o) => rel(`len(${o}) == 0`), clear: (o) => `${o}.clear()`,
+      indexOf: (o, a) => `(${o}.index(${Wp(a[0])}) if ${Wp(a[0])} in ${o} else -1)`, contains: (o, a) => rel(`${Wp(a[0])} in ${o}`) } },
+    cpp: { type: (t) => `vector<${t[0]}>*`, ctor: (t, a, ty) => `new vector<${t ? t[0] : 'int'}>(${!a || isCap(ty) ? '' : deref(a)})`, m: {
+      add: (o, a) => (a.length === 2 ? `${o}->insert(${o}->begin() + ${Wp(a[0])}, ${a[1].s})` : `${o}->push_back(${a[0].s})`),
+      get: (o, a) => `(*${o})[${a[0].s}]`, set: (o, a) => `(*${o})[${a[0].s}] = ${a[1].s}`, remove: (o, a) => { need('rimuoviIn'); return `rimuoviIn(${o}, ${a[0].s})`; },
+      size: (o) => ({ s: `(int) ${o}->size()`, p: P.un }), isEmpty: (o) => `${o}->empty()`, clear: (o) => `${o}->clear()`,
+      indexOf: (o, a) => { need('indiceDi'); return `indiceDi(${o}, ${a[0].s})`; }, contains: (o, a) => { need('indiceDi'); return rel(`indiceDi(${o}, ${a[0].s}) >= 0`); } } },
+    csharp: { type: (t) => `List<${t[0]}>`, ctor: (t, a) => `new List<${t ? t[0] : 'int'}>(${a})`, m: {
+      add: (o, a) => (a.length === 2 ? `${o}.Insert(${a[0].s}, ${a[1].s})` : `${o}.Add(${a[0].s})`),
+      get: (o, a) => `${o}[${a[0].s}]`, set: (o, a) => `${o}[${a[0].s}] = ${a[1].s}`, remove: (o, a) => { need('Aiuti'); return `Aiuti.RimuoviIn(${o}, ${a[0].s})`; },
+      size: (o) => `${o}.Count`, isEmpty: (o) => rel(`${o}.Count == 0`), clear: (o) => `${o}.Clear()`,
+      indexOf: (o, a) => `${o}.IndexOf(${a[0].s})`, contains: (o, a) => `${o}.Contains(${a[0].s})` } },
+    javascript: { ctor: (t, a, ty) => (!a || isCap(ty) ? '[]' : `[...${a}]`), m: {
+      add: (o, a) => (a.length === 2 ? `${o}.splice(${a[0].s}, 0, ${a[1].s})` : `${o}.push(${a[0].s})`),
+      get: (o, a) => `${o}[${a[0].s}]`, set: (o, a) => `${o}[${a[0].s}] = ${a[1].s}`, remove: (o, a) => `${o}.splice(${a[0].s}, 1)[0]`,
+      size: (o) => `${o}.length`, isEmpty: (o) => rel(`${o}.length === 0`), clear: (o) => `${o}.length = 0`,
+      indexOf: (o, a) => `${o}.indexOf(${a[0].s})`, contains: (o, a) => `${o}.includes(${a[0].s})` } },
+  },
+  'strutture_dati/Stack': {
+    cls: 'Stack',
+    java: { type: (t) => `Stack<${t[0]}>`, ctor: () => 'new Stack<>()' },
+    python: { ctor: () => '[]', m: { push: (o, a) => `${o}.append(${a[0].s})`, pop: (o) => `${o}.pop()`, peek: (o) => `${o}[-1]`, size: (o) => `len(${o})`, isEmpty: (o) => rel(`len(${o}) == 0`) } },
+    cpp: { type: (t) => { need('stack'); return `stack<${t[0]}>*`; }, ctor: (t) => { need('stack'); return `new stack<${t ? t[0] : 'int'}>()`; }, m: {
+      push: (o, a) => `${o}->push(${a[0].s})`, pop: (o) => { need('togliCima'); return `togliCima(${o})`; }, peek: (o) => `${o}->top()`,
+      size: (o) => ({ s: `(int) ${o}->size()`, p: P.un }), isEmpty: (o) => `${o}->empty()` } },
+    csharp: { type: (t) => `Stack<${t[0]}>`, ctor: (t) => `new Stack<${t ? t[0] : 'int'}>()`, m: { push: (o, a) => `${o}.Push(${a[0].s})`, pop: (o) => `${o}.Pop()`, peek: (o) => `${o}.Peek()`, size: (o) => `${o}.Count`, isEmpty: (o) => rel(`${o}.Count == 0`) } },
+    javascript: { ctor: () => '[]', m: { push: (o, a) => `${o}.push(${a[0].s})`, pop: (o) => `${o}.pop()`, peek: (o) => `${o}[${o}.length - 1]`, size: (o) => `${o}.length`, isEmpty: (o) => rel(`${o}.length === 0`) } },
+  },
+  'strutture_dati/Queue': {
+    cls: 'Queue',
+    java: { type: (t) => `Queue<${t[0]}>`, ctor: (t, a) => `new LinkedList<>(${a})` },
+    python: { ctor: (t, a) => { need('deque'); return `deque(${a})`; }, m: { add: (o, a) => `${o}.append(${a[0].s})`, remove: (o) => `${o}.popleft()`, peek: (o) => `${o}[0]`, size: (o) => `len(${o})`, isEmpty: (o) => rel(`len(${o}) == 0`) } },
+    cpp: { type: (t) => { need('queue'); return `queue<${t[0]}>*`; }, ctor: (t, a) => { need('queue'); return `new queue<${t ? t[0] : 'int'}>(${a ? deref(a) : ''})`; }, m: {
+      add: (o, a) => `${o}->push(${a[0].s})`, remove: (o) => { need('togliPrimo'); return `togliPrimo(${o})`; }, peek: (o) => `${o}->front()`,
+      size: (o) => ({ s: `(int) ${o}->size()`, p: P.un }), isEmpty: (o) => `${o}->empty()` } },
+    csharp: { type: (t) => `Queue<${t[0]}>`, ctor: (t, a) => `new Queue<${t ? t[0] : 'int'}>(${a})`, m: { add: (o, a) => `${o}.Enqueue(${a[0].s})`, remove: (o) => `${o}.Dequeue()`, peek: (o) => `${o}.Peek()`, size: (o) => `${o}.Count`, isEmpty: (o) => rel(`${o}.Count == 0`) } },
+    javascript: { ctor: (t, a) => (a ? `[...${a}]` : '[]'), m: { add: (o, a) => `${o}.push(${a[0].s})`, remove: (o) => `${o}.shift()`, peek: (o) => `${o}[0]`, size: (o) => `${o}.length`, isEmpty: (o) => rel(`${o}.length === 0`) } },
+  },
+};
+/* prepara GEN per un programma e un linguaggio */
+function setupGen(prog, lang) {
+  const native = new Map(), skip = new Set();
+  const cs = _CM.hasClasses(prog) ? prog.classes : [];
+  if (lang !== 'pseudo') for (const c of cs) {
+    const src = c.module && c.module.src || '';
+    const spec = src.startsWith('lib:') ? NATIVE[src.slice(4)] : null;
+    if (!spec || !spec[lang]) continue;
+    skip.add(c.id);
+    if (c.name === spec.cls) native.set(c.name.toLowerCase(), spec);
+  }
+  GEN = { native, skip, tparams: new Set(cs.flatMap((c) => (c.tparams || []).map((t) => t.toLowerCase()))), helpers: new Set() };
+}
+/* durante l'assegnazione il tipo atteso permette di scrivere new ArrayList<Integer>() anche se nel diagramma c'è new ArrayList() */
+function withExpect(sc, t, fn) { const old = sc.expect; sc.expect = t; try { return fn(); } finally { sc.expect = old; } }
+
 function buildScope(prog, func) {
   const vars = new Map();
   for (const p of func.params) vars.set(p.name.toLowerCase(), { type: p.type, array: p.array, dims: p.array ? (p.dims || 1) : 0, name: p.name });
@@ -2591,7 +2922,14 @@ function buildScope(prog, func) {
 
 /* Strumenti per le classi: attributi e metodi ereditati, accessi statici, tipi delle espressioni */
 function ooScope(prog, sc) {
-  const classNamed = (n) => _CM.classByName(prog, n);
+  const classNamed = (n) => _CM.classByName(prog, _CE.splitType(n).base);
+  // tipo di un membro di una classe generica: T sostituito con il tipo dell'oggetto (ArrayList<Integer> -> Integer)
+  const subst = (type, objNode, c) => {
+    if (!(c.tparams || []).length) return type;
+    const g = _CE.splitType(_CE.inferType(objNode, sc)); if (!g.args.length) return type;
+    const map = {}; c.tparams.forEach((p, i) => { map[p.toLowerCase()] = g.args[i]; });
+    return _CE.substType(type, map);
+  };
   const fieldHit = (c, low) => { for (const k of _CM.chainOf(prog, c)) { const a = k.attributes.find((x) => x.name.toLowerCase() === low); if (a) return { attr: a, owner: k }; } return null; };
   const methodHit = (c, low) => { for (const k of _CM.chainOf(prog, c)) { const f = _CM.membersOf(prog, k).find((x) => !x.ctor && x.name.toLowerCase() === low); if (f) return { f, owner: k }; } return null; };
   const implicitField = (name) => { const low = String(name).toLowerCase(); return !sc.vars.has(low) && sc.cls ? fieldHit(sc.cls, low) : null; };
@@ -2603,9 +2941,9 @@ function ooScope(prog, sc) {
       switch (node.k) {
         case 'var': { const h = implicitField(node.name); return h ? h.attr.type : 'Unknown'; }
         case 'this': return sc.cls ? sc.cls.name : 'Unknown';
-        case 'new': { const c = classNamed(node.cls); return c ? c.name : node.cls; }
-        case 'member': { const c = objClass(node.obj); const h = c && fieldHit(c, node.name.toLowerCase()); return h ? h.attr.type : 'Unknown'; }
-        case 'mcall': { const c = objClass(node.obj); const h = c && methodHit(c, node.name.toLowerCase()); return h ? h.f.type : 'Unknown'; }
+        case 'new': { const c = classNamed(node.cls); return c ? (node.targs && node.targs.length ? _CE.joinType(c.name, node.targs) : c.name) : node.cls; }
+        case 'member': { const c = objClass(node.obj); const h = c && fieldHit(c, node.name.toLowerCase()); return h ? subst(h.attr.type, node.obj, c) : 'Unknown'; }
+        case 'mcall': { const c = objClass(node.obj); const h = c && methodHit(c, node.name.toLowerCase()); return h ? subst(h.f.type, node.obj, c) : 'Unknown'; }
       }
       return undefined;
     },
@@ -2637,7 +2975,7 @@ const OO = {
     const main = _CM.mainClass(prog);
     const out = [], done = new Set();
     const visit = (c) => { if (!c || done.has(c)) return; done.add(c); visit(_CM.classByName(prog, c.parent)); out.push(c); };
-    const rest = prog.classes.filter((c) => c !== main);
+    const rest = prog.classes.filter((c) => c !== main && !GEN.skip.has(c.id));
     if (mainFirst) { visit(main); rest.forEach(visit); } else { rest.forEach(visit); visit(main); }
     return out;
   },
@@ -2720,7 +3058,14 @@ function exprPrinter(L) {
       case 'new': {
         const c = sc.classNamed ? sc.classNamed(n.cls) : null; const nm = c ? c.name : n.cls;
         const a = n.args.map((x) => pr(x, sc).s).join(', ');
-        return { s: L.newObj ? L.newObj(nm, a) : `new ${nm}(${a})`, p: P.atom };
+        // argomenti di tipo: quelli scritti, altrimenti quelli della variabile a cui si assegna
+        let targs = n.targs && n.targs.length ? n.targs : null;
+        const gen = c && (c.tparams || []).length;
+        if (!targs && gen && sc.expect) { const g = _CE.splitType(sc.expect); if (g.base.toLowerCase() === c.name.toLowerCase() && g.args.length) targs = g.args; }
+        const nat = c && L.lang && nativeOf(c.name);
+        if (nat && nat[L.lang]) return { s: nat[L.lang].ctor(targs && L.targ ? targs.map(L.targ) : null, a, n.args.map((x) => _CE.inferType(x, sc))), p: P.atom };
+        const full = gen && L.targ ? (targs ? `${nm}<${targs.map(L.targ).join(', ')}>` : nm + (L.diamond || '')) : nm;
+        return { s: L.newObj ? L.newObj(full, a) : `new ${full}(${a})`, p: P.atom };
       }
       case 'supercall': { const a = n.args.map((x) => pr(x, sc).s).join(', '); return { s: L.superCtor ? L.superCtor(a, sc) : `super(${a})`, p: P.atom }; }
       case 'member': {
@@ -2742,6 +3087,10 @@ function exprPrinter(L) {
         }
         const ref = objRef(n.obj, sc);
         const c = ref.cls || (sc.objClass && sc.objClass(n.obj));
+        // metodo di una classe nativa: si usa quello del linguaggio
+        const nat = c && !ref.cls && L.lang && nativeOf(c.name);
+        const nm0 = nat && nat[L.lang] && nat[L.lang].m && (sc.methodHit(c, n.name.toLowerCase()) || {}).f;
+        if (nm0 && nat[L.lang].m[nm0.name]) { const r = nat[L.lang].m[nm0.name](ref.s, n.args.map((x) => pr(x, sc))); return typeof r === 'string' ? { s: r, p: P.atom } : r; }
         const h = c && sc.methodHit(c, n.name.toLowerCase());
         const nm = h ? h.f.name : n.name;
         return { s: ref.cls ? `${L.staticSep ? L.staticSep(ref.cls.name, nm) : ref.cls.name + '.' + nm}(${a})` : `${ref.s}${L.arrow || '.'}${nm}(${a})`, p: P.atom };
@@ -2855,12 +3204,13 @@ LANGS.pseudo = {
     };
     const pr = exprPrinter(L);
     const o = new Out('   ');
+    const TP = (t) => { const g = _CE.splitType(t); const b = TIPO[g.base] || g.base; return g.args.length ? `${b}<${g.args.map(TP).join(', ')}>` : b; };
     const E = (src, sc) => { const t = tryParse(src); return t ? pr(t, sc).s : src; };
     const block = (stmts, sc) => {
       for (const s of stmts) {
         switch (s.kind) {
-          case 'const': o.line(`COSTANTE ${s.name} : ${TIPO[s.type] || s.type} = ${E(s.expression, sc)}`); break;
-          case 'declare': o.line(`DICHIARA ${s.array ? `ARRAY ${s.name.split(',').map((x) => x.trim() + '[' + dimsOf(s, E, sc).join(', ') + ']').join(', ')} DI ${TIPO[s.type] || s.type}` : `${s.name} : ${TIPO[s.type] || s.type}${String(s.init || '').trim() ? ' = ' + E(s.init, sc) : ''}`}`); break;
+          case 'const': o.line(`COSTANTE ${s.name} : ${TP(s.type)} = ${E(s.expression, sc)}`); break;
+          case 'declare': o.line(`DICHIARA ${s.array ? `ARRAY ${s.name.split(',').map((x) => x.trim() + '[' + dimsOf(s, E, sc).join(', ') + ']').join(', ')} DI ${TP(s.type)}` : `${s.name} : ${TP(s.type)}${String(s.init || '').trim() ? ' = ' + E(s.init, sc) : ''}`}`); break;
           case 'assign': o.line(`${targetsOf(s).map((x) => E(x, sc)).join(', ')} ← ${E(s.expression, sc)}`); break;
           case 'input': o.line(`LEGGI ${E(s.variable, sc)}`); break;
           case 'output': o.line(`SCRIVI ${E(s.expression, sc)}${s.newline ? '' : '   // senza a capo'}`); break;
@@ -2885,14 +3235,14 @@ LANGS.pseudo = {
         }
       }
     };
-    const T = (t) => TIPO[t] || t;
+    const T = TP;
     const psig = (f) => f.params.map((p) => `${p.name} : ${p.array ? ((p.dims || 1) > 1 ? `array a ${p.dims} dimensioni di ` : 'array di ') : ''}${T(p.type)}`).join(', ');
     if (_CM.hasClasses(prog)) {
       const main = _CM.mainClass(prog);
       const V = (v) => _CM.VISIBILITY[v || 'public'];
       OO.ordered(prog, true).forEach((c, ci) => {
         if (ci) o.line('');
-        o.line(`${c.abstract ? 'CLASSE ASTRATTA' : 'CLASSE'} ${c.name}${c.parent ? ' EREDITA DA ' + c.parent : ''}${c === main ? '   // classe principale: il programma parte da Main' : ''}`);
+        o.line(`${c.abstract ? 'CLASSE ASTRATTA' : 'CLASSE'} ${_CM.classTitle(c)}${c.module ? '   // dal modulo ' + c.module.name : ''}${c.parent ? ' EREDITA DA ' + c.parent : ''}${c === main ? '   // classe principale: il programma parte da Main' : ''}`);
         o.in();
         if (c.attributes.length) {
           o.line('ATTRIBUTI'); o.in();
@@ -2944,7 +3294,7 @@ LANGS.python = {
     const L = {
       str: (s) => escStr(s, '"'), T: 'True', F: 'False', pi: 'math.pi', use: (x) => used.add(x === 'pi' ? 'math' : x), not: 'not ', notPrec: P.notLow, or: 'or', and: 'and', pow: '**',
       rel: { '==': '==', '!=': '!=', '<': '<', '<=': '<=', '>': '>', '>=': '>=' },
-      nul: 'None', self: 'self', newObj: (c, a) => `${c}(${a})`, superCtor: (a) => `super().__init__(${a})`, superMethod: (m, a) => `super().${m}(${a})`,
+      lang: 'python', nul: 'None', self: 'self', newObj: (c, a) => `${c}(${a})`, superCtor: (a) => `super().__init__(${a})`, superMethod: (m, a) => `super().${m}(${a})`,
       field: (h, sc) => (h.attr.static ? `${h.owner.name}.${h.attr.name}` : `self.${h.attr.name}`),
       bin(n, sc, pr, generic) {
         // confronto con None: is / is not
@@ -3001,7 +3351,7 @@ LANGS.python = {
           case 'declare': {
             if (!s.array && String(s.init || '').trim()) { for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(`${nm} = ${asReal(s.init, s.type, E, sc)}`); break; }
             const init = initOf(s, stmts[si + 1]);
-            if (init != null) { o.line(`${s.name.trim()} = ${asReal(init, s.type, E, sc)}`); si++; break; }
+            if (init != null) { o.line(`${s.name.trim()} = ${withExpect(sc, s.type, () => asReal(init, s.type, E, sc))}`); si++; break; }
             for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) {
               if (!s.array) { o.line(`${nm} = ${DEFT(s.type)}`); continue; }
               const D = dimsOf(s, E, sc);
@@ -3011,7 +3361,7 @@ LANGS.python = {
             }
             break;
           }
-          case 'assign': { const tg = targetsOf(s); o.line(`${tg.map((x) => E(x, sc)).join(', ')} = ${tg.length === 1 ? asReal(s.expression, lvType(s.variable, sc), E, sc) : E(s.expression, sc)}`); break; }
+          case 'assign': { const tg = targetsOf(s); const lt = tg.length === 1 ? lvType(s.variable, sc) : null; o.line(`${tg.map((x) => E(x, sc)).join(', ')} = ${tg.length === 1 ? withExpect(sc, lt, () => asReal(s.expression, lt, E, sc)) : E(s.expression, sc)}`); break; }
           case 'input': o.line(`${E(s.variable, sc)} = ${CAST[lvType(s.variable, sc)]}`); break;
           case 'output': o.line(s.newline ? `print(${E(s.expression, sc)})` : `print(${E(s.expression, sc)}, end="")`); break;
           case 'if': {
@@ -3075,6 +3425,7 @@ LANGS.python = {
       if (used.has('math')) hd.push('import math');
       if (used.has('random')) hd.push('import random');
       if (used.has('abc')) hd.push('from abc import ABC, abstractmethod');
+      if (GEN.helpers.has('deque')) hd.push('from collections import deque');
       if (hd.length) hd.push('');
       if (used.has('eof')) hd.push('def fine_file():', '    pos = file_lettura.tell()', '    riga = file_lettura.readline()', '    file_lettura.seek(pos)', '    return riga == ""', '', '');
       return hd.join('\n') + (hd.length ? '\n' : '');
@@ -3085,7 +3436,7 @@ LANGS.python = {
       const main = _CM.mainClass(prog);
       const attrInit = (a, sc) => (a.array ? pyArr(_CE.splitTop(a.size).map((x) => E(x, sc)), DEFT(a.type)) : (String(a.init || '').trim() ? E(a.init, sc) : DEFT(a.type)));
       const pyType = { Integer: (x) => `type(${x}) is int`, Real: (x) => `isinstance(${x}, (int, float))`, String: (x) => `isinstance(${x}, str)`, Boolean: (x) => `isinstance(${x}, bool)` };
-      const test = { len: (n) => `len(args) == ${n}`, type: (p, i) => (p.array ? `isinstance(args[${i}], list)` : (pyType[p.type] || ((x) => `isinstance(${x}, ${p.type})`))(`args[${i}]`)) };
+      const test = { len: (n) => `len(args) == ${n}`, type: (p, i) => (p.array ? `isinstance(args[${i}], list)` : isTP(p.type) ? 'True' : (pyType[p.type] || ((x) => `isinstance(${x}, ${_CE.splitType(p.type).base})`))(`args[${i}]`)) };
       for (const c of OO.ordered(prog, false)) {
         // classe astratta: deriva da ABC (se la madre non lo è già)
         const par = _CM.classByName(prog, c.parent);
@@ -3188,6 +3539,7 @@ function cFamily(cfg) {
         idx: cfg.idx, str: (s) => cfg.strLit(s), T: 'true', F: 'false', pi: cfg.pi, use: () => used.add('pi'),
         not: '!', notPrec: P.un, or: '||', and: '&&', pow: '**',
         rel: { '==': cfg.eq || '==', '!=': cfg.neq || '!=', '<': '<', '<=': '<=', '>': '>', '>=': '>=' },
+        lang: cfg.lang, targ: cfg.targ, diamond: cfg.diamond,
         nul: cfg.nul, self: cfg.self, arrow: cfg.arrow, staticSep: cfg.staticSep, newObj: cfg.newObj, superCtor: cfg.superCtor, superMethod: cfg.superMethod, field: cfg.field,
         bin(n, sc, pr) {
           const lt = _CE.inferType(n.l, sc), rt = _CE.inferType(n.r, sc);
@@ -3232,16 +3584,16 @@ function cFamily(cfg) {
           switch (s.kind) {
             case 'const': o.line(cfg.constDecl(s.name.trim(), s.type, E(s.expression, sc), isLiteralExpr(s.expression))); break;
             case 'declare': {
-              if (!s.array && String(s.init || '').trim() && cfg.declareInit) { for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declareInit(nm, s.type, asReal(s.init, s.type, E, sc))); break; }
+              if (!s.array && String(s.init || '').trim() && cfg.declareInit) { for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declareInit(nm, s.type, withExpect(sc, s.type, () => asReal(s.init, s.type, E, sc)))); break; }
               const init = initOf(s, stmts[si + 1]);
-              if (init != null && cfg.declareInit) { o.line(cfg.declareInit(s.name.trim(), s.type, asReal(init, s.type, E, sc))); si++; break; }
+              if (init != null && cfg.declareInit) { o.line(cfg.declareInit(s.name.trim(), s.type, withExpect(sc, s.type, () => asReal(init, s.type, E, sc)))); si++; break; }
               for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declare(nm, s.type, s.array, s.array ? dimsOf(s, E, sc) : null, used));
               break;
             }
             case 'assign': {
               const tg = targetsOf(s);
               if (tg.length > 1) cfg.multiAssign(o, tg.map((x) => E(x, sc)), E(s.expression, sc), calleeOf(s, sc), sc, used);
-              else o.line(`${E(s.variable, sc)} = ${asReal(s.expression, lvInfo(s.variable, sc).type, E, sc)};`);
+              else { const lt = lvInfo(s.variable, sc).type; o.line(`${E(s.variable, sc)} = ${withExpect(sc, lt, () => asReal(s.expression, lt, E, sc))};`); }
               break;
             }
             case 'input': cfg.input(o, E(s.variable, sc), lvInfo(s.variable, sc).type, used); break;
@@ -3287,7 +3639,31 @@ function cFamily(cfg) {
 }
 
 const T_CPP = { Integer: 'int', Real: 'double', String: 'string', Boolean: 'bool', None: 'void' };
-const tCpp = (t) => T_CPP[t] || t + '*'; // gli oggetti in C++ sono puntatori (creati con new)
+/* gli oggetti in C++ sono puntatori (creati con new); T resta T; ArrayList<int> nativo diventa vector<int>* */
+const tCpp = (t) => {
+  const g = _CE.splitType(t);
+  if (!g.args.length) return T_CPP[t] || (isTP(t) ? t : t + '*');
+  const a = g.args.map(tCpp), n = nativeOf(g.base);
+  return n && n.cpp ? n.cpp.type(a) : `${g.base}<${a.join(', ')}>*`;
+};
+const tplOf = (c) => ((c.tparams || []).length ? `template <${c.tparams.map((t) => 'typename ' + t).join(', ')}>` : '');
+const qualOf = (c) => ((c.tparams || []).length ? `${c.name}<${c.tparams.join(', ')}>` : c.name);
+const CPP_HELPERS = {
+  rimuoviIn: ['// toglie l\'elemento in posizione i e lo restituisce', 'template <typename T> T rimuoviIn(vector<T>* v, int i) { T x = (*v)[i]; v->erase(v->begin() + i); return x; }'],
+  indiceDi: ['// posizione di x nel vector, -1 se non c\'è', 'template <typename T, typename U> int indiceDi(vector<T>* v, const U& x) { for (int i = 0; i < (int) v->size(); i++) if ((*v)[i] == x) return i; return -1; }'],
+  togliCima: ['// toglie e restituisce l\'elemento in cima alla pila', 'template <typename T> T togliCima(stack<T>* s) { T x = s->top(); s->pop(); return x; }'],
+  togliPrimo: ['// toglie e restituisce il primo elemento della coda', 'template <typename T> T togliPrimo(queue<T>* q) { T x = q->front(); q->pop(); return x; }'],
+};
+function cppHeaderExtras(o) {
+  if (GEN.helpers.has('stack')) o.line('#include <stack>');
+  if (GEN.helpers.has('queue')) o.line('#include <queue>');
+}
+function cppHelpers(o) {
+  const hs = Object.keys(CPP_HELPERS).filter((k) => GEN.helpers.has(k));
+  if (!hs.length) return;
+  o.line('');
+  for (const k of hs) CPP_HELPERS[k].forEach((l) => o.line(l));
+}
 const DEF_CPP = { Integer: '0', Real: '0.0', String: '""', Boolean: 'false' };
 const usesFiles = (prog) => prog.functions.some((f) => { let u = false; _CM.walk(f.body, (s) => { if (['open', 'close', 'read', 'write'].includes(s.kind)) u = true; }); return u; });
 const cap = (n) => n[0].toUpperCase() + n.slice(1);
@@ -3299,6 +3675,7 @@ function cppParts(t, arr, D) {
   return { ty: ty(0), args: init(0) };
 }
 LANGS.cpp = cFamily({
+  lang: 'cpp', targ: (t) => tCpp(t),
   label: 'C++', ext: 'cpp', intDiv: true, fmod: true, powFn: 'pow', intCast: '(int) ', wrapOut: true,
   keywords: ['int', 'double', 'string', 'bool', 'void', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'using', 'namespace', 'std', 'include', 'cout', 'cin', 'endl', 'vector', 'const', 'main', 'class', 'public', 'private', 'protected', 'static', 'virtual', 'new', 'this', 'nullptr'],
   pi: 'PI',
@@ -3332,7 +3709,7 @@ LANGS.cpp = cFamily({
     return null;
   },
   declare: (n, t, arr, D) => {
-    if (!arr) return T_CPP[t] ? `${T_CPP[t]} ${n};` : `${tCpp(t)} ${n} = nullptr;`;
+    if (!arr) return T_CPP[t] ? `${T_CPP[t]} ${n};` : isTP(t) ? `${t} ${n}{};` : `${tCpp(t)} ${n} = nullptr;`;
     const c = cppParts(t, arr, D);
     return `${c.ty} ${n}(${c.args});`;
   },
@@ -3399,8 +3776,8 @@ LANGS.cpp = cFamily({
       for (const a of c.attributes) {
         const sc = OO.classScope(prog, c, a.static);
         const pt = cppParts(a.type, a.array, a.array ? _CE.splitTop(a.size).map((x) => g.E(x, sc)) : null);
-        const init = a.array ? `${pt.ty}(${pt.args})` : (String(a.init || '').trim() ? g.E(a.init, sc) : (DEF_CPP[a.type] || 'nullptr'));
-        if (a.static) { vis(a.visibility).push(`static ${pt.ty} ${a.name};`); statics.push(`${pt.ty} ${c.name}::${a.name} = ${init};`); }
+        const init = a.array ? `${pt.ty}(${pt.args})` : (String(a.init || '').trim() ? g.E(a.init, sc) : (DEF_CPP[a.type] || (isTP(a.type) ? a.type + '()' : 'nullptr')));
+        if (a.static) { vis(a.visibility).push(`static ${pt.ty} ${a.name};`); statics.push(`${tplOf(c) ? tplOf(c) + ' ' : ''}${pt.ty} ${qualOf(c)}::${a.name} = ${init};`); }
         else vis(a.visibility).push(`${pt.ty} ${a.name} = ${init};`);
       }
       for (const f of OO.methods(prog, c)) {
@@ -3409,6 +3786,7 @@ LANGS.cpp = cFamily({
         vis(f.visibility).push(`${f.static ? 'static ' : (poly || f.abstract ? 'virtual ' : '')}${retT(f)} ${nm}(${params(f)})${f.abstract ? ' = 0' : ''};`);
       }
       decls.line('');
+      if (tplOf(c)) decls.line(tplOf(c));
       decls.line(`class ${c.name}${c.parent ? ' : public ' + c.parent : ''} {${c.abstract ? ' // classe astratta' : ''}`);
       for (const v of ['public', 'protected', 'private']) if (sec[v].length) { decls.line(v + ':'); decls.in(); sec[v].forEach((l) => decls.line(l)); decls.out(); }
       decls.line('};');
@@ -3417,13 +3795,14 @@ LANGS.cpp = cFamily({
         if (f.abstract) continue;
         const sc = g.buildScope(f);
         defs.line('');
+        if (tplOf(c)) defs.line(tplOf(c));
         if (f.ctor) {
           const sp = OO.splitSuper(f);
-          defs.line(`${c.name}::${c.name}(${params(f)})${sp.args ? ` : ${c.parent}(${sp.args.map((x) => g.pr(x, sc).s).join(', ')})` : ''} {`);
+          defs.line(`${qualOf(c)}::${c.name}(${params(f)})${sp.args ? ` : ${c.parent}(${sp.args.map((x) => g.pr(x, sc).s).join(', ')})` : ''} {`);
           defs.in(); g.block(defs, sp.rest, sc); defs.out(); defs.line('}');
           continue;
         }
-        defs.line(`${retT(f)} ${c.name}::${OO.isMain(prog, f) ? 'Main' : f.name}(${params(f)}) {`);
+        defs.line(`${retT(f)} ${qualOf(c)}::${OO.isMain(prog, f) ? 'Main' : f.name}(${params(f)}) {`);
         defs.in(); g.block(defs, f.body, sc);
         const rl = _CM.rets(f);
         if (rl.length) { defs.line(rl.length > 1 ? `return make_tuple(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
@@ -3432,6 +3811,7 @@ LANGS.cpp = cFamily({
     }
     const o = new g.Out(); const u = g.used;
     o.line('#include <iostream>'); o.line('#include <string>'); o.line('#include <vector>'); o.line('#include <cmath>');
+    cppHeaderExtras(o);
     if (u.has('rand')) { o.line('#include <cstdlib>'); o.line('#include <ctime>'); }
     if (u.has('fmt') || u.has('fixed')) { o.line('#include <sstream>'); o.line('#include <iomanip>'); }
     if (u.has('fstream')) o.line('#include <fstream>');
@@ -3441,8 +3821,9 @@ LANGS.cpp = cFamily({
     if (u.has('fstream')) { o.line('ifstream fileLettura;'); o.line('ofstream fileScrittura;'); }
     if (u.has('fmt')) { o.line(''); o.line('string formatta(double x) {'); o.line('    ostringstream s;'); o.line('    s << setprecision(15) << x;'); o.line('    return s.str();'); o.line('}'); }
     if (u.has('fixed')) { o.line(''); o.line('string aDecimali(double x, int cifre) {'); o.line('    ostringstream s;'); o.line('    s << fixed << setprecision(cifre) << x;'); o.line('    return s.str();'); o.line('}'); }
+    cppHelpers(o);
     o.line(''); o.line('// Classi (gli oggetti si creano con new e si usano tramite puntatori)');
-    o.line(ordered.map((c) => `class ${c.name};`).join(' '));
+    o.line(ordered.map((c) => `${tplOf(c) ? tplOf(c) + ' ' : ''}class ${c.name};`).join(' '));
     o.lines.push(...decls.lines);
     if (statics.length) { o.line(''); o.line('// Attributi statici'); statics.forEach((l) => o.line(l)); }
     o.line(''); o.line('int main() {');
@@ -3456,10 +3837,20 @@ LANGS.cpp = cFamily({
 });
 
 const T_JAVA = { Integer: 'int', Real: 'double', String: 'String', Boolean: 'boolean', None: 'void' };
-const tJava = (t) => T_JAVA[t] || t;
+const BOX_J = { Integer: 'Integer', Real: 'Double', String: 'String', Boolean: 'Boolean' };
+/* tipi Java: ArrayList<Integer> con i tipi base "inscatolati"; i moduli nativi usano le classi di java.util */
+const tJava = (t) => {
+  const g = _CE.splitType(t);
+  if (!g.args.length) return T_JAVA[t] || t;
+  const a = g.args.map((x) => BOX_J[x] || tJava(x)), n = nativeOf(g.base);
+  return n && n.java ? n.java.type(a) : `${g.base}<${a.join(', ')}>`;
+};
+/* array di T in Java: non si può scrivere new T[n] */
+const newArrJava = (t, D) => (isTP(t) ? `(${t}${'[]'.repeat(D.length)}) new Object${D.map((d) => `[${d}]`).join('')}` : `new ${tJava(t)}${D.map((d) => `[${d}]`).join('')}`);
 let J_PFX = ''; // dalle altre classi lo Scanner e i file stanno nella classe principale
 const DEF_C = { Integer: '0', Real: '0.0', String: '""', Boolean: 'false' };
 LANGS.java = cFamily({
+  lang: 'java', targ: (t) => BOX_J[t] || tJava(t), diamond: '<>',
   label: 'Java', ext: 'java', intDiv: true, powFn: 'Math.pow', intCast: '(int) ', concatPrefix: '""',
   keywords: ['public', 'static', 'void', 'class', 'int', 'double', 'String', 'boolean', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'new', 'import', 'Scanner', 'System', 'Math', 'private', 'protected', 'extends', 'this', 'super', 'null', 'final', 'record', 'throws', 'abstract'],
   pi: 'Math.PI',
@@ -3495,7 +3886,7 @@ LANGS.java = cFamily({
     }
     return null;
   },
-  declare: (n, t, arr, D) => (arr ? `${tJava(t)}${'[]'.repeat(D.length)} ${n} = new ${tJava(t)}${D.map((d) => `[${d}]`).join('')};` : `${tJava(t)} ${n} = ${DEF_C[t] || 'null'};`),
+  declare: (n, t, arr, D) => (arr ? `${tJava(t)}${'[]'.repeat(D.length)} ${n} = ${newArrJava(t, D)};` : `${tJava(t)} ${n} = ${DEF_C[t] || 'null'};`),
   constDecl: (n, t, e) => `final ${tJava(t)} ${n} = ${e};`,
   declareInit: (n, t, e) => `${tJava(t)} ${n} = ${e};`,
   input: (o, v, t) => { const i = J_PFX + 'input'; o.line(`${v} = ${t === 'Integer' ? `Integer.parseInt(${i}.nextLine())` : t === 'Real' ? `Double.parseDouble(${i}.nextLine())` : t === 'Boolean' ? `Boolean.parseBoolean(${i}.nextLine())` : `${i}.nextLine()`};`); },
@@ -3568,7 +3959,7 @@ LANGS.java = cFamily({
       for (const a of c.attributes) {
         const sc = OO.classScope(prog, c, a.static);
         const D = a.array ? _CE.splitTop(a.size).map((x) => g.E(x, sc)) : null;
-        const init = a.array ? ` = new ${tJava(a.type)}${D.map((d) => `[${d}]`).join('')}` : (String(a.init || '').trim() ? ' = ' + g.E(a.init, sc) : (a.type === 'String' ? ' = ""' : ''));
+        const init = a.array ? ` = ${newArrJava(a.type, D)}` : (String(a.init || '').trim() ? ' = ' + g.E(a.init, sc) : (a.type === 'String' ? ' = ""' : ''));
         o.line(`${V(a.visibility)}${a.static ? 'static ' : ''}${tJava(a.type)}${a.array ? '[]'.repeat(D.length) : ''} ${a.name}${init};`);
       }
       for (const f of [...OO.ctors(prog, c), ...OO.methods(prog, c)]) {
@@ -3591,7 +3982,8 @@ LANGS.java = cFamily({
     o.line('import java.util.*;');
     for (const { c, lines } of parts) {
       o.line('');
-      o.line(`${c === main ? 'public ' : ''}${c.abstract ? 'abstract ' : ''}class ${c.name}${c.parent ? ' extends ' + c.parent : ''} {`);
+      if ((c.tparams || []).length) o.line('@SuppressWarnings("unchecked")');
+      o.line(`${c === main ? 'public ' : ''}${c.abstract ? 'abstract ' : ''}class ${_CM.classTitle(c)}${c.parent ? ' extends ' + c.parent : ''} {`);
       o.lines.push(...lines);
       o.line('}');
     }
@@ -3599,9 +3991,15 @@ LANGS.java = cFamily({
   },
 });
 
-const tCs = (t) => T_CPP[t] || t;
+const tCs = (t) => {
+  const g = _CE.splitType(t);
+  if (!g.args.length) return T_CPP[t] || t;
+  const a = g.args.map(tCs), n = nativeOf(g.base);
+  return n && n.csharp ? n.csharp.type(a) : `${g.base}<${a.join(', ')}>`;
+};
 let CS_PFX = '';
 LANGS.csharp = cFamily({
+  lang: 'csharp', targ: (t) => tCs(t),
   label: 'C#', ext: 'cs', intDiv: true, powFn: 'Math.Pow', intCast: '(int) ',
   keywords: ['using', 'class', 'static', 'void', 'int', 'double', 'string', 'bool', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'new', 'Console', 'Math', 'System', 'public', 'private', 'protected', 'this', 'base', 'null', 'virtual', 'override', 'const', 'abstract'],
   pi: 'Math.PI',
@@ -3633,7 +4031,7 @@ LANGS.csharp = cFamily({
     return null;
   },
   idx: idxComma,
-  declare: (n, t, arr, D) => (arr ? `${tCs(t)}[${','.repeat(D.length - 1)}] ${n} = new ${tCs(t)}[${D.join(', ')}];` : `${tCs(t)} ${n} = ${DEF_C[t] || 'null'};`),
+  declare: (n, t, arr, D) => (arr ? `${tCs(t)}[${','.repeat(D.length - 1)}] ${n} = new ${tCs(t)}[${D.join(', ')}];` : `${tCs(t)} ${n} = ${DEF_C[t] || (isTP(t) ? `default(${t})` : 'null')};`),
   // in C# const vuole un valore noto in compilazione; altrimenti una variabile normale
   constDecl: (n, t, e, lit) => (lit ? `const ${tCs(t)} ${n} = ${e};` : `${tCs(t)} ${n} = ${e}; // costante`),
   declareInit: (n, t, e) => `${tCs(t)} ${n} = ${e};`,
@@ -3714,9 +4112,16 @@ LANGS.csharp = cFamily({
     CS_PFX = '';
     const o = new g.Out();
     o.line('using System;');
+    if (GEN.native.size) o.line('using System.Collections.Generic;');
+    if (GEN.helpers.has('Aiuti')) {
+      o.line(''); o.line('static class Aiuti {');
+      o.line('    // toglie l\'elemento in posizione i e lo restituisce');
+      o.line('    public static T RimuoviIn<T>(List<T> lista, int i) { T x = lista[i]; lista.RemoveAt(i); return x; }');
+      o.line('}');
+    }
     for (const { c, lines } of parts) {
       o.line('');
-      o.line(`${c.abstract ? 'abstract ' : ''}class ${c.name}${c.parent ? ' : ' + c.parent : ''} {`);
+      o.line(`${c.abstract ? 'abstract ' : ''}class ${_CM.classTitle(c)}${c.parent ? ' : ' + c.parent : ''} {`);
       if (c === main) {
         if (g.used.has('rnd')) o.line('    public static Random rnd = new Random();');
         if (g.used.has('files')) { o.line('    public static System.IO.StreamReader fileLettura;'); o.line('    public static System.IO.StreamWriter fileScrittura;'); }
@@ -3730,6 +4135,7 @@ LANGS.csharp = cFamily({
 });
 
 LANGS.javascript = cFamily({
+  lang: 'javascript',
   label: 'JavaScript', ext: 'js',
   keywords: ['let', 'const', 'function', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'new', 'Math', 'console', 'prompt', 'parseInt', 'parseFloat', 'String', 'Array', 'class', 'extends', 'constructor', 'static', 'this', 'super', 'null', 'throw', 'args', 'typeof', 'instanceof'],
   pi: 'Math.PI', eq: '===', neq: '!==', concatPrefix: '""',
@@ -3803,7 +4209,7 @@ LANGS.javascript = cFamily({
     o.line('}');
     const test = {
       len: (n) => `args.length === ${n}`,
-      type: (p, i) => { const a = `args[${i}]`; if (p.array) return `Array.isArray(${a})`; return { Integer: `Number.isInteger(${a})`, Real: `typeof ${a} === "number"`, String: `typeof ${a} === "string"`, Boolean: `typeof ${a} === "boolean"` }[p.type] || `${a} instanceof ${p.type}`; },
+      type: (p, i) => { const a = `args[${i}]`; if (p.array) return `Array.isArray(${a})`; if (isTP(p.type)) return 'true'; return { Integer: `Number.isInteger(${a})`, Real: `typeof ${a} === "number"`, String: `typeof ${a} === "string"`, Boolean: `typeof ${a} === "boolean"` }[p.type] || `${a} instanceof ${_CE.splitType(p.type).base}`; },
     };
     let multiDim = false;
     for (const c of OO.ordered(prog, false)) {
@@ -3859,7 +4265,7 @@ LANGS.javascript = cFamily({
 const CodeGen = {
   LANGS,
   generate(prog, lang) {
-    try { return LANGS[lang].generate(prog); } catch (e) { return `// Impossibile generare il codice: ${e.message}\n`; }
+    try { setupGen(prog, lang); return LANGS[lang].generate(prog); } catch (e) { return `// Impossibile generare il codice: ${e.message}\n`; }
   },
 };
 if (typeof module !== 'undefined') module.exports = CodeGen;
@@ -4327,7 +4733,7 @@ const UmlLib = (() => {
       const meths = methods.map((f) => ({ text: methodText(prog, f), f, st: !!f.static, ctor: !!f.ctor, abs: !!f.abstract, main: f === prog.functions[0] }));
       // classe concreta che non definisce metodi astratti ereditati
       const missing = c.abstract ? [] : ModelLib.missingAbstract(prog, c);
-      let w = Math.max(MINW, tw(c.name, FN) + PADX * 2 + 24, ...attrs.map((r) => tw(r.text, FM) + PADX * 2), ...meths.map((r) => tw(r.text, FM) + PADX * 2));
+      let w = Math.max(MINW, tw(ModelLib.classTitle(c), FN) + PADX * 2 + 24, ...attrs.map((r) => tw(r.text, FM) + PADX * 2), ...meths.map((r) => tw(r.text, FM) + PADX * 2));
       w = Math.ceil(Math.min(MAXW, w));
       const head = HEAD + (c === main || c.abstract ? STEREO : 0);
       const ah = Math.max(1, attrs.length) * ROW + CPAD * 2 - (attrs.length ? 0 : ROW - 10);
@@ -4346,18 +4752,42 @@ const UmlLib = (() => {
     return [cx + dx * t, cy + dy * t];
   }
 
-  function render(prog, sel) {
+  /* pulsantino per condensare (−) o espandere (+) un modulo */
+  const modTog = (cx, cy, name, open) => `<g class="umodtog" data-module="${esc(name)}" role="button" aria-label="${open ? 'Condensa' : 'Espandi'} il modulo ${esc(name)}"><title>${open ? 'Condensa il modulo: mostra solo i nomi delle classi' : 'Espandi il modulo: mostra attributi e metodi'}</title><circle cx="${cx}" cy="${cy}" r="8"/><path d="M${cx - 3.5} ${cy}H${cx + 3.5}${open ? '' : `M${cx} ${cy - 3.5}V${cy + 3.5}`}"/></g>`;
+  /* opts.collapsed: nomi dei moduli condensati (un solo riquadro con i nomi delle classi) */
+  function render(prog, sel, opts) {
     const boxes = layout(prog);
+    const collapsed = (opts && opts.collapsed) || new Set();
+    const mods = ModelLib.modulesOf(prog).filter((x) => x.classes.length);
+    // moduli condensati: tutte le loro classi puntano allo stesso riquadro compatto
+    for (const m of mods.filter((x) => collapsed.has(x.name))) {
+      const bs = m.classes.map((c) => boxes.get(c.id));
+      const rows = m.classes.map((c) => ModelLib.classTitle(c));
+      const label = 'modulo ' + m.name;
+      const w = Math.ceil(Math.max(170, tw(label, FS) + 60, ...rows.map((r) => tw(r, FN) + 36)));
+      const cb = { compact: true, m, rows, label, x: Math.min(...bs.map((b) => b.x)), y: Math.min(...bs.map((b) => b.y)), w, h: 40 + rows.length * 22 + 8 };
+      for (const c of m.classes) boxes.set(c.id, cb);
+    }
     let W = 640, H = 420;
     for (const b of boxes.values()) { W = Math.max(W, b.x + b.w + 120); H = Math.max(H, b.y + b.h + 120); }
-    const lines = [], labels = [], shapes = [];
+    const lines = [], labels = [], shapes = [], frames = [];
+    // moduli importati: un riquadro tratteggiato intorno alle loro classi
+    for (const m of mods.filter((x) => !collapsed.has(x.name))) {
+      const bs = m.classes.map((c) => boxes.get(c.id));
+      const x1 = Math.min(...bs.map((b) => b.x)) - 16, y1 = Math.min(...bs.map((b) => b.y)) - 34;
+      const x2 = Math.max(...bs.map((b) => b.x + b.w)) + 16, y2 = Math.max(...bs.map((b) => b.y + b.h)) + 16;
+      const label = 'modulo ' + m.name;
+      const tabW = tw(label, FS) + 46;
+      frames.push(`<g class="umod" data-module="${esc(m.name)}"><title>Modulo ${esc(m.name)} (sola lettura): clic destro per aggiornarlo o rimuoverlo</title><rect class="umodbg" x="${x1}" y="${y1}" width="${x2 - x1}" height="${y2 - y1}" rx="10"/><rect class="umodtab" x="${x1}" y="${y1}" width="${tabW}" height="22" rx="10"/><text class="umodlab" x="${x1 + 13}" y="${y1 + 15}">${esc(label)}</text>${modTog(x1 + tabW - 14, y1 + 11, m.name, true)}</g>`);
+      W = Math.max(W, x2 + 40); H = Math.max(H, y2 + 40);
+    }
     // relazioni: una sola linea per coppia ordinata e tipo; le coppie con più relazioni si scostano
     const rels = [];
     for (const c of prog.classes) {
       const par = ModelLib.classByName(prog, c.parent);
       if (par && par !== c) rels.push({ kind: 'inh', from: c, to: par });
       for (const a of c.attributes) {
-        const t = ModelLib.classByName(prog, a.type);
+        const t = ModelLib.classByName(prog, ExprLib.splitType(a.type).base);
         if (t) rels.push({ kind: 'assoc', from: c, to: t, name: a.name, mult: a.array ? '*' : '0..1', st: a.static });
       }
     }
@@ -4367,6 +4797,7 @@ const UmlLib = (() => {
     const selfIdx = new Map();
     for (const r of rels) {
       const A = boxes.get(r.from.id), B = boxes.get(r.to.id);
+      if (A.compact && A === B) continue; // dentro un modulo condensato
       if (r.from === r.to) {
         // associazione verso la propria classe: anello sul lato destro
         const k = selfIdx.get(A.c.id) || 0; selfIdx.set(A.c.id, k + 1);
@@ -4395,18 +4826,29 @@ const UmlLib = (() => {
         labels.push(`<text class="ulab" x="${lx + nx * 14}" y="${ly + ny * 14 + 4}" text-anchor="${anchor}">${r.st ? '<tspan text-decoration="underline">' : ''}${esc(r.name)}${r.st ? '</tspan>' : ''} ${r.mult}</text>`);
       }
     }
+    // moduli condensati
+    for (const b of new Set([...boxes.values()].filter((x) => x.compact))) {
+      const { x, y, w, h } = b;
+      let g = `<g class="umod umodc" data-module="${esc(b.m.name)}"><title>Modulo ${esc(b.m.name)} (sola lettura, condensato): doppio clic per espanderlo, clic destro per aggiornarlo o rimuoverlo</title>`;
+      g += `<rect class="umodbg" x="${x}" y="${y}" width="${w}" height="${h}" rx="10"/><rect class="umodtab" x="${x}" y="${y}" width="${w}" height="26" rx="10"/><text class="umodlab" x="${x + 13}" y="${y + 17}">${esc(b.label)}</text>`;
+      g += modTog(x + w - 15, y + 13, b.m.name, false);
+      b.rows.forEach((r, k) => { g += `<text class="umodcls" x="${x + 16}" y="${y + 46 + k * 22}">${esc(r)}</text>`; });
+      shapes.push(g + '</g>');
+    }
     // riquadri
     for (const b of boxes.values()) {
+      if (b.compact) continue;
       const { c, x, y, w } = b;
       const isSel = sel && sel.cls === c.id;
       const warn = b.missing.length ? `${c.name} non definisce ${b.missing.map((m) => m.f.name + '()').join(', ')} (${b.missing.length === 1 ? 'astratto' : 'astratti'} in ${[...new Set(b.missing.map((m) => m.owner.name))].join(', ')}): aggiungi ${b.missing.length === 1 ? 'il metodo' : 'i metodi'} oppure rendi astratta la classe` : '';
-      let g = `<g class="ubox${isSel && sel.kind === 'class' ? ' sel' : ''}${isSel ? ' cur' : ''}${b.main ? ' main' : ''}${c.abstract ? ' abstract' : ''}${warn ? ' warn' : ''}" data-cls="${c.id}">`;
-      g += `<title>${c.abstract ? 'Classe astratta ' : ''}${esc(c.name)}${c.parent ? ' — eredita da ' + esc(c.parent) : ''}${warn ? ' — ⚠ ' + esc(warn) : ''}: doppio clic sul nome per modificarla, clic destro per aggiungere membri</title>`;
+      let g = `<g class="ubox${isSel && sel.kind === 'class' ? ' sel' : ''}${isSel ? ' cur' : ''}${b.main ? ' main' : ''}${c.abstract ? ' abstract' : ''}${warn ? ' warn' : ''}${c.module ? ' mod' : ''}" data-cls="${c.id}">`;
+      g += c.module ? `<title>${esc(ModelLib.classTitle(c))} — dal modulo ${esc(c.module.name)}, in sola lettura: doppio clic su un metodo per vederne il diagramma di flusso</title>`
+        : `<title>${c.abstract ? 'Classe astratta ' : ''}${esc(ModelLib.classTitle(c))}${c.parent ? ' — eredita da ' + esc(c.parent) : ''}${warn ? ' — ⚠ ' + esc(warn) : ''}: doppio clic sul nome per modificarla, clic destro per aggiungere membri</title>`;
       g += `<rect class="ubg" x="${x}" y="${y}" width="${w}" height="${b.h}" rx="6"/>`;
       g += `<path class="uheadbg" d="M${x} ${y + b.head}V${y + 6}Q${x} ${y} ${x + 6} ${y}H${x + w - 6}Q${x + w} ${y} ${x + w} ${y + 6}V${y + b.head}Z"/>`;
       g += `<rect class="uhit head" data-part="head" x="${x}" y="${y}" width="${w}" height="${b.head}"/>`;
       if (b.main || c.abstract) g += `<text class="ustereo" x="${x + w / 2}" y="${y + 15}">${b.main ? '«principale»' : '«abstract»'}</text>`;
-      g += `<text class="uname" x="${x + w / 2}" y="${y + b.head - 13}">${esc(c.name)}</text>`;
+      g += `<text class="uname" x="${x + w / 2}" y="${y + b.head - 13}">${esc(ModelLib.classTitle(c))}</text>`;
       if (warn) g += `<g class="uwarn"><circle cx="${x + 15}" cy="${y + b.head / 2}" r="8"/><text x="${x + 15}" y="${y + b.head / 2 + 4}">!</text></g>`;
       // attributi
       let yy = y + b.head;
@@ -4416,7 +4858,7 @@ const UmlLib = (() => {
         const on = isSel && sel.kind === 'attr' && sel.i === r.i;
         g += `<g class="urow${on ? ' sel' : ''}" data-kind="attr" data-i="${r.i}"><rect class="uhit" x="${x + 2}" y="${ry}" width="${w - 4}" height="${ROW}" rx="3"/><text class="umem" x="${x + PADX}" y="${ry + ROW / 2 + 4.5}"${r.st ? ' text-decoration="underline"' : ''}>${esc(RenderLib.fitText(r.text, w - PADX * 2, FM))}</text><title>${esc(r.text)}${r.st ? ' (statico)' : ''} — doppio clic per modificarlo</title></g>`;
       });
-      g += addBtn(x + w - 13, yy, 'attr', 'Aggiungi un attributo');
+      if (!c.module) g += addBtn(x + w - 13, yy, 'attr', 'Aggiungi un attributo');
       // metodi
       yy += b.ah;
       g += `<path class="usep" d="M${x} ${yy}H${x + w}"/>`;
@@ -4426,14 +4868,14 @@ const UmlLib = (() => {
         const tip = r.ctor ? 'costruttore' : r.main ? 'punto di partenza del programma' : r.st ? 'metodo statico' : r.abs ? 'metodo astratto, senza corpo: lo definiscono le sottoclassi' : 'metodo';
         g += `<g class="urow method${on ? ' sel' : ''}${r.ctor ? ' ctor' : ''}${r.abs ? ' abs' : ''}${r.main ? ' mainm' : ''}" data-kind="method" data-fid="${r.f.id}"><rect class="uhit" x="${x + 2}" y="${ry}" width="${w - 4}" height="${ROW}" rx="3"/><text class="umem" x="${x + PADX}" y="${ry + ROW / 2 + 4.5}"${r.st ? ' text-decoration="underline"' : ''}>${esc(RenderLib.fitText(r.text, w - PADX * 2, FM))}</text><title>${esc(r.text)} (${tip})${r.abs ? '' : ' — doppio clic per aprire il diagramma di flusso'}</title></g>`;
       });
-      g += addBtn(x + w - 13, yy, 'method', 'Aggiungi un metodo o un costruttore');
+      if (!c.module) g += addBtn(x + w - 13, yy, 'method', 'Aggiungi un metodo o un costruttore');
       g += '</g>';
       shapes.push(g);
     }
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" class="uml" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" data-w="${W}" data-h="${H}">`
       + '<defs><marker id="uml-inh" viewBox="0 0 14 14" refX="13" refY="7" markerWidth="13" markerHeight="13" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M1 1L13 7L1 13Z" class="minh"/></marker>'
       + '<marker id="uml-open" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M1 1L11 6L1 11" class="mopen"/></marker></defs>'
-      + `<g class="urels">${lines.join('')}</g><g class="uboxes">${shapes.join('')}</g><g class="ulabels">${labels.join('')}</g></svg>`;
+      + `<g class="umods">${frames.join('')}</g><g class="urels">${lines.join('')}</g><g class="uboxes">${shapes.join('')}</g><g class="ulabels">${labels.join('')}</g></svg>`;
     return { svg, W, H, boxes };
   }
   function addBtn(cx, y, what, title) {
@@ -5421,7 +5863,7 @@ const ArrayView = (() => {
   const st = {
     prog: null, fi: 0, sel: null, clip: null, undo: [], redo: [], dirty: false,
     zoom: store.get('zoom', 1), speed: store.get('speed', 2), lang: store.get('lang', 'python'), tab: store.get('tab', 'console'),
-    fileName: null, ins: [], expanded: new Set(), varsOpen: new Set(), vfs: new Map(Object.entries(store.get('vfs', {}))),
+    fileName: null, ins: [], expanded: new Set(), modCollapsed: new Set(store.get('modCollapsed', [])), varsOpen: new Set(), vfs: new Map(Object.entries(store.get('vfs', {}))),
     // vista Funzioni o Oggetti; nella vista Oggetti il foglio mostra il diagramma delle classi (uml) o un metodo
     view: store.get('view', 'functions') === 'objects' ? 'objects' : 'functions', uml: true, usel: null,
   };
@@ -5480,11 +5922,57 @@ const ArrayView = (() => {
     }
     return [...new Set(out)];
   }
-  /* tipi per dichiarazioni, parametri e attributi: i quattro di base e le classi */
-  function typeOpts() {
-    const base = E.TYPES.map((t) => [t, TYPE_IT[t]]);
-    return M.hasClasses(st.prog) ? base.concat(st.prog.classes.map((c) => [c.name, c.name + ' (classe)'])) : base;
+  /* scelta di un tipo: un menu con i tipi base, i parametri di tipo (T) e le classi; per una
+     classe generica (Nodo<S, T>) accanto compaiono i menu dei suoi parametri, anche annidati.
+     ctx: classe in cui si usa il tipo; onChange(tipo) a ogni cambiamento */
+  function typePicker(value, ctx, onChange, aria) {
+    const el = h('span', { class: 'tpick' });
+    const sel = h('select', { 'aria-label': aria || 'Tipo' });
+    const sub = h('span', { class: 'tpargs' });
+    const cs = M.hasClasses(st.prog) ? st.prog.classes : [];
+    const tps = ctx ? ctx.tparams || [] : [];
+    const opts = [...E.TYPES.map((t) => [t, TYPE_IT[t]]), ...tps.map((t) => [t, `${t} (tipo generico di ${ctx.name})`]), ...cs.map((c) => [c.name, `${M.classTitle(c)} (${c.module ? 'modulo' : 'classe'})`])];
+    const genOf = (b) => { const c = M.classByName(st.prog, b); return c && (c.tparams || []).length ? c : null; };
+    let kids = [];
+    const get = () => { const c = genOf(sel.value); return c ? E.joinType(c.name, kids.map((k) => k.get())) : sel.value; };
+    const fire = () => { if (onChange) onChange(get()); };
+    const drawArgs = (args) => {
+      sub.innerHTML = ''; kids = [];
+      const c = genOf(sel.value); if (!c) return;
+      c.tparams.forEach((p, i) => {
+        const k = typePicker(args[i] || 'Integer', ctx, fire, `${aria || 'Tipo'}: ${p} di ${c.name}`);
+        kids.push(k);
+        sub.append(h('span', { class: 'tparg' }, h('span', { class: 'tpname' }, p + ':'), k.el));
+      });
+    };
+    const set = (v) => {
+      const g = E.splitType(v || 'Integer');
+      if (![...sel.options].some((o) => o.value.toLowerCase() === g.base.toLowerCase())) sel.append(h('option', { value: g.base }, E.typeName(g.base)));
+      sel.value = [...sel.options].find((o) => o.value.toLowerCase() === g.base.toLowerCase()).value;
+      drawArgs(g.args);
+    };
+    sel.append(...opts.map(([v, l]) => h('option', { value: v }, l)));
+    sel.addEventListener('change', () => { drawArgs([]); fire(); });
+    el.append(sel, sub);
+    set(value);
+    return { el, sel, get, set, setDisabled(d) { el.querySelectorAll('select').forEach((x) => { x.disabled = d; }); } };
   }
+  /* ---- moduli: le loro classi sono in sola lettura ---- */
+  function roGuard(c) {
+    if (c === undefined) {
+      // funzione o metodo aperto: viene da un modulo?
+      if (isUml()) return false;
+      const f = func(), m = M.moduleOfFunc(st.prog, f);
+      if (m) { toast(`${f.module ? f.name + '()' : M.classOf(st.prog, f).name} fa parte del modulo ${m.name}: è in sola lettura`, 'warn'); return true; }
+      return false;
+    }
+    if (c && c.module) { toast(`${c.name} fa parte del modulo ${c.module.name}: è in sola lettura`, 'warn'); return true; }
+    return false;
+  }
+  /* funzione importata da un modulo di sole funzioni */
+  function roFunc(f) { if (f && f.module) { toast(`${f.name}() fa parte del modulo ${f.module.name}: è in sola lettura`, 'warn'); return true; } return false; }
+  /* tipo di una cella con i parametri di tipo sostituiti (T -> Intero per un ArrayList<Intero>) */
+  function cellT(c) { return run.interp && run.interp.cellType ? run.interp.cellType(c) : c.type; }
 
   /* ----------------------------- Viste ----------------------------------- */
   /* il programma deve corrispondere alla vista: classe predefinita nella vista Oggetti */
@@ -5530,8 +6018,18 @@ const ArrayView = (() => {
     document.body.classList.toggle('umlmode', isUml());
     $('.hint-add').textContent = isUml() ? 'Doppio clic su un metodo per disegnarlo · clic destro su una classe per aggiungere membri · trascina le classi per spostarle' : 'Clic su una freccia per aggiungere un blocco · doppio clic per modificarlo · trascina per spostarlo';
     const bar = $('#crumbBar');
-    bar.hidden = !isOO() || st.uml;
-    if (!bar.hidden) { const f = func(); const c = M.classOf(st.prog, f); $('#crumbWhere').textContent = `${c ? c.name : ''} › ${f === st.prog.functions[0] ? 'Main (inizio del programma)' : f.ctor ? 'costruttore' : f.name + '()'}`; }
+    const fmod = !isUml() && func().module;
+    bar.hidden = (!isOO() || st.uml) && !fmod;
+    $('#backUml').hidden = !isOO();
+    if (!bar.hidden) {
+      const f = func(); const c = isOO() ? M.classOf(st.prog, f) : null; const m = M.moduleOfFunc(st.prog, f);
+      $('#crumbWhere').textContent = isOO() ? `${c ? M.classTitle(c) : ''} › ${f === st.prog.functions[0] ? 'Main (inizio del programma)' : f.ctor ? 'costruttore' : f.name + '()'}${m ? ` · modulo ${m.name}, sola lettura` : ''}` : `${f.name}() · modulo ${m.name}, sola lettura`;
+    }
+    document.body.classList.toggle('readonly', !bar.hidden && M.isModuleFunc(st.prog, func()));
+    const mods = isUml() ? M.modulesOf(st.prog).filter((m) => m.classes.length) : [];
+    $('#modBar').hidden = !mods.length;
+    document.body.classList.toggle('hasmods', !!mods.length);
+    if (mods.length) { const anyOpen = mods.some((m) => !st.modCollapsed.has(m.name)); $('#modToggle').textContent = anyOpen ? '⊟ Condensa i moduli' : '⊞ Espandi i moduli'; $('#modToggle').title = (anyOpen ? 'Mostra i moduli importati come riquadri compatti, con i soli nomi delle classi' : 'Mostra attributi e metodi delle classi dei moduli importati') + ' (Maiusc+M)'; }
   }
   /* metodo astratto: niente diagramma di flusso, solo le versioni delle sottoclassi */
   function abstractCard(f) {
@@ -5550,6 +6048,17 @@ const ArrayView = (() => {
     const holder = $('#chart'); holder.innerHTML = ''; holder.append(card);
   }
   function showUml() { st.uml = true; st.sel = null; render(); $('#canvasWrap').scrollTo(0, 0); }
+  /* moduli condensati nel diagramma delle classi (si ricordano per nome) */
+  function toggleModule(name) {
+    if (st.modCollapsed.has(name)) st.modCollapsed.delete(name); else st.modCollapsed.add(name);
+    store.set('modCollapsed', [...st.modCollapsed]); render();
+  }
+  function toggleAllModules() {
+    const ms = M.modulesOf(st.prog).filter((m) => m.classes.length).map((m) => m.name);
+    const anyOpen = ms.some((n) => !st.modCollapsed.has(n));
+    for (const n of ms) { if (anyOpen) st.modCollapsed.add(n); else st.modCollapsed.delete(n); }
+    store.set('modCollapsed', [...st.modCollapsed]); render();
+  }
 
   /* --------------------------- Disegno ----------------------------------- */
   let codeTimer = null;
@@ -5557,7 +6066,7 @@ const ArrayView = (() => {
     ensureView();
     const holder = $('#chart');
     if (isUml()) {
-      const out = UmlLib.render(st.prog, st.usel);
+      const out = UmlLib.render(st.prog, st.usel, { collapsed: st.modCollapsed });
       st.ins = []; st.edges = [];
       holder.innerHTML = out.svg;
       applyZoom();
@@ -5613,11 +6122,11 @@ const ArrayView = (() => {
       $('#funcLbl').textContent = 'Diagramma';
       sel.append(h('option', { value: 'uml', selected: st.uml }, '▦ Classi (UML)'));
       for (const c of st.prog.classes) {
-        const og = h('optgroup', { label: 'Classe ' + c.name });
+        const og = h('optgroup', { label: 'Classe ' + M.classTitle(c) + (c.module ? ` · modulo ${c.module.name}` : '') });
         const ms = M.membersOf(st.prog, c);
         for (const f of [...ms.filter((x) => x.ctor), ...ms.filter((x) => !x.ctor)]) {
           const i = st.prog.functions.indexOf(f);
-          og.append(h('option', { value: i, selected: !st.uml && i === st.fi }, i === 0 ? 'Inizio (principale)' : f.ctor ? `new ${c.name}(${f.params.map((p) => p.name).join(', ')}) · costruttore` : `${f.name}(${f.params.map((p) => p.name).join(', ')})${f.abstract ? ' · astratto' : ''}`));
+          og.append(h('option', { value: i, selected: !st.uml && i === st.fi }, i === 0 ? 'Inizio (principale)' : f.ctor ? `new ${c.name}(${f.params.map((p) => p.name).join(', ')}) · costruttore` : `${f.name}(${f.params.map((p) => p.name).join(', ')})${f.abstract ? ' · astratto' : ''}${f.module ? ' · modulo ' + f.module.name : ''}`));
         }
         sel.append(og);
       }
@@ -5632,7 +6141,7 @@ const ArrayView = (() => {
     $('#funcLbl').textContent = 'Funzione';
     add.title = 'Nuova funzione (N)'; edit.title = 'Modifica funzione o proprietà del programma (F2)'; del.title = 'Elimina funzione (Maiusc+Canc)';
     edit.disabled = false;
-    st.prog.functions.forEach((f, i) => sel.append(h('option', { value: i, selected: i === st.fi }, i === 0 ? 'Inizio (principale)' : `${f.name}(${f.params.map((p) => p.name).join(', ')})`)));
+    st.prog.functions.forEach((f, i) => sel.append(h('option', { value: i, selected: i === st.fi }, i === 0 ? 'Inizio (principale)' : `${f.name}(${f.params.map((p) => p.name).join(', ')})${f.module ? ' · modulo ' + f.module.name : ''}`)));
     del.disabled = st.fi === 0;
   }
   function showFunc(i) { if (i === st.fi && !st.uml) return; st.fi = i; st.uml = false; st.sel = null; render(); $('#canvasWrap').scrollTo(0, 0); }
@@ -5737,27 +6246,30 @@ const ArrayView = (() => {
   function addStmt(target, kind) {
     const s = M.makeStmt(kind);
     if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; }
+    if (roGuard()) return;
     stmtDialog(s, true, (vals) => mutate(() => { Object.assign(s, vals); target.arr.splice(target.idx, 0, s); st.sel = s.id; }));
   }
   function editStmt(id) {
     const f = M.findStmt(st.prog, id); if (!f) return;
     if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; }
+    if (roGuard()) return;
     stmtDialog(f.stmt, false, (vals) => mutate(() => Object.assign(f.stmt, vals)));
   }
   function deleteSel() {
-    if (!st.sel) return;
+    if (!st.sel || roGuard()) return;
     const f = M.findStmt(st.prog, st.sel); if (!f) return;
     mutate(() => { f.arr.splice(f.index, 1); st.sel = f.arr[f.index] ? f.arr[f.index].id : (f.arr[f.index - 1] ? f.arr[f.index - 1].id : null); });
   }
   function copySel(cut) {
     if (!st.sel) return;
     const f = M.findStmt(st.prog, st.sel); if (!f) return;
+    if (cut && roGuard()) return;
     st.clip = M.cloneStmt(f.stmt, true);
     if (cut) mutate(() => { f.arr.splice(f.index, 1); st.sel = null; });
     else toast('Blocco copiato: fai clic su una freccia e scegli «Incolla qui»');
   }
   function paste(target) {
-    if (!st.clip || (!target && (isUml() || func().abstract))) return;
+    if (!st.clip || (!target && (isUml() || func().abstract)) || roGuard()) return;
     const c = M.cloneStmt(st.clip);
     if (!target) {
       const f = st.sel && M.findStmt(st.prog, st.sel);
@@ -5767,7 +6279,7 @@ const ArrayView = (() => {
   }
   /* sposta il blocco selezionato di un posto (dir -1 su, +1 giù) nella stessa sequenza */
   function shiftSel(dir) {
-    if (!st.sel) return;
+    if (!st.sel || roGuard()) return;
     if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; }
     const f = M.findStmt(st.prog, st.sel); if (!f) return;
     const j = f.index + dir; if (j < 0 || j >= f.arr.length) return;
@@ -5780,7 +6292,7 @@ const ArrayView = (() => {
     addStmt(f ? { arr: f.arr, idx: f.index + 1 } : { arr: func().body, idx: func().body.length }, kind);
   }
   function duplicate() {
-    if (!st.sel) return;
+    if (!st.sel || roGuard()) return;
     const f = M.findStmt(st.prog, st.sel); if (!f) return;
     const c = M.cloneStmt(f.stmt);
     mutate(() => { f.arr.splice(f.index + 1, 0, c); st.sel = c.id; });
@@ -5792,7 +6304,7 @@ const ArrayView = (() => {
     return found;
   }
   function moveStmt(id, target) {
-    const f = M.findStmt(st.prog, id); if (!f) return;
+    const f = M.findStmt(st.prog, id); if (!f || roGuard()) return;
     if (containsArr(f.stmt, target.arr)) { toast('Non puoi spostare un blocco dentro se stesso', 'warn'); return; }
     let idx = target.idx;
     if (target.arr === f.arr && f.index < idx) idx--;
@@ -5845,6 +6357,12 @@ const ArrayView = (() => {
     let input;
     if (spec.type === 'select') {
       input = h('select', { id }, spec.options.map(([v, l]) => h('option', { value: v, selected: v === val }, l)));
+    } else if (spec.type === 'typepick') {
+      const tpk = typePicker(val, spec.ctx, null, spec.label);
+      tpk.sel.id = id;
+      wrap.append(h('label', { class: 'flabel', for: id }, spec.label), tpk.el);
+      wrap._get = tpk.get; wrap._input = tpk.sel; wrap._check = () => '';
+      return wrap;
     } else if (spec.type === 'check') {
       input = h('input', { id, type: 'checkbox', checked: !!val });
       wrap.append(h('label', { class: 'check', for: id }, input, h('span', null, spec.label)));
@@ -5972,7 +6490,7 @@ const ArrayView = (() => {
   function stmtDialog(s, isNew, done) {
     let form = STMT_FORMS[s.kind];
     // nella vista Oggetti si possono dichiarare variabili di tipo classe
-    if (s.kind === 'declare' && M.hasClasses(st.prog)) form = { ...form, fields: form.fields.map((f) => (f.key === 'type' ? { ...f, type: 'select', options: typeOpts() } : f)) };
+    if (s.kind === 'declare' && M.hasClasses(st.prog)) form = { ...form, fields: form.fields.map((f) => (f.key === 'type' ? { ...f, type: 'typepick', ctx: M.classOf(st.prog, func()) } : f)) };
     const vars = declaredNames(func());
     const body = h('div', { class: 'fields' });
     if (form.help) body.append(h('p', { class: 'help' }, form.help));
@@ -6017,6 +6535,7 @@ const ArrayView = (() => {
     const f = isNew ? M.makeFunction('') : st.prog.functions[index];
     const oo = isOO() && M.hasClasses(st.prog);
     const cls = oo ? (isNew ? opts.cls : M.classOf(st.prog, f)) : null;
+    if (roGuard(cls) || (!isNew && roFunc(f))) return;
     const ctor = oo && (isNew ? !!(opts && opts.ctor) : !!f.ctor);
     const params = f.params.map((p) => ({ ...p }));
     const body = h('div', { class: 'fields' });
@@ -6045,7 +6564,7 @@ const ArrayView = (() => {
       if (!params.length) plist.append(h('p', { class: 'muted small' }, 'Nessun parametro.'));
       params.forEach((p, i) => {
         const nm = h('input', { type: 'text', class: 'mono', value: p.name, 'aria-label': 'Nome parametro ' + (i + 1), placeholder: 'nome', oninput: (e) => { p.name = e.target.value.trim(); } });
-        const tp = h('select', { 'aria-label': 'Tipo parametro ' + (i + 1), onchange: (e) => { p.type = e.target.value; } }, typeOpts().map(([v, l]) => h('option', { value: v, selected: v === p.type }, l)));
+        const tp = typePicker(p.type, cls, (t) => { p.type = t; }, 'Tipo parametro ' + (i + 1)).el;
         const shape = p.array ? (p.dims || 1) : 0;
         const arr = h('select', { 'aria-label': 'Forma del parametro ' + (i + 1), title: 'Valore singolo o array', onchange: (e) => { const d = +e.target.value; p.array = d > 0; p.dims = Math.max(1, d); } }, [[0, 'valore'], [1, 'array [ ]'], [2, 'matrice [ , ]'], [3, '3 dimensioni'], [4, '4 dimensioni'], [5, '5 dimensioni']].map(([v, l]) => h('option', { value: v, selected: v === shape }, l)));
         plist.append(h('div', { class: 'prow' }, nm, tp, arr,
@@ -6066,13 +6585,13 @@ const ArrayView = (() => {
       rlist.innerHTML = '';
       if (!rets.length) rlist.append(h('p', { class: 'muted small' }, 'Nessun valore: è una procedura.'));
       rets.forEach((r, i) => {
-        const tp = h('select', { 'aria-label': 'Tipo del valore restituito ' + (i + 1), onchange: (e) => { r.type = e.target.value; } }, typeOpts().map(([v, l]) => h('option', { value: v, selected: v === r.type }, l)));
+        const tpk = typePicker(r.type, cls, (t) => { r.type = t; }, 'Tipo del valore restituito ' + (i + 1)), tp = tpk.el;
         const tag = h('span', { class: 'rtag', title: 'È un attributo della classe: il metodo lo restituisce direttamente, senza dichiarare una variabile' }, 'attributo');
         // scegliendo un attributo il tipo è il suo e non si cambia
         const syncAttr = () => {
           const a = attrOf(r.name);
-          if (a) { r.type = a.attr.type; tp.value = a.attr.type; }
-          tp.disabled = !!a; tag.hidden = !a;
+          if (a) { r.type = a.attr.type; tpk.set(a.attr.type); }
+          tpk.setDisabled(!!a); tag.hidden = !a;
         };
         const nm = h('input', { type: 'text', class: 'mono', value: r.name, list: retAttrs.length ? dlId : null, 'aria-label': 'Variabile restituita ' + (i + 1), placeholder: retAttrs.length ? 'variabile o attributo' : 'variabile', oninput: (e) => { r.name = e.target.value.trim(); syncAttr(); } });
         syncAttr();
@@ -6171,7 +6690,7 @@ const ArrayView = (() => {
   function deleteFunction(target) {
     const f = target || func();
     const i = st.prog.functions.indexOf(f);
-    if (i <= 0) return;
+    if (i <= 0 || roFunc(f) || roGuard(M.hasClasses(st.prog) ? M.classOf(st.prog, f) : null)) return;
     const what = f.ctor ? `Il costruttore ${f.name}(…)` : isOO() ? `Il metodo ${fname(f)}` : `La funzione ${f.name}`;
     confirmBox(f.ctor ? 'Eliminare il costruttore?' : isOO() ? 'Eliminare il metodo?' : 'Eliminare la funzione?', `${what} e tutti i suoi blocchi verranno eliminati.`, 'Elimina', () => mutate(() => {
       st.prog.functions.splice(i, 1);
@@ -6208,7 +6727,7 @@ const ArrayView = (() => {
   function renameClass(c, nu) {
     const old = c.name, lo = old.toLowerCase();
     if (old === nu) return;
-    const T = (t) => (String(t).toLowerCase() === lo ? nu : t);
+    const T = (t) => { const g = E.splitType(t); return E.joinType(g.base.toLowerCase() === lo ? nu : g.base, g.args.map(T)); };
     for (const k of st.prog.classes) {
       if ((k.parent || '').toLowerCase() === lo) k.parent = nu;
       for (const a of k.attributes) { a.type = T(a.type); a.init = renameInExpr(a.init || '', old, nu); a.size = renameInExpr(a.size || '', old, nu); }
@@ -6226,12 +6745,14 @@ const ArrayView = (() => {
   }
   function classDialog(c, pos) {
     const isNew = !c;
+    if (c && roGuard(c)) return;
     const nameW = field({ key: 'cname', label: 'Nome della classe', type: 'ident', required: true, placeholder: 'es. Punto', hint: 'Per convenzione inizia con la lettera maiuscola' }, c ? c.name : '');
     const banned = c ? [c, ...descendants(c)] : [];
-    const parW = field({ key: 'cpar', label: 'Eredita da (classe madre)', type: 'select', options: [['', '— nessuna —'], ...st.prog.classes.filter((k) => !banned.includes(k)).map((k) => [k.name, k.name])] }, c ? (c.parent || '') : '');
+    const parW = field({ key: 'cpar', label: 'Eredita da (classe madre)', type: 'select', options: [['', '— nessuna —'], ...st.prog.classes.filter((k) => !banned.includes(k) && !(k.tparams || []).length).map((k) => [k.name, k.name])] }, c ? (c.parent || '') : '');
+    const tpW = isMainClsOf(c) ? null : field({ key: 'ctp', label: 'Parametri di tipo (classe generica, facoltativo)', type: 'plain', placeholder: 'es. T   oppure   K, V', hint: 'Una classe generica lavora con un tipo scelto da chi la usa: ArrayList<T> diventa ArrayList<Intero>, ArrayList<Stringa>… Dentro la classe T si usa come un tipo.' }, c ? (c.tparams || []).join(', ') : '');
     const isMainCls = c && c === M.mainClass(st.prog);
     const absW = isMainCls ? null : field({ key: 'cabs', label: 'Astratta: non si creano oggetti di questa classe, solo delle sue sottoclassi', type: 'check' }, c ? !!c.abstract : false);
-    const body = h('div', { class: 'fields' }, h('p', { class: 'help' }, 'Una classe descrive un tipo di oggetti: i loro attributi (i dati) e i metodi (le operazioni). Con l\'ereditarietà la classe riceve attributi e metodi della classe madre e può ridefinire i metodi.'), nameW, parW, absW);
+    const body = h('div', { class: 'fields' }, h('p', { class: 'help' }, 'Una classe descrive un tipo di oggetti: i loro attributi (i dati) e i metodi (le operazioni). Con l\'ereditarietà la classe riceve attributi e metodi della classe madre e può ridefinire i metodi.'), nameW, parW, absW, tpW);
     openModal({
       title: isNew ? 'Nuova classe' : 'Modifica classe ' + c.name, body, okText: isNew ? 'Crea' : 'Salva',
       onOk: () => {
@@ -6241,6 +6762,15 @@ const ArrayView = (() => {
         if (st.prog.classes.some((k) => k !== c && k.name.toLowerCase() === name.toLowerCase())) return `Esiste già una classe chiamata ${name}`;
         const parent = parW._get();
         const abs = !!(absW && absW._get());
+        // parametri di tipo: nomi brevi, diversi dai tipi e dalle classi
+        const tps = tpW ? tpW._get().split(',').map((x) => x.trim()).filter(Boolean) : (c ? c.tparams || [] : []);
+        for (const t of tps) {
+          if (!E.validIdent(t)) return `"${t}" non è un nome valido per un parametro di tipo (di solito una lettera maiuscola: T)`;
+          if (E.TYPES.some((x) => x.toLowerCase() === t.toLowerCase()) || Object.values(TYPE_IT).some((x) => x.toLowerCase() === t.toLowerCase()) || M.classByName(st.prog, t)) return `${t} è già il nome di un tipo: scegli un altro nome, per esempio T`;
+        }
+        if (new Set(tps.map((t) => t.toLowerCase())).size !== tps.length) return 'I parametri di tipo devono avere nomi diversi';
+        if (tps.length && parent) return 'Una classe generica non può ereditare da un\'altra classe in FlowLab';
+        if (c && (c.tparams || []).join(',') !== tps.join(',') && classUsed(c)) return `${c.name} è già usata nel programma: per cambiarne i parametri di tipo togli prima le variabili e gli attributi di tipo ${c.name}`;
         if (c && !abs) { const am = M.membersOf(st.prog, c).filter((f) => f.abstract); if (am.length) return `${c.name} ha metodi astratti (${am.map((f) => f.name + '()').join(', ')}): per renderla concreta togli prima «astratto» da quei metodi`; }
         // gli attributi non possono avere lo stesso nome di quelli della nuova classe madre
         if (parent) {
@@ -6249,10 +6779,10 @@ const ArrayView = (() => {
         }
         mutate(() => {
           if (isNew) {
-            const nc = M.makeClass(name, Object.assign({ parent, abstract: abs }, UmlLib.freeSpot(st.prog, pos)));
+            const nc = M.makeClass(name, Object.assign({ parent, abstract: abs, tparams: tps }, UmlLib.freeSpot(st.prog, pos)));
             st.prog.classes.push(nc);
             st.usel = { cls: nc.id, kind: 'class' };
-          } else { renameClass(c, name); c.parent = parent; c.abstract = abs; }
+          } else { renameClass(c, name); c.parent = parent; c.abstract = abs; c.tparams = tps; }
         });
         return true;
       },
@@ -6260,9 +6790,10 @@ const ArrayView = (() => {
   }
   function attrDialog(c, index) {
     const isNew = index == null;
+    if (roGuard(c)) return;
     const a = isNew ? M.makeAttribute() : c.attributes[index];
     const nameW = field({ key: 'aname', label: 'Nome dell\'attributo', type: 'ident', required: true, placeholder: 'es. raggio' }, a.name);
-    const typeW = field({ key: 'atype', label: 'Tipo', type: 'select', options: typeOpts() }, a.type);
+    const typeW = field({ key: 'atype', label: 'Tipo', type: 'typepick', ctx: c }, a.type);
     const arrW = field({ key: 'aarr', label: 'Array', type: 'check' }, a.array);
     const sizeW = field({ key: 'asize', label: 'Numero di elementi', type: 'exprlist', placeholder: 'es. 10   oppure   3, 4' }, a.size);
     const visW = field({ key: 'avis', label: 'Accesso', type: 'seg', options: VIS_OPTS }, a.visibility);
@@ -6289,6 +6820,7 @@ const ArrayView = (() => {
     });
   }
   function deleteClass(c) {
+    if (c.module) { removeModule(c.module.name); return; }
     if (c === M.mainClass(st.prog)) { infoBox('Classe principale', `${c.name} è la classe principale: contiene Main, da cui parte il programma, e non si può eliminare.`); return; }
     const kids = st.prog.classes.filter((k) => (k.parent || '').toLowerCase() === c.name.toLowerCase());
     if (kids.length) { infoBox('Classe con sottoclassi', `Prima togli l'ereditarietà da ${kids.map((k) => k.name).join(', ')}: ereditano da ${c.name}.`); return; }
@@ -6301,7 +6833,7 @@ const ArrayView = (() => {
     }));
   }
   function deleteAttr(c, i) {
-    const a = c.attributes[i]; if (!a) return;
+    const a = c.attributes[i]; if (!a || roGuard(c)) return;
     mutate(() => { c.attributes.splice(i, 1); st.usel = { cls: c.id, kind: 'class' }; });
     toast(`Attributo ${a.name} eliminato (Ctrl+Z per annullare)`);
   }
@@ -6331,9 +6863,18 @@ const ArrayView = (() => {
     const c = box && M.classById(st.prog, box.dataset.cls);
     const B = (label, fn, cls, key) => h('button', { type: 'button', class: cls || '', onclick: () => { closePop(); fn(); } }, h('span', null, label), key ? h('kbd', null, key) : null);
     let menuBox;
-    if (!c) {
+    const modEl = e.target.closest('.umod');
+    if (modEl && !c) {
+      const mn = modEl.dataset.module;
+      menuBox = h('div', { class: 'ctxmenu' }, h('div', { class: 'pophead' }, 'Modulo ' + mn), B('Aggiorna il modulo', () => updateModule(mn)), h('hr'), B('Rimuovi il modulo', () => removeModule(mn), 'danger'));
+    } else if (!c) {
       const pt = svgPoint(e);
-      menuBox = h('div', { class: 'ctxmenu' }, B('Nuova classe…', () => classDialog(null, pt), '', 'N'));
+      menuBox = h('div', { class: 'ctxmenu' }, B('Nuova classe…', () => classDialog(null, pt), '', 'N'), B('Importa un modulo…', moduleDialog, '', 'Ctrl+I'));
+    } else if (c.module) {
+      const f = row && row.dataset.kind === 'method' ? st.prog.functions.find((x) => x.id === row.dataset.fid) : null;
+      menuBox = h('div', { class: 'ctxmenu' }, h('div', { class: 'pophead' }, `${M.classTitle(c)} · modulo ${c.module.name}`),
+        f ? B('Apri il diagramma di flusso', () => openMethod(f.id), '', 'Invio') : null,
+        B('Aggiorna il modulo', () => updateModule(c.module.name)), h('hr'), B('Rimuovi il modulo', () => removeModule(c.module.name), 'danger'));
     } else if (row && row.dataset.kind === 'method') {
       const f = st.prog.functions.find((x) => x.id === row.dataset.fid);
       menuBox = h('div', { class: 'ctxmenu' },
@@ -6381,7 +6922,7 @@ const ArrayView = (() => {
     const a = st.prog.attrs;
     const n = field({ key: 'pname', label: 'Nome del programma', type: 'plain' }, a.name);
     const au = field({ key: 'pauth', label: 'Autori', type: 'plain' }, a.authors);
-    const ab = field({ key: 'pabout', label: 'Descrizione', type: 'textarea' }, a.about);
+    const ab = field({ key: 'pabout', label: 'Descrizione', type: 'textarea', hint: 'Se il programma viene usato come modulo, è la descrizione mostrata quando lo si importa' }, a.about);
     openModal({ title: 'Proprietà del programma', body: h('div', { class: 'fields' }, n, au, ab), okText: 'Salva', onOk: () => {
       if (isRunning()) return 'Ferma il programma prima di modificarlo';
       mutate(() => {
@@ -6401,6 +6942,8 @@ const ArrayView = (() => {
     chart.addEventListener('click', (e) => {
       if (suppressClick) { suppressClick = false; return; }
       if (isUml()) {
+        const mt = e.target.closest('.umodtog');
+        if (mt) { toggleModule(mt.dataset.module); return; }
         const add = e.target.closest('.uadd');
         if (add) {
           const c = M.classById(st.prog, add.closest('.ubox').dataset.cls);
@@ -6421,7 +6964,10 @@ const ArrayView = (() => {
     });
     chart.addEventListener('dblclick', (e) => {
       if (isUml()) {
-        if (e.target.closest('.uadd')) return;
+        if (e.target.closest('.uadd') || e.target.closest('.umodtog')) return;
+        const mc = e.target.closest('.umodc');
+        if (mc) { toggleModule(mc.dataset.module); return; }
+        if (e.target.closest('.umod')) return; // riquadro di un modulo: niente nuova classe
         const row = e.target.closest('.urow'), box = e.target.closest('.ubox');
         if (row && row.dataset.kind === 'method') { openMethod(row.dataset.fid); return; }
         if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; }
@@ -6450,11 +6996,14 @@ const ArrayView = (() => {
     });
     chart.addEventListener('pointerdown', (e) => {
       if (isUml()) {
-        // le classi si spostano trascinandole
-        if (e.button !== 0 || isRunning() || e.target.closest('.uadd')) return;
-        const box = e.target.closest('.ubox'); if (!box) return;
-        const c = M.classById(st.prog, box.dataset.cls);
-        udrag = { c, x: e.clientX, y: e.clientY, ox: c.x, oy: c.y, on: false, raf: 0 };
+        // le classi si spostano trascinandole; un modulo (riquadro o etichetta) si sposta con tutte le sue classi
+        if (e.button !== 0 || isRunning() || e.target.closest('.uadd') || e.target.closest('.umodtog')) return;
+        const box = e.target.closest('.ubox'), mod = !box && e.target.closest('.umod');
+        let cs;
+        if (box) cs = [M.classById(st.prog, box.dataset.cls)];
+        else if (mod) { const m = M.modulesOf(st.prog).find((x) => x.name === mod.dataset.module); cs = m ? m.classes : []; }
+        if (!cs || !cs.length) return;
+        udrag = { items: cs.map((c) => ({ c, ox: c.x || 0, oy: c.y || 0 })), mod: mod ? mod.dataset.module : null, x: e.clientX, y: e.clientY, on: false, raf: 0 };
         return;
       }
       if (e.button !== 0 || isRunning() || e.target.closest('.ctoggle')) return;
@@ -6468,11 +7017,14 @@ const ArrayView = (() => {
           udrag.on = true;
           st.undo.push(snapshot()); if (st.undo.length > 150) st.undo.shift(); st.redo = [];
           document.body.classList.add('udragging');
-          st.usel = { cls: udrag.c.id, kind: 'class' };
+          st.usel = udrag.mod ? null : { cls: udrag.items[0].c.id, kind: 'class' };
         }
         if (udrag.on) {
-          udrag.c.x = Math.max(10, Math.round((udrag.ox + dx) / 10) * 10);
-          udrag.c.y = Math.max(10, Math.round((udrag.oy + dy) / 10) * 10);
+          // passo di 10 e mai oltre il bordo in alto o a sinistra (le classi di un modulo restano allineate tra loro)
+          const it = udrag.items;
+          const mx = Math.max(Math.round(dx / 10) * 10, 10 - Math.min(...it.map((i) => i.ox)));
+          const my = Math.max(Math.round(dy / 10) * 10, 10 - Math.min(...it.map((i) => i.oy)));
+          for (const i of it) { i.c.x = it.length > 1 ? i.ox + mx : Math.max(10, Math.round((i.ox + dx) / 10) * 10); i.c.y = it.length > 1 ? i.oy + my : Math.max(10, Math.round((i.oy + dy) / 10) * 10); }
           if (!udrag.raf) udrag.raf = requestAnimationFrame(() => { if (udrag) udrag.raf = 0; render(); });
         }
         return;
@@ -6939,7 +7491,7 @@ const ArrayView = (() => {
           h('div', { class: 'det-wrap' }, h('div', { class: 'det-inner', ...(ind(depth + 1) || {}) },
             h('button', { class: 'avlink', type: 'button', tabindex: st.varsOpen.has(okey) ? '0' : '-1', title: 'Apri una finestra con i valori dell\'array', onclick: openArr }, 'visualizza i valori')))));
         const car = makeCaret(okey, label, (open) => { detail.classList.toggle('open', open); detail.querySelector('.avlink').tabIndex = open ? 0 : -1; });
-        tb.append(h('tr', { class: 'arr' + (changed ? ' changed' : '') }, h('td', ind(depth), car.el, label, ...tags, icon), h('td', null, `${E.typeName(c.type)}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`)));
+        tb.append(h('tr', { class: 'arr' + (changed ? ' changed' : '') }, h('td', ind(depth), car.el, label, ...tags, icon), h('td', null, `${E.typeName(cellT(c))}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`)));
         tb.append(detail);
         return;
       }
@@ -6952,7 +7504,7 @@ const ArrayView = (() => {
         const loop = seen.has(obj);
         const rows = [];
         const car = loop ? null : makeCaret(okey, label, () => renderVars());
-        tb.append(h('tr', { class: 'objrow' + (changed ? ' changed' : '') }, h('td', ind(depth), car ? car.el : h('span', { class: 'caret-sp' }), label, ...tags), h('td', null, E.typeName(c.type)), h('td', null, fmt(v, key), loop ? h('span', { class: 'muted small' }, ' ↺ già sopra') : null)));
+        tb.append(h('tr', { class: 'objrow' + (changed ? ' changed' : '') }, h('td', ind(depth), car ? car.el : h('span', { class: 'caret-sp' }), label, ...tags), h('td', null, E.typeName(cellT(c))), h('td', null, fmt(v, key), loop ? h('span', { class: 'muted small' }, ' ↺ già sopra') : null)));
         if (car && car.isOpen && depth < 6) {
           const s2 = new Set(seen); s2.add(obj);
           for (const fc of obj.fields.values()) addCell(fc, fc.name, depth + 1, path + '.' + fc.name, s2);
@@ -6960,7 +7512,7 @@ const ArrayView = (() => {
         }
         return;
       }
-      tb.append(h('tr', { class: changed ? 'changed' : '' }, h('td', ind(depth), depth || (v && v.t === 'Object') ? h('span', { class: 'caret-sp' }) : null, label, ...tags), h('td', null, E.typeName(c.type)), h('td', null, fmt(c.value))));
+      tb.append(h('tr', { class: changed ? 'changed' : '' }, h('td', ind(depth), depth || (v && v.t === 'Object') ? h('span', { class: 'caret-sp' }) : null, label, ...tags), h('td', null, E.typeName(cellT(c))), h('td', null, fmt(c.value))));
     };
     if (frame.self) addCell({ name: 'this', type: frame.self.cls.name, value: E.V.obj(frame.self) }, 'this', 0, 'this', new Set(), h('span', { class: 'ptag', title: 'l\'oggetto su cui lavora il metodo' }, 'oggetto'));
     for (const c of frame.vars.values()) addCell(c, c.name, 0, c.name, new Set());
@@ -7342,6 +7894,310 @@ const ArrayView = (() => {
     wrap.scrollLeft = (wrap.scrollWidth - wrap.clientWidth) / 2;
   }
   function openFile() { $('#fileInput').click(); }
+
+  /* ------------------------------ Moduli --------------------------------
+     Un modulo è un programma .fprg. Se ha delle classi, le classi si copiano nel programma;
+     se ha solo funzioni, si copiano le funzioni (e il programma resta nella sua vista).
+     In entrambi i casi restano in sola lettura, segnate con il nome del modulo e da dove
+     viene; il Main del modulo serve solo per provarlo e non si importa.
+     src: "lib:argomento/Nome" (raccolta ufficiale), "url:indirizzo", "file:nome.fprg"
+     Le raccolte di moduli sono cartelle GitHub: ogni sottocartella è un argomento
+     (strutture_dati -> «Strutture dati») e contiene i file .fprg dei moduli. */
+  const OFFICIAL_SRC = 'https://github.com/nicvac/flowlab/tree/main/moduli';
+  const isMainClsOf = (c) => !!c && c === M.mainClass(st.prog);
+  const topicTitle = (t) => { const x = String(t || '').replace(/[_-]+/g, ' ').trim(); return x ? x[0].toUpperCase() + x.slice(1) : 'Altri moduli'; };
+  /* la classe è usata come tipo da qualche parte nel programma? */
+  function classUsed(c) {
+    const lo = c.name.toLowerCase();
+    const uses = (t) => { const g = E.splitType(t); return g.base.toLowerCase() === lo || g.args.some(uses); };
+    for (const k of st.prog.classes) if (k !== c && k.attributes.some((a) => uses(a.type))) return true;
+    for (const f of st.prog.functions) {
+      if (f.cls === c.id) continue;
+      if (f.params.some((p) => uses(p.type)) || M.rets(f).some((r) => uses(r.type))) return true;
+      let u = false; M.walk(f.body, (x) => { if ((x.kind === 'declare' || x.kind === 'const') && uses(x.type)) u = true; }); if (u) return true;
+    }
+    return false;
+  }
+  /* la funzione è chiamata da qualche parte nel programma (fuori dal suo modulo)? */
+  function funcUsed(fn) {
+    const re = new RegExp(`(^|[^\\w.])${fn.name}\\s*\\(`, 'i');
+    let u = false;
+    for (const f of st.prog.functions) if (!f.module) M.walk(f.body, (x) => { for (const k of ['expression', 'variable', 'start', 'end']) if (typeof x[k] === 'string' && re.test(x[k])) u = true; });
+    return u;
+  }
+  /* cosa importare da un modulo: le classi (tranne quella del Main, se ha solo il Main)
+     oppure, se il modulo ha solo funzioni, le funzioni tranne il Main */
+  function moduleParts(text, src) {
+    const mp = M.parseFprg(text);
+    const name = (mp.attrs.name || String(src).replace(/^.*[/:]/, '').replace(/\.fprg$/i, '') || 'Modulo').trim();
+    const about = mp.attrs.about || '';
+    if (!M.hasClasses(mp) || M.isTrivialOO(mp)) {
+      const funcs = mp.functions.slice(1);
+      if (!funcs.length) throw new Error('il modulo non contiene funzioni da importare (il suo Main serve solo per provarlo)');
+      return { kind: 'functions', mp, name, about, classes: [], funcs };
+    }
+    const mc = M.mainClass(mp);
+    const classes = mp.classes.filter((c) => c !== mc || c.attributes.length || M.membersOf(mp, c).length > 1);
+    if (!classes.length) throw new Error('il modulo non contiene classi da importare (il suo Main serve solo per provarlo)');
+    const funcs = mp.functions.filter((f) => f !== mp.functions[0] && classes.some((c) => c.id === f.cls));
+    return { kind: 'classes', mp, name, about, classes, funcs };
+  }
+  const cloneFunc = (f) => { const nf = JSON.parse(JSON.stringify(f)); nf.id = M.newId(); nf.body.forEach((s) => M.reId(s)); return nf; };
+  /* copia il modulo nel programma (sostituisce una versione già importata) */
+  function importModule(text, src) {
+    if (isRunning()) { toast('Ferma il programma per importare un modulo', 'warn'); return false; }
+    let parts;
+    try { parts = moduleParts(text, src); } catch (e) { toast('Impossibile importare il modulo: ' + e.message, 'error'); return false; }
+    const { name, classes, funcs } = parts;
+    const same = (m) => m && m.name.toLowerCase() === name.toLowerCase();
+    const oldC = (st.prog.classes || []).filter((c) => same(c.module));
+    const oldF = st.prog.functions.filter((f) => same(M.moduleOfFunc(st.prog, f)));
+    const fail = (msg) => { infoBox('Modulo non importato', msg); return false; };
+    if (parts.kind === 'functions') {
+      // funzioni: stessi nomi non ammessi (nella vista Funzioni non c'è l'overloading)
+      for (const f of funcs) {
+        if (E.BUILTINS[f.name.toLowerCase()] || f.name.toLowerCase() === 'main') return fail(`Il modulo ${name} contiene la funzione ${f.name}, che ha il nome di una funzione integrata.`);
+        const clash = st.prog.functions.find((g) => !oldF.includes(g) && g.name.toLowerCase() === f.name.toLowerCase() && (!M.hasClasses(st.prog) || g.cls === M.mainClass(st.prog).id));
+        if (clash) return fail(`Il modulo ${name} contiene la funzione ${f.name}, ma nel programma c'è già una funzione con questo nome${clash.module ? ` (dal modulo ${clash.module.name})` : ''}. Rinomina la tua funzione e riprova.`);
+      }
+      mutate(() => {
+        const cur = func();
+        st.prog.functions = st.prog.functions.filter((f) => !oldF.includes(f));
+        const home = M.hasClasses(st.prog) ? M.mainClass(st.prog) : null;
+        for (const f of funcs) {
+          const nf = cloneFunc(f);
+          if (home) Object.assign(nf, { cls: home.id, static: true, visibility: 'public', ctor: false });
+          else { delete nf.cls; delete nf.visibility; delete nf.static; delete nf.ctor; delete nf.abstract; }
+          nf.module = { name, src };
+          st.prog.functions.push(nf);
+        }
+        st.fi = Math.max(0, st.prog.functions.indexOf(cur));
+      });
+      toast(oldF.length ? `Modulo ${name} aggiornato` : `Modulo ${name} importato: ${funcs.map((f) => f.name + '()').join(', ')}`, 'ok');
+      return true;
+    }
+    if (!M.hasClasses(st.prog)) M.wrapInClass(st.prog);
+    for (const c of classes) {
+      const clash = st.prog.classes.find((k) => !oldC.includes(k) && k.name.toLowerCase() === c.name.toLowerCase());
+      if (clash) return fail(`Il modulo ${name} contiene la classe ${c.name}, ma nel programma c'è già una classe con questo nome${clash.module ? ` (dal modulo ${clash.module.name})` : ''}. Rinomina la tua classe e riprova.`);
+    }
+    mutate(() => {
+      // posizione: quella della versione precedente, altrimenti a destra delle classi esistenti
+      const prevPos = new Map(oldC.map((c) => [c.name.toLowerCase(), { x: c.x, y: c.y }]));
+      st.prog.functions = st.prog.functions.filter((f) => !oldC.some((c) => c.id === f.cls));
+      st.prog.classes = st.prog.classes.filter((c) => !oldC.includes(c));
+      const boxes = [...UmlLib.layout(st.prog).values()];
+      const right = boxes.length ? Math.max(...boxes.map((b) => b.x + b.w)) + 90 : 40;
+      const minX = Math.min(...classes.map((c) => c.x || 0)), minY = Math.min(...classes.map((c) => c.y || 0));
+      const idMap = new Map();
+      for (const c of classes) {
+        const p = prevPos.get(c.name.toLowerCase());
+        const nc = M.makeClass(c.name, { parent: c.parent, abstract: c.abstract, tparams: (c.tparams || []).slice(), attributes: c.attributes.map((a) => ({ ...a })), module: { name, src },
+          x: p ? p.x : right + (c.x || 0) - minX, y: p ? p.y : 60 + (c.y || 0) - minY });
+        idMap.set(c.id, nc.id);
+        st.prog.classes.push(nc);
+      }
+      for (const f of funcs) { const nf = cloneFunc(f); nf.cls = idMap.get(f.cls); st.prog.functions.push(nf); }
+      st.view = 'objects'; store.set('view', 'objects');
+      st.uml = true; st.usel = null;
+    });
+    toast(oldC.length ? `Modulo ${name} aggiornato` : `Modulo ${name} importato: ${classes.map((c) => M.classTitle(c)).join(', ')}`, 'ok');
+    return true;
+  }
+  /* ---- raccolte di moduli su GitHub ---- */
+  /* "https://github.com/utente/repo/tree/ramo/cartella" -> { owner, repo, ref, path } */
+  function ghSource(u) {
+    const m = String(u).trim().match(/^https?:\/\/github\.com\/([^/\s]+)\/([^/\s#?]+)(?:\/tree\/([^/\s]+)(?:\/([^?#\s]*))?)?\/?(?:[?#].*)?$/i);
+    if (!m) return null;
+    return { owner: m[1], repo: m[2].replace(/\.git$/i, ''), ref: m[3] || 'HEAD', path: (m[4] || '').replace(/\/+$/, '') };
+  }
+  const srcLabel = (u) => { const g = ghSource(u); return g ? `${g.owner}/${g.repo}${g.path ? '/' + g.path : ''}` : u; };
+  function getSources() { const v = store.get('moduleSources'); return Array.isArray(v) ? v : [OFFICIAL_SRC]; }
+  function setSources(list) { store.set('moduleSources', list); }
+  /* moduli di una raccolta: [{ topic, id, text, src }] (con cache di qualche ora) */
+  const SRC_TTL = 6 * 3600 * 1000;
+  async function loadSource(u, force) {
+    const key = 'modsrc:' + u;
+    const cached = store.get(key);
+    if (!force && cached && Date.now() - cached.time < SRC_TTL) return { list: cached.list, cached: true };
+    const g = ghSource(u);
+    if (!g) throw new Error('non è il link di una cartella GitHub');
+    const r = await fetch(`https://api.github.com/repos/${g.owner}/${g.repo}/git/trees/${encodeURIComponent(g.ref)}?recursive=1`, { cache: 'no-cache' });
+    if (r.status === 403 || r.status === 429) throw new Error('GitHub ha raggiunto il limite di richieste: riprova tra qualche minuto');
+    if (!r.ok) throw new Error(r.status === 404 ? 'repository o cartella non trovati (deve essere pubblico)' : `GitHub risponde ${r.status}`);
+    const tree = (await r.json()).tree || [];
+    const pre = g.path ? g.path + '/' : '';
+    const files = tree.filter((x) => x.type === 'blob' && /\.fprg$/i.test(x.path) && x.path.startsWith(pre)).map((x) => x.path);
+    const official = u === OFFICIAL_SRC;
+    const list = [];
+    await Promise.all(files.map(async (p) => {
+      const rel = p.slice(pre.length).split('/');
+      const id = rel.pop().replace(/\.fprg$/i, ''), topic = rel.length ? rel[rel.length - 1] : '';
+      const raw = `https://raw.githubusercontent.com/${g.owner}/${g.repo}/${g.ref}/${p.split('/').map(encodeURIComponent).join('/')}`;
+      try { const t = await fetch(raw, { cache: 'no-cache' }); if (t.ok) list.push({ topic, id, text: await t.text(), src: official ? `lib:${topic}/${id}` : 'url:' + raw }); } catch (e) { /* file non leggibile: si salta */ }
+    }));
+    list.sort((a, b) => (a.topic + '/' + a.id).localeCompare(b.topic + '/' + b.id));
+    if (list.length) store.set(key, { time: Date.now(), list });
+    return { list, cached: false };
+  }
+  /* copia inclusa in FlowLab della raccolta ufficiale (per quando GitHub non risponde) */
+  const builtinList = () => ModuleLibrary.map((m) => ({ topic: m.topic, id: m.id, text: m.text, src: `lib:${m.topic}/${m.id}` }));
+  async function libText(src) {
+    const m = /^lib:(.+)\/([^/]+)$/.exec(src || ''); if (!m) return null;
+    const g = ghSource(OFFICIAL_SRC);
+    try {
+      const r = await fetch(`https://raw.githubusercontent.com/${g.owner}/${g.repo}/${g.ref}/${g.path}/${m[1]}/${m[2]}.fprg`, { cache: 'no-cache' });
+      if (r.ok) return await r.text();
+    } catch (e) { /* si usa la copia inclusa */ }
+    const b = ModuleLibrary.find((x) => x.topic === m[1] && x.id === m[2]);
+    return b ? b.text : null;
+  }
+  async function fetchText(u) {
+    const abs = new URL(rawUrl(u), location.href).href;
+    const r = await fetch(abs, { cache: 'no-cache' });
+    if (!r.ok) throw new Error(`il server risponde ${r.status}`);
+    return { text: await r.text(), abs };
+  }
+  async function importModuleUrl(u) {
+    try { const { text, abs } = await fetchText(u); return importModule(text, 'url:' + abs); }
+    catch (e) { toast(`Impossibile scaricare il modulo: ${e instanceof TypeError ? 'il sito non risponde oppure non permette di leggere il file (CORS)' : e.message}`, 'error'); return false; }
+  }
+  function importModuleFile() {
+    const inp = h('input', { type: 'file', accept: '.fprg,.xml', hidden: true });
+    inp.addEventListener('change', () => {
+      const file = inp.files[0]; if (!file) return;
+      const r = new FileReader(); r.onload = () => importModule(r.result, 'file:' + file.name); r.readAsText(file);
+    });
+    document.body.append(inp); inp.click(); setTimeout(() => inp.remove(), 60000);
+  }
+  async function updateModule(name) {
+    const m = M.modulesOf(st.prog).find((x) => x.name === name); if (!m) return;
+    const src = m.src || '';
+    if (src.startsWith('lib:')) { const t = await libText(src); if (t) importModule(t, src); else toast(`Il modulo ${name} non è più nella raccolta ufficiale`, 'error'); return; }
+    if (src.startsWith('url:')) { importModuleUrl(src.slice(4)); return; }
+    toast(`Scegli di nuovo il file del modulo ${name}`); importModuleFile();
+  }
+  function removeModule(name) {
+    if (isRunning()) { toast('Ferma il programma per rimuovere un modulo', 'warn'); return; }
+    const m = M.modulesOf(st.prog).find((x) => x.name === name); if (!m) return;
+    const used = m.classes.some((c) => classUsed(c)) || m.funcs.some((f) => !m.classes.length && funcUsed(f));
+    const what = m.classes.length ? `Le classi ${m.classes.map((c) => M.classTitle(c)).join(', ')}` : `Le funzioni ${m.funcs.map((f) => f.name + '()').join(', ')}`;
+    confirmBox('Rimuovere il modulo?', `${what} del modulo ${name} verranno tolte dal programma.${used ? ' Il programma le usa: andrà corretto.' : ''}`, 'Rimuovi', () => mutate(() => {
+      const cur = func();
+      st.prog.functions = st.prog.functions.filter((f) => !m.funcs.includes(f) && !m.classes.some((c) => c.id === f.cls));
+      if (m.classes.length) st.prog.classes = st.prog.classes.filter((k) => !m.classes.includes(k));
+      st.fi = Math.max(0, st.prog.functions.indexOf(cur)); st.usel = null;
+      if (m.classes.length) st.uml = true;
+    }));
+  }
+  /* dialogo: moduli nel programma, raccolte di moduli (GitHub) per argomento, altri moduli */
+  function moduleDialog() {
+    if (isRunning()) { toast('Ferma il programma per importare un modulo', 'warn'); return; }
+    let closeIt = null;
+    const done = (fn) => () => { if (closeIt) closeIt(); fn(); };
+    const have = () => new Map(M.modulesOf(st.prog).map((m) => [m.name.toLowerCase(), m]));
+    // moduli già importati
+    const mine = h('div', { class: 'modlib' });
+    const drawMine = () => {
+      mine.innerHTML = '';
+      const ms = M.modulesOf(st.prog);
+      if (!ms.length) return;
+      mine.append(h('h3', { class: 'modh' }, 'Moduli nel programma'));
+      for (const m of ms) mine.append(h('div', { class: 'modrow' },
+        h('div', { class: 'modinfo' }, h('strong', null, m.name), h('span', { class: 'modcls mono' }, m.classes.length ? m.classes.map((c) => M.classTitle(c)).join(' · ') : m.funcs.map((f) => f.name + '()').join(' · ')), h('span', { class: 'muted small' }, m.src.startsWith('lib:') ? 'raccolta ufficiale' : m.src.replace(/^(url|file):/, ''))),
+        h('button', { class: 'btn small', type: 'button', onclick: done(() => updateModule(m.name)) }, 'Aggiorna'),
+        h('button', { class: 'btn small danger', type: 'button', onclick: done(() => removeModule(m.name)) }, 'Rimuovi')));
+    };
+    drawMine();
+    // raccolte
+    const coll = h('div', { class: 'modlib' });
+    const row = (m) => {
+      let info; try { info = moduleParts(m.text, m.src); } catch (e) { return null; }
+      const got = have().get(info.name.toLowerCase());
+      return h('div', { class: 'modrow' },
+        h('div', { class: 'modinfo' }, h('strong', null, info.name), h('span', { class: 'modcls mono' }, info.kind === 'classes' ? info.classes.map((c) => M.classTitle(c)).join(' · ') : info.funcs.map((f) => f.name + '()').join(' · ')), info.about ? h('p', { class: 'muted small' }, info.about) : null),
+        h('button', { class: 'btn small' + (got ? '' : ' primary'), type: 'button', onclick: done(() => importModule(m.text, m.src)) }, got ? 'Aggiorna' : 'Importa'));
+    };
+    // albero espandibile: raccolta › argomento › moduli (lo stato aperto/chiuso si ricorda)
+    // la prima volta la raccolta ufficiale è già aperta, così si vede subito com'è fatta
+    const openSet = new Set(store.get('modOpen', [OFFICIAL_SRC]));
+    // barra cliccabile: freccia grande, icona, titolo, conteggio
+    const ICON_CHEV = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+    const ICON_REPO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v6l2-1.5L12 10V4"/><path d="M8 14h8M8 17h6"/></svg>';
+    const ICON_DIR = '<svg class="dir-closed" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><svg class="dir-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v2"/><path d="M3 18V6M3 18l2.6-7.2a1 1 0 0 1 .9-.8H21a.7.7 0 0 1 .7.9L19.4 18a1 1 0 0 1-1 .8H3"/></svg>';
+    const count = (n) => `${n} ${n === 1 ? 'modulo' : 'moduli'}`;
+    const keepOpen = (key, det) => det.addEventListener('toggle', () => { if (det.open) openSet.add(key); else openSet.delete(key); store.set('modOpen', [...openSet]); });
+    const fill = (box, list, u) => {
+      box.innerHTML = '';
+      if (!list.length) { box.append(h('p', { class: 'muted small' }, 'Nessun file .fprg in questa cartella.')); return; }
+      const topics = new Map();
+      for (const m of list) { if (!topics.has(m.topic)) topics.set(m.topic, []); topics.get(m.topic).push(m); }
+      for (const [topic, ms] of topics) {
+        const key = u + '|' + topic;
+        const rows = ms.map(row).filter(Boolean);
+        const det = h('details', { class: 'modtopic', open: openSet.has(key) },
+          h('summary', { class: 'modbar', title: 'Clic per mostrare o nascondere i moduli' }, h('span', { class: 'modchev', html: ICON_CHEV }), h('span', { class: 'modicon', html: ICON_DIR }),
+            h('span', { class: 'modtname' }, topicTitle(topic)), h('span', { class: 'modlist muted small' }, ms.map((m) => m.id).join(', ')), h('span', { class: 'grow' }), h('span', { class: 'modcount' }, count(rows.length))),
+          h('div', { class: 'modtopicbody' }, ...rows));
+        keepOpen(key, det);
+        box.append(det);
+      }
+    };
+    const drawSources = (force) => {
+      coll.innerHTML = '';
+      const srcs = getSources();
+      for (const u of srcs) {
+        const box = h('div', { class: 'modsrcbody' });
+        const badge = h('span', { class: 'modcount', hidden: true });
+        const showCount = () => { const n = box.querySelectorAll('.modrow').length; badge.textContent = count(n); badge.hidden = !n; };
+        const official = u === OFFICIAL_SRC;
+        let loaded = false;
+        const load = (again) => {
+          loaded = true;
+          box.innerHTML = ''; box.append(h('p', { class: 'muted small' }, 'Caricamento da GitHub…'));
+          const fallback = (why) => { fill(box, builtinList(), u); box.prepend(h('p', { class: 'muted small' }, `${why}: questa è la copia della raccolta inclusa in FlowLab.`)); showCount(); };
+          loadSource(u, again).then(({ list }) => { if (!list.length && official) fallback('La raccolta su GitHub è vuota o non ancora pubblicata'); else { fill(box, list, u); showCount(); } }).catch((e) => {
+            if (official) fallback(`GitHub non risponde (${e.message})`);
+            else { box.innerHTML = ''; box.append(h('p', { class: 'formerr' }, `Impossibile leggere la raccolta: ${e.message}`)); }
+          });
+        };
+        // i pulsanti nel titolo non devono aprire o chiudere la raccolta
+        const btn = (title, text, fn) => h('button', { class: 'iconbtn', type: 'button', title, 'aria-label': title, onclick: (e) => { e.preventDefault(); e.stopPropagation(); fn(); } }, text);
+        const det = h('details', { class: 'modsrc', open: openSet.has(u) },
+          h('summary', { class: 'modsrchead modbar', title: 'Clic per mostrare o nascondere gli argomenti della raccolta' }, h('span', { class: 'modchev', html: ICON_CHEV }), h('span', { class: 'modicon', html: ICON_REPO }),
+            h('span', { class: 'modsname mono' }, srcLabel(u)), official ? h('span', { class: 'ptag' }, 'ufficiale') : null, h('span', { class: 'grow' }), badge,
+            btn('Ricarica da GitHub', '↻', () => { det.open = true; load(true); }),
+            btn('Togli questa raccolta', '✕', () => { setSources(getSources().filter((x) => x !== u)); drawSources(); })),
+          box);
+        keepOpen(u, det);
+        det.addEventListener('toggle', () => { if (det.open && !loaded) load(force); });
+        coll.append(det);
+        if (det.open) load(force);
+      }
+      if (!srcs.includes(OFFICIAL_SRC)) coll.append(h('button', { class: 'btn small', type: 'button', onclick: () => { setSources([OFFICIAL_SRC, ...getSources()]); drawSources(); } }, 'Rimetti la raccolta ufficiale'));
+    };
+    drawSources(false);
+    const srcW = field({ key: 'msrc', label: 'Aggiungi una raccolta di moduli (link a una cartella GitHub)', type: 'plain', placeholder: 'https://github.com/utente/repo/tree/main/moduli', hint: 'Ogni sottocartella è un argomento (es. strutture_dati) e contiene i file .fprg dei moduli. Il repository deve essere pubblico.' }, '');
+    const addSrc = () => {
+      const u = srcW._get().trim(); if (!u) { toast('Incolla il link della cartella GitHub', 'warn'); return; }
+      if (!ghSource(u)) { toast('Serve il link di una cartella GitHub, es. https://github.com/utente/repo/tree/main/moduli', 'warn'); return; }
+      if (!getSources().includes(u)) setSources([...getSources(), u]);
+      srcW._input.value = ''; drawSources();
+    };
+    const addRow = h('div', { class: 'modadd' }, srcW, h('button', { class: 'btn small', type: 'button', onclick: addSrc }, 'Aggiungi la raccolta'));
+    srcW._input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); addSrc(); } });
+    // altri moduli
+    const urlW = field({ key: 'murl', label: 'Oppure da un indirizzo web', type: 'plain', placeholder: 'https://github.com/…/Modulo.fprg' }, '');
+    const other = h('div', { class: 'modother' },
+      h('button', { class: 'btn small', type: 'button', onclick: done(importModuleFile) }, 'Importa da un file .fprg…'),
+      urlW, h('button', { class: 'btn small', type: 'button', onclick: () => { const u = urlW._get().trim(); if (!u) { toast('Scrivi l\'indirizzo del modulo', 'warn'); return; } if (closeIt) closeIt(); importModuleUrl(u); } }, 'Importa dall\'indirizzo'));
+    const body = h('div', { class: 'fields' },
+      h('p', { class: 'help' }, 'Un modulo è un programma .fprg da riusare: le sue classi o funzioni si importano nel tuo programma in sola lettura (il Main del modulo serve solo per provarlo). La descrizione di un modulo è quella scritta in Proprietà del programma.'),
+      mine, h('h3', { class: 'modh' }, 'Raccolte di moduli'), coll, addRow, h('h3', { class: 'modh' }, 'Altri moduli'), other);
+    closeIt = openModal({ title: 'Importa un modulo', body, wide: true, okText: 'Chiudi', noCancel: true }).close;
+    setTimeout(() => { const mb = body.closest('.modal-body'); if (mb) mb.scrollTop = 0; const b = body.querySelector('.modsrc > summary'); if (b) b.focus(); }, 20);
+  }
+
   function readFileObj(file) {
     if (!file) return;
     const r = new FileReader();
@@ -7372,7 +8228,7 @@ const ArrayView = (() => {
     const svg = (source || $('#chart svg')).cloneNode(true);
     svg.setAttribute('width', svg.dataset.w); svg.setAttribute('height', svg.dataset.h);
     svg.insertBefore(h('style', null, css || exportCss()), svg.firstChild);
-    $$('.hits, .ctoggle, .uadd, .uhit', svg).forEach((x) => x.remove());
+    $$('.hits, .ctoggle, .uadd, .uhit, .umodtog', svg).forEach((x) => x.remove());
     return new XMLSerializer().serializeToString(svg);
   }
 
@@ -7577,6 +8433,8 @@ const ArrayView = (() => {
       { label: 'Copia XML negli appunti', key: 'Ctrl+Maiusc+X', do: copyXml },
       { label: 'Copia il link a questo programma', key: 'Ctrl+Maiusc+L', do: copyShareLink },
       '-',
+      { label: 'Importa un modulo…', key: 'Ctrl+I', do: moduleDialog },
+      '-',
       { label: 'Esporta diagramma SVG', key: 'Ctrl+Maiusc+G', do: exportSvgFile },
       { label: 'Esporta diagramma PNG', key: 'Ctrl+Maiusc+E', do: exportPng },
       { label: 'Esporta tutto il progetto in PDF', key: 'Ctrl+P', do: exportPdf },
@@ -7605,6 +8463,8 @@ const ArrayView = (() => {
       ['this.x', 'Attributo dell\'oggetto su cui si sta lavorando (in un metodo basta x)'], ['Punto.contatore   Punto.crea()', 'Attributo o metodo statico: si usa con il nome della classe'],
       ['super(nome)', 'Blocco Chiamata, primo blocco del costruttore: esegue il costruttore della classe madre'], ['super.descrivi()', 'Esegue la versione del metodo della classe madre'],
       ['null   p = null', 'Nessun oggetto: si può assegnare e confrontare'], ['«abstract»', 'Classe astratta: non si creano oggetti. Un metodo astratto non ha corpo e lo definiscono le sottoclassi'], ['+  -  #', 'Accesso pubblico, privato, protetto (controllato durante l\'esecuzione)'],
+      ['ArrayList<T>', 'Classe generica: T è un tipo scelto da chi la usa (parametri di tipo nel dialogo della classe)'], ['l ← new ArrayList<Intero>()', 'Oggetto di una classe generica; con new ArrayList<>() il tipo si ricava dalla variabile'],
+      ['a ← b', 'Con due array: a diventa lo stesso array di b (come in Java)'], ['Ctrl+I', 'Importa un modulo: classi già pronte (ArrayList, Stack, Queue, ordinamento…) da riusare in sola lettura'],
     ].map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
     const keys = SHORTCUTS.flatMap(([g, rows]) => [h('tr', { class: 'kgroup' }, h('td', { colspan: 2 }, g)), ...rows.map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)))]);
     const body = h('div', { class: 'help-body' },
@@ -7621,7 +8481,7 @@ const ArrayView = (() => {
   const SHORTCUTS = [
     ['File', [
       ['Ctrl+Alt+N', 'Nuovo programma'], ['Ctrl+O', 'Apri file .fprg'], ['Ctrl+Maiusc+O', 'Apri da indirizzo web'], ['Ctrl+S', 'Salva come .fprg'],
-      ['Ctrl+Maiusc+X', 'Copia XML negli appunti'], ['Ctrl+Maiusc+L', 'Copia il link al programma'],
+      ['Ctrl+Maiusc+X', 'Copia XML negli appunti'], ['Ctrl+Maiusc+L', 'Copia il link al programma'], ['Ctrl+I', 'Importa un modulo'],
       ['Ctrl+Maiusc+G  ·  Ctrl+Maiusc+E', 'Esporta il diagramma in SVG, in PNG'], ['Ctrl+P', 'Esporta tutto il progetto in PDF'], ['Ctrl+Maiusc+S', 'Scarica il codice sorgente'],
       ['Alt+Invio', 'Proprietà del programma'],
     ]],
@@ -7643,6 +8503,7 @@ const ArrayView = (() => {
       ['Maiusc+Canc', 'Elimina la funzione o il metodo'], ['Pag↑  Pag↓', 'Diagramma precedente, successivo'], ['U', 'Diagramma delle classi'],
       ['A  M  C', 'Diagramma delle classi: nuovo attributo, metodo, costruttore della classe selezionata'],
       ['Invio  ·  Canc', 'Diagramma delle classi: apri o modifica, elimina l\'elemento selezionato'],
+      ['Maiusc+M', 'Diagramma delle classi: condensa o espandi i moduli importati'],
     ]],
     ['Vista', [
       ['Ctrl+Alt+F  ·  Ctrl+Alt+O', 'Vista Funzioni, vista Oggetti'], ['Alt+1  2  3  4', 'Schede Console, Variabili, Codice, File'], ['Ctrl+B', 'Mostra o nascondi il pannello'],
@@ -7696,6 +8557,7 @@ const ArrayView = (() => {
         if (shift && k === 'g') return go(exportSvgFile);
         if (shift && k === 'x' && !typing) return go(copyXml);
         if (shift && k === 'l') return go(copyShareLink);
+        if (!shift && k === 'i') return go(moduleDialog);
       }
       if (alt && !ctrl && e.key === 'Enter') return go(() => { if (!busy()) editProgram(); });
       if (typing) return;
@@ -7728,6 +8590,7 @@ const ArrayView = (() => {
       if (isUml()) {
         if ((e.key === 'Delete' || e.key === 'Backspace') && st.usel && !isRunning()) { e.preventDefault(); deleteUmlSel(); }
         else if (e.key === 'Enter' && st.usel) { e.preventDefault(); if (st.usel.kind === 'method') openMethod(st.usel.fid); else if (!isRunning()) editUmlSel(); }
+        else if (lab === 'Maiusc+M') { e.preventDefault(); toggleAllModules(); }
         else if (lab === 'A' || lab === 'M' || lab === 'C') {
           e.preventDefault();
           if (busy()) return;
@@ -7755,6 +8618,8 @@ const ArrayView = (() => {
   function bindUi() {
     $('#fileBtn').addEventListener('click', (e) => fileMenu(e.currentTarget));
     $('#exBtn').addEventListener('click', (e) => examplesMenu(e.currentTarget));
+    $('#modBtn').addEventListener('click', moduleDialog);
+    $('#modToggle').addEventListener('click', toggleAllModules);
     $('#openBtn').addEventListener('click', openFile);
     $('#saveBtn').addEventListener('click', saveFile);
     $('#undoBtn').addEventListener('click', undo);

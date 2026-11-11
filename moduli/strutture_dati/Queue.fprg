@@ -1,0 +1,129 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Queue"/>
+        <attribute name="authors" value="FlowLab"/>
+        <attribute name="about" value="Coda (FIFO) di elementi di tipo T, come java.util.Queue: gli elementi escono nell'ordine in cui sono entrati. È una lista collegata di nodi Nodo&lt;T&gt;."/>
+        <attribute name="saved" value="2026-11-11 08:00:00 AM"/>
+        <attribute name="created" value="Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx"/>
+    </attributes>
+    <flowlab-classes>
+        <class name="ProvaQueue" parent="" x="40" y="360"/>
+        <class name="Queue" parent="" tparams="T" x="40" y="40">
+            <attribute name="testa" type="Nodo&lt;T&gt;" array="False" size="" visibility="private" static="False" init=""/>
+            <attribute name="ultimo" type="Nodo&lt;T&gt;" array="False" size="" visibility="private" static="False" init=""/>
+            <attribute name="quanti" type="Integer" array="False" size="" visibility="private" static="False" init="0"/>
+        </class>
+        <class name="Nodo" parent="" tparams="T" x="40" y="330">
+            <attribute name="valore" type="T" array="False" size="" visibility="public" static="False" init=""/>
+            <attribute name="successivo" type="Nodo&lt;T&gt;" array="False" size="" visibility="public" static="False" init=""/>
+        </class>
+    </flowlab-classes>
+    <function name="Main" type="None" variable="" flowlab-class="ProvaQueue" flowlab-visibility="public" flowlab-static="True">
+        <parameters/>
+        <body>
+            <comment text="Prova del modulo: questo Main non viene importato"/>
+            <declare name="fila" type="Queue&lt;Integer&gt;" array="False" size=""/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <assign variable="fila" expression="new Queue&lt;Integer&gt;()"/>
+            <for variable="i" start="1" end="5" direction="inc" step="1">
+                <call expression="fila.add(i * 10)"/>
+            </for>
+            <output expression="&quot;Primo in fila: &quot; &amp; fila.peek() &amp; &quot; su &quot; &amp; fila.size()" newline="True"/>
+            <declare name="copia" type="Queue&lt;Integer&gt;" array="False" size=""/>
+            <assign variable="copia" expression="new Queue&lt;Integer&gt;(fila)"/>
+            <call expression="copia.remove()"/>
+            <output expression="&quot;La copia ha &quot; &amp; copia.size() &amp; &quot; elementi, la coda &quot; &amp; fila.size()" newline="True"/>
+            <while expression="not fila.isEmpty()">
+                <output expression="fila.remove() &amp; &quot; &quot;" newline="False"/>
+            </while>
+            <output expression="&quot;&quot;" newline="True"/>
+        </body>
+    </function>
+    <function name="Nodo" type="None" variable="" flowlab-class="Nodo" flowlab-visibility="public" flowlab-static="False" flowlab-ctor="True">
+        <parameters>
+            <parameter name="v" type="T" array="False"/>
+        </parameters>
+        <body>
+            <assign variable="valore" expression="v"/>
+            <assign variable="successivo" expression="null"/>
+        </body>
+    </function>
+    <function name="Queue" type="None" variable="" flowlab-class="Queue" flowlab-visibility="public" flowlab-static="False" flowlab-ctor="True">
+        <parameters/>
+        <body>
+            <comment text="Coda vuota, come new LinkedList&lt;&gt;() in Java"/>
+        </body>
+    </function>
+    <function name="Queue" type="None" variable="" flowlab-class="Queue" flowlab-visibility="public" flowlab-static="False" flowlab-ctor="True">
+        <parameters>
+            <parameter name="altra" type="Queue&lt;T&gt;" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Copia degli elementi di un'altra coda, nello stesso ordine, come new LinkedList&lt;&gt;(altra) in Java"/>
+            <declare name="n" type="Nodo&lt;T&gt;" array="False" size=""/>
+            <assign variable="n" expression="altra.testa"/>
+            <while expression="n != null">
+                <call expression="add(n.valore)"/>
+                <assign variable="n" expression="n.successivo"/>
+            </while>
+        </body>
+    </function>
+    <function name="add" type="None" variable="" flowlab-class="Queue" flowlab-visibility="public" flowlab-static="False">
+        <parameters>
+            <parameter name="x" type="T" array="False"/>
+        </parameters>
+        <body>
+            <declare name="n" type="Nodo&lt;T&gt;" array="False" size=""/>
+            <assign variable="n" expression="new Nodo&lt;T&gt;(x)"/>
+            <if expression="ultimo = null">
+                <then>
+                    <assign variable="testa" expression="n"/>
+                </then>
+                <else>
+                    <assign variable="ultimo.successivo" expression="n"/>
+                </else>
+            </if>
+            <assign variable="ultimo" expression="n"/>
+            <assign variable="quanti" expression="quanti + 1"/>
+        </body>
+    </function>
+    <function name="remove" type="T" variable="primo" flowlab-class="Queue" flowlab-visibility="public" flowlab-static="False">
+        <parameters/>
+        <body>
+            <comment text="Toglie e restituisce il primo elemento della coda"/>
+            <declare name="primo" type="T" array="False" size=""/>
+            <assign variable="primo" expression="testa.valore"/>
+            <assign variable="testa" expression="testa.successivo"/>
+            <if expression="testa = null">
+                <then>
+                    <assign variable="ultimo" expression="null"/>
+                </then>
+                <else/>
+            </if>
+            <assign variable="quanti" expression="quanti - 1"/>
+        </body>
+    </function>
+    <function name="peek" type="T" variable="primo" flowlab-class="Queue" flowlab-visibility="public" flowlab-static="False">
+        <parameters/>
+        <body>
+            <declare name="primo" type="T" array="False" size=""/>
+            <assign variable="primo" expression="testa.valore"/>
+        </body>
+    </function>
+    <function name="size" type="Integer" variable="n" flowlab-class="Queue" flowlab-visibility="public" flowlab-static="False">
+        <parameters/>
+        <body>
+            <declare name="n" type="Integer" array="False" size=""/>
+            <assign variable="n" expression="quanti"/>
+        </body>
+    </function>
+    <function name="isEmpty" type="Boolean" variable="vuota" flowlab-class="Queue" flowlab-visibility="public" flowlab-static="False">
+        <parameters/>
+        <body>
+            <declare name="vuota" type="Boolean" array="False" size=""/>
+            <assign variable="vuota" expression="quanti = 0"/>
+        </body>
+    </function>
+</flowgorithm>

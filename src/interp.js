@@ -29,6 +29,7 @@ class Interpreter {
     this.superFirst = new Map();
     if (this.oo) {
       for (const c of prog.classes) { this.byName.set(c.name.toLowerCase(), c); this.methods.set(c.id, []); this.ctors.set(c.id, []); }
+      this.tparamNames = new Set(prog.classes.flatMap((c) => (c.tparams || []).map((t) => t.toLowerCase())));
       for (const f of prog.functions) {
         if (!this.methods.has(f.cls)) continue;
         (f.ctor ? this.ctors : this.methods).get(f.cls).push(f);
@@ -52,9 +53,32 @@ class Interpreter {
   parentOf(c) { return c && c.parent ? this.byName.get(c.parent.toLowerCase()) || null : null; }
   chain(c) { const out = []; while (c && !out.includes(c)) { out.push(c); c = this.parentOf(c); } return out; }
   isA(c, of) { return this.chain(c).includes(of); }
-  coerceTo(val, type, what) {
-    return _E.coerce(val, type, what, (oc, tn) => { const t = this.byName.get(String(tn).toLowerCase()); return !!t && this.isA(oc, t); });
+  /* ---- generici: un oggetto di una classe generica ha i suoi argomenti di tipo (obj.targs) ---- */
+  /* tipo con i parametri sostituiti da quelli dell'oggetto: "T" -> "Integer" per un ArrayList<Integer> */
+  resolve(type, obj) {
+    if (!obj || !obj.targs || !(obj.cls.tparams || []).length) return type;
+    if (!obj._tmap) { obj._tmap = {}; obj.cls.tparams.forEach((p, i) => { obj._tmap[p.toLowerCase()] = obj.targs[i]; }); }
+    return _E.substType(type, obj._tmap);
   }
+  /* parametro di tipo non ancora noto (oggetto creato senza indicare il tipo) */
+  unresolved(t) { return !!this.tparamNames && this.tparamNames.has(_E.splitType(t).base.toLowerCase()); }
+  /* conversione per assegnamenti e parametri; ctx = oggetto che dà il significato a T (di solito this) */
+  coerceTo(val, type, what, ctx) {
+    const t = this.resolve(type, ctx === undefined ? (this.frame ? this.frame.self : null) : ctx);
+    if (this.unresolved(t)) return val;
+    const isA = (oc, tn) => { const k = this.byName.get(String(tn).toLowerCase()); return !!k && this.isA(oc, k); };
+    const g = _E.splitType(t);
+    if (!g.args.length) return _E.coerce(val, t, what, isA);
+    const v = _E.coerce(val, g.base, what, isA);
+    const o = v.v;
+    if (o && (o.cls.tparams || []).length) {
+      if (!o.targs) { if (!g.args.some((a) => this.unresolved(a))) { o.targs = g.args.slice(); delete o._tmap; } } // new C<>(): il tipo si ricava dalla variabile
+      else if (g.args.some((a, i) => !this.unresolved(a) && !_E.sameType(a, o.targs[i]))) throw new _E.FlowError(`Tipi incompatibili: ${what || 'il valore'} è un ${_E.typeName(_E.joinType(o.cls.name, o.targs))}, ma serve ${_E.typeName(t)}`);
+    }
+    return v;
+  }
+  /* tipo da mostrare per una cella (T sostituito, se noto) */
+  cellType(cell) { return this.resolve(cell.type, cell.ctx); }
   /* attributo cercato nella classe e nelle classi madri: { attr, owner } */
   fieldLookup(c, low) {
     for (const k of this.chain(c)) { const a = k.attributes.find((x) => x.name.toLowerCase() === low); if (a) return { attr: a, owner: k }; }
@@ -93,6 +117,7 @@ class Interpreter {
     return 'l\'espressione';
   }
   defaultOf(t) {
+    if (this.unresolved(t)) return undefined;
     switch (t) {
       case 'Integer': return _E.V.int(0);
       case 'Real': return _E.V.real(0);
@@ -101,8 +126,20 @@ class Interpreter {
     }
     return _E.V.obj(null);
   }
-  checkType(t) {
-    if (this.oo && !_E.isBaseType(t) && !this.byName.has(String(t).toLowerCase())) throw new _E.FlowError(`Il tipo "${t}" non esiste: crea la classe ${t} nel diagramma delle classi`);
+  /* il tipo esiste? cls = classe in cui si usa (per i parametri di tipo come T) */
+  checkType(t, cls) {
+    if (!this.oo) return;
+    const g = _E.splitType(t);
+    if (!g.args.length && (_E.isBaseType(g.base) || _M.isTypeParam(cls, g.base))) return;
+    const c = this.byName.get(g.base.toLowerCase());
+    if (!c) throw new _E.FlowError(`Il tipo "${_E.typeName(t)}" non esiste: crea la classe ${g.base} nel diagramma delle classi`);
+    const np = (c.tparams || []).length;
+    if (np !== g.args.length) {
+      if (np && !g.args.length) throw new _E.FlowError(`${c.name} è una classe generica: indica il tipo, es. ${c.name}<${c.tparams.map(() => 'Intero').join(', ')}>`);
+      if (!np) throw new _E.FlowError(`${c.name} non è una classe generica: si usa senza < >`);
+      throw new _E.FlowError(`${_M.classTitle(c)} vuole ${np} tipi tra < >`);
+    }
+    for (const a of g.args) this.checkType(a, cls);
   }
   /* esegue fn in una chiamata "di servizio" per inizializzare gli attributi di una classe */
   *withInit(c, obj, fn) {
@@ -112,8 +149,10 @@ class Interpreter {
   }
   /* cella di un attributo: valore iniziale come in Java (0, "", false, null) oppure quello indicato */
   *attrCell(a, owner) {
-    this.checkType(a.type);
-    const cell = { name: a.name, type: a.type, array: !!a.array, field: true, owner, visibility: a.visibility, static: !!a.static };
+    this.checkType(a.type, owner);
+    const self = a.static ? null : this.frame.self;
+    const cell = { name: a.name, type: a.type, array: !!a.array, field: true, owner, visibility: a.visibility, static: !!a.static, ctx: self };
+    const dt = this.resolve(a.type, self);
     try {
       if (a.array) {
         const dims = [];
@@ -124,9 +163,9 @@ class Interpreter {
         }
         const n = dims.reduce((x, y) => x * y, 1);
         if (n > 1e7) throw new _E.FlowError('array troppo grande');
-        cell.dims = dims; cell.items = new Array(n).fill(this.defaultOf(a.type));
+        cell.dims = dims; cell.items = new Array(n).fill(this.defaultOf(dt));
       } else {
-        cell.value = this.defaultOf(a.type);
+        cell.value = this.defaultOf(dt);
         if (String(a.init || '').trim()) cell.value = this.coerceTo(yield* _E.evalE(this.parse(a.init, 'e'), this.ctx), a.type, `il valore iniziale di ${owner.name}.${a.name}`);
       }
     } catch (e) {
@@ -249,26 +288,30 @@ class Interpreter {
     return out;
   }
   /* overloading: sceglie la versione più adatta agli argomenti */
-  pick(cands, pre, name, node) {
+  pick(cands, pre, name, node, self) {
     if (cands.length === 1) return cands[0];
     const score = (f) => {
       if (f.params.length !== pre.length) return -1;
       let tot = 0;
       for (let i = 0; i < pre.length; i++) {
         const p = f.params[i], a = pre[i];
+        const pt = this.resolve(p.type, self);
         if (p.array) {
-          if (!a.cell || a.cell.type.toLowerCase() !== p.type.toLowerCase() || (a.cell.dims || [0]).length !== (p.dims || 1)) return -1;
+          if (!a.cell || (a.cell.dims || [0]).length !== (p.dims || 1)) return -1;
+          const at = this.cellType(a.cell);
+          if (!this.unresolved(pt) && !this.unresolved(at) && !_E.sameType(at, pt)) return -1;
           tot += 3; continue;
         }
         if (a.cell) return -1;
         const v = a.val;
-        if (_E.isBaseType(p.type)) {
-          if (v.t === p.type) tot += 3;
-          else if (p.type === 'Real' && v.t === 'Integer') tot += 2;
-          else if (p.type === 'Integer' && v.t === 'Real') tot += 1;
+        if (this.unresolved(pt)) { tot += 2; continue; }
+        if (_E.isBaseType(pt)) {
+          if (v.t === pt) tot += 3;
+          else if (pt === 'Real' && v.t === 'Integer') tot += 2;
+          else if (pt === 'Integer' && v.t === 'Real') tot += 1;
           else return -1;
         } else {
-          const t = this.byName.get(p.type.toLowerCase());
+          const t = this.byName.get(_E.splitType(pt).base.toLowerCase());
           if (v.t !== 'Object' || !t) return -1;
           if (v.v === null) tot += 2;
           else if (v.v.cls === t) tot += 3;
@@ -282,10 +325,10 @@ class Interpreter {
     for (const f of cands) { const sc = score(f); if (sc > bs) { bs = sc; best = f; } }
     if (best) return best;
     const got = pre.map((a) => (a.cell ? `array di ${_E.typeName(a.cell.type)}` : a.val.t === 'Object' ? (a.val.v ? a.val.v.cls.name : 'null') : _E.typeName(a.val.t))).join(', ');
-    const vers = cands.map((f) => `${f.name}(${f.params.map((p) => _E.typeName(p.type) + (p.array ? '[]' : '')).join(', ')})`).join(' · ');
+    const vers = cands.map((f) => `${f.name}(${f.params.map((p) => _E.typeName(this.resolve(p.type, self)) + (p.array ? '[]' : '')).join(', ')})`).join(' · ');
     throw new _E.FlowError(`Nessuna versione di ${name} accetta questi argomenti (${got || 'nessuno'}). Versioni disponibili: ${vers}`, { node });
   }
-  bindArgs(func, pre, node) {
+  bindArgs(func, pre, node, self) {
     const args = [];
     for (let i = 0; i < pre.length; i++) {
       const p = func.params[i], a = pre[i];
@@ -296,13 +339,14 @@ class Interpreter {
           throw new _E.FlowError(`Il parametro "${p.name}" di ${func.name} è un array: passa il nome di un array`, { node });
         }
         const cell = a.cell;
-        if (cell.type !== p.type) throw new _E.FlowError(`L'array "${cell.name}" è di tipo ${_E.typeName(cell.type)}, ma il parametro "${p.name}" è ${_E.typeName(p.type)}`, { node });
+        const ct = this.cellType(cell), pt = this.resolve(p.type, self);
+        if (!this.unresolved(ct) && !this.unresolved(pt) && !_E.sameType(ct, pt)) throw new _E.FlowError(`L'array "${cell.name}" è di tipo ${_E.typeName(ct)}, ma il parametro "${p.name}" è ${_E.typeName(pt)}`, { node });
         const nd = (cell.dims || [0]).length, pd = p.dims || 1;
         if (nd !== pd) throw new _E.FlowError(`L'array "${cell.name}" ha ${nd} ${nd === 1 ? 'dimensione' : 'dimensioni'}, ma il parametro "${p.name}" ne vuole ${pd}`, { node });
         args.push(cell);
       } else {
         if (a.cell) throw new _E.FlowError(`"${a.cell.name}" è un array: il parametro "${p.name}" di ${func.name} vuole un singolo valore`, { node });
-        args.push(this.coerceTo(a.val, p.type, `l'argomento "${p.name}" di ${func.name}`));
+        args.push(this.coerceTo(a.val, p.type, `l'argomento "${p.name}" di ${func.name}`, self));
       }
     }
     return args;
@@ -328,7 +372,7 @@ class Interpreter {
       if (argNodes.length !== f.params.length) throw new _E.FlowError(`${f.name} richiede ${f.params.length} argomenti, ne sono stati passati ${argNodes.length}`, { node });
     }
     const pre = yield* this.prepArgs(argNodes);
-    const f = this.pick(cands, pre, name, node);
+    const f = this.pick(cands, pre, name, node, opts.self);
     this.checkRetUse(f, opts, node);
     if (f.abstract) throw new _E.FlowError(`${f.name} è un metodo astratto di ${this.classById(f.cls).name}: non ha un corpo da eseguire, lo definiscono le sottoclassi`, { node });
     let self = null;
@@ -340,7 +384,7 @@ class Interpreter {
         self = opts.self;
       }
     }
-    return yield* this.invoke(f, this.bindArgs(f, pre, node), node, { self });
+    return yield* this.invoke(f, this.bindArgs(f, pre, node, self), node, { self });
   }
   *mcall(node, opts) {
     const low = node.name.toLowerCase();
@@ -372,9 +416,19 @@ class Interpreter {
     }
     const missing = _M.missingAbstract(this.prog, cls);
     if (missing.length) throw new _E.FlowError(`${cls.name} non definisce ${missing.map((m) => m.f.name + '()').join(', ')}, ${missing.length === 1 ? 'metodo astratto' : 'metodi astratti'} di ${[...new Set(missing.map((m) => m.owner.name))].join(', ')}: definisci${missing.length === 1 ? 'lo' : 'li'} in ${cls.name} oppure rendi astratta ${cls.name}`, { node });
+    // argomenti di tipo: new ArrayList<Intero>() (dentro una classe generica anche new Nodo<T>(x))
+    let targs = null;
+    const np = (cls.tparams || []).length;
+    if (node.targs && node.targs.length) {
+      if (!np) throw new _E.FlowError(`${cls.name} non è una classe generica: si crea senza < >, es. new ${cls.name}(...)`, { node });
+      if (node.targs.length !== np) throw new _E.FlowError(`${_M.classTitle(cls)} vuole ${np} tipi tra < >`, { node });
+      targs = node.targs.map((t) => this.resolve(t, this.frame.self));
+      for (const t of targs) this.checkType(t, this.frame.cls);
+      if (targs.some((t) => this.unresolved(t))) targs = null;
+    }
     const n = (this.classCount.get(cls.id) || 0) + 1;
     this.classCount.set(cls.id, n);
-    const obj = { id: n, uid: ++this.objCount, cls, fields: new Map() };
+    const obj = { id: n, uid: ++this.objCount, cls, fields: new Map(), targs };
     for (const c of this.chain(cls).reverse()) {
       const attrs = c.attributes.filter((a) => !a.static);
       if (!attrs.length) continue;
@@ -402,9 +456,9 @@ class Interpreter {
       }
     }
     const pre = yield* this.prepArgs(argNodes);
-    const f = this.pick(cands, pre, cls.name, node);
+    const f = this.pick(cands, pre, cls.name, node, obj);
     this.checkAccess(f.visibility, cls, 'Il costruttore', cls.name);
-    yield* this.invoke(f, this.bindArgs(f, pre, node), node, { self: obj });
+    yield* this.invoke(f, this.bindArgs(f, pre, node, obj), node, { self: obj });
   }
   /* il primo blocco eseguibile del costruttore è super(...)? */
   startsWithSuper(func) {
@@ -472,8 +526,8 @@ class Interpreter {
     const cls = this.oo ? this.classById(func.cls) : null;
     const frame = { func, vars: new Map(), depth: this.stack.length, cls, self: (opts && opts.self) || null, executed: 0 };
     func.params.forEach((p, i) => {
-      if (p.array) frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: true, dims: args[i].dims || [args[i].items.length], items: args[i].items, param: true });
-      else frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: false, value: args[i], param: true });
+      if (p.array) frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: true, dims: args[i].dims || [args[i].items.length], items: args[i].items, param: true, ctx: frame.self });
+      else frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: false, value: args[i], param: true, ctx: frame.self });
     });
     this.stack.push(frame);
     yield { type: 'stmt', stmt: { id: 'start:' + func.id, kind: 'start' }, frame };
@@ -573,15 +627,15 @@ class Interpreter {
           size = dims.reduce((a, b) => a * b, 1);
           if (size > 1e7) throw new _E.FlowError('Array troppo grande (massimo 10 milioni di elementi)');
         }
-        this.checkType(s.type);
+        this.checkType(s.type, frame.cls);
         for (const n of names) {
           if (!_E.validIdent(n)) throw new _E.FlowError(`"${n}" non è un nome di variabile valido`);
           if (_E.RESERVED.has(n.toLowerCase())) throw new _E.FlowError(`"${n}" è una parola riservata`);
           const key = n.toLowerCase();
           if (frame.vars.has(key) && frame.vars.get(key).constant) throw new _E.FlowError(`Il nome "${n}" è già usato dalla costante "${frame.vars.get(key).name}"`);
           if (frame.vars.has(key)) throw new _E.FlowError(frame.vars.get(key).name === n ? `La variabile "${n}" è già stata dichiarata` : `La variabile "${n}" è già stata dichiarata come "${frame.vars.get(key).name}" (maiuscole e minuscole non contano)`);
-          if (s.array) frame.vars.set(key, { name: n, type: s.type, array: true, dims: dims.slice(), items: new Array(size).fill(undefined) });
-          else frame.vars.set(key, { name: n, type: s.type, array: false, value: undefined });
+          if (s.array) frame.vars.set(key, { name: n, type: s.type, array: true, dims: dims.slice(), items: new Array(size).fill(undefined), ctx: frame.self });
+          else frame.vars.set(key, { name: n, type: s.type, array: false, value: undefined, ctx: frame.self });
         }
         // valore iniziale: vale per tutte le variabili del blocco
         if (!s.array && String(s.init || '').trim()) for (const n of names) yield* this.store({ k: 'var', name: n }, yield* ev(s.init));
@@ -595,7 +649,7 @@ class Interpreter {
         const key = n.toLowerCase();
         if (frame.vars.has(key)) throw new _E.FlowError(`Il nome "${n}" è già usato da ${frame.vars.get(key).constant ? 'un\'altra costante' : 'una variabile'}`);
         const v = yield* ev(s.expression);
-        frame.vars.set(key, { name: n, type: s.type, array: false, value: this.coerceTo(v, s.type, `il valore della costante "${n}"`), constant: true });
+        frame.vars.set(key, { name: n, type: s.type, array: false, value: this.coerceTo(v, s.type, `il valore della costante "${n}"`), constant: true, ctx: frame.self });
         return;
       }
       case 'assign': {
@@ -612,6 +666,13 @@ class Interpreter {
           return;
         }
         const lv = this.parse(s.variable, 'lv');
+        // array ← altroArray: l'array a sinistra diventa lo stesso array (come in Java)
+        let rx = this.parse(s.expression, 'e');
+        while (rx.k === 'par') rx = rx.e;
+        if (!lv.indices && (rx.k === 'var' || rx.k === 'member') && !rx.indices) {
+          const tcell = yield* this.cellOf(lv);
+          if (tcell.array) { yield* this.storeArray(tcell, lv, rx); return; }
+        }
         const val = yield* ev(s.expression);
         yield* this.store(lv, val);
         return;
@@ -755,6 +816,19 @@ class Interpreter {
     }
   }
 
+  *storeArray(tcell, lv, rx) {
+    const nm = lv.k === 'var' ? lv.name : this.label(lv);
+    if (tcell.constant) throw new _E.FlowError(`"${tcell.name}" è una costante: il suo valore non si può modificare`);
+    const src = yield* this.cellOf(rx);
+    if (!src.array) throw new _E.FlowError(`"${nm}" è un array: a destra serve un array dello stesso tipo, oppure indica l'elemento da modificare, es. ${nm}[i]`);
+    const tt = this.cellType(tcell), st = this.cellType(src);
+    if (!this.unresolved(tt) && !this.unresolved(st) && !_E.sameType(tt, st)) throw new _E.FlowError(`Tipi incompatibili: "${this.label(rx)}" è un array di ${_E.typeName(st)}, ma "${nm}" è un array di ${_E.typeName(tt)}`);
+    const sd = src.dims || [src.items.length], td = tcell.dims || [tcell.items.length];
+    if (sd.length !== td.length) throw new _E.FlowError(`"${this.label(rx)}" ha ${sd.length} ${sd.length === 1 ? 'dimensione' : 'dimensioni'}, "${nm}" ne ha ${td.length}`);
+    tcell.items = src.items; tcell.dims = sd.slice();
+    tcell.lastWrite = undefined;
+    tcell.writes = (tcell.writes || 0) + 1;
+  }
   *store(lv, val) {
     const cell = yield* this.cellOf(lv);
     const nm = lv.k === 'var' ? lv.name : this.label(lv).replace(/\[…\]$/, '');
@@ -764,12 +838,12 @@ class Interpreter {
       const ivs = [];
       for (const ix of lv.indices) ivs.push(yield* _E.evalE(ix, this.ctx));
       const off = _E.arrOffset(ivs, cell, { name: nm });
-      cell.items[off] = this.coerceTo(val, cell.type, `il valore assegnato a ${nm}[${ivs.map((x) => x.v).join(', ')}]`);
+      cell.items[off] = this.coerceTo(val, cell.type, `il valore assegnato a ${nm}[${ivs.map((x) => x.v).join(', ')}]`, cell.ctx);
       cell.lastWrite = off;
       cell.writes = (cell.writes || 0) + 1;
     } else {
       if (lv.index) throw new _E.FlowError(`"${nm}" non è un array`);
-      cell.value = this.coerceTo(val, cell.type, `il valore assegnato a "${nm}"`);
+      cell.value = this.coerceTo(val, cell.type, `il valore assegnato a "${nm}"`, cell.ctx);
       cell.writes = (cell.writes || 0) + 1;
     }
   }

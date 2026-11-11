@@ -29,7 +29,7 @@
   const st = {
     prog: null, fi: 0, sel: null, clip: null, undo: [], redo: [], dirty: false,
     zoom: store.get('zoom', 1), speed: store.get('speed', 2), lang: store.get('lang', 'python'), tab: store.get('tab', 'console'),
-    fileName: null, ins: [], expanded: new Set(), varsOpen: new Set(), vfs: new Map(Object.entries(store.get('vfs', {}))),
+    fileName: null, ins: [], expanded: new Set(), modCollapsed: new Set(store.get('modCollapsed', [])), varsOpen: new Set(), vfs: new Map(Object.entries(store.get('vfs', {}))),
     // vista Funzioni o Oggetti; nella vista Oggetti il foglio mostra il diagramma delle classi (uml) o un metodo
     view: store.get('view', 'functions') === 'objects' ? 'objects' : 'functions', uml: true, usel: null,
   };
@@ -88,11 +88,57 @@
     }
     return [...new Set(out)];
   }
-  /* tipi per dichiarazioni, parametri e attributi: i quattro di base e le classi */
-  function typeOpts() {
-    const base = E.TYPES.map((t) => [t, TYPE_IT[t]]);
-    return M.hasClasses(st.prog) ? base.concat(st.prog.classes.map((c) => [c.name, c.name + ' (classe)'])) : base;
+  /* scelta di un tipo: un menu con i tipi base, i parametri di tipo (T) e le classi; per una
+     classe generica (Nodo<S, T>) accanto compaiono i menu dei suoi parametri, anche annidati.
+     ctx: classe in cui si usa il tipo; onChange(tipo) a ogni cambiamento */
+  function typePicker(value, ctx, onChange, aria) {
+    const el = h('span', { class: 'tpick' });
+    const sel = h('select', { 'aria-label': aria || 'Tipo' });
+    const sub = h('span', { class: 'tpargs' });
+    const cs = M.hasClasses(st.prog) ? st.prog.classes : [];
+    const tps = ctx ? ctx.tparams || [] : [];
+    const opts = [...E.TYPES.map((t) => [t, TYPE_IT[t]]), ...tps.map((t) => [t, `${t} (tipo generico di ${ctx.name})`]), ...cs.map((c) => [c.name, `${M.classTitle(c)} (${c.module ? 'modulo' : 'classe'})`])];
+    const genOf = (b) => { const c = M.classByName(st.prog, b); return c && (c.tparams || []).length ? c : null; };
+    let kids = [];
+    const get = () => { const c = genOf(sel.value); return c ? E.joinType(c.name, kids.map((k) => k.get())) : sel.value; };
+    const fire = () => { if (onChange) onChange(get()); };
+    const drawArgs = (args) => {
+      sub.innerHTML = ''; kids = [];
+      const c = genOf(sel.value); if (!c) return;
+      c.tparams.forEach((p, i) => {
+        const k = typePicker(args[i] || 'Integer', ctx, fire, `${aria || 'Tipo'}: ${p} di ${c.name}`);
+        kids.push(k);
+        sub.append(h('span', { class: 'tparg' }, h('span', { class: 'tpname' }, p + ':'), k.el));
+      });
+    };
+    const set = (v) => {
+      const g = E.splitType(v || 'Integer');
+      if (![...sel.options].some((o) => o.value.toLowerCase() === g.base.toLowerCase())) sel.append(h('option', { value: g.base }, E.typeName(g.base)));
+      sel.value = [...sel.options].find((o) => o.value.toLowerCase() === g.base.toLowerCase()).value;
+      drawArgs(g.args);
+    };
+    sel.append(...opts.map(([v, l]) => h('option', { value: v }, l)));
+    sel.addEventListener('change', () => { drawArgs([]); fire(); });
+    el.append(sel, sub);
+    set(value);
+    return { el, sel, get, set, setDisabled(d) { el.querySelectorAll('select').forEach((x) => { x.disabled = d; }); } };
   }
+  /* ---- moduli: le loro classi sono in sola lettura ---- */
+  function roGuard(c) {
+    if (c === undefined) {
+      // funzione o metodo aperto: viene da un modulo?
+      if (isUml()) return false;
+      const f = func(), m = M.moduleOfFunc(st.prog, f);
+      if (m) { toast(`${f.module ? f.name + '()' : M.classOf(st.prog, f).name} fa parte del modulo ${m.name}: è in sola lettura`, 'warn'); return true; }
+      return false;
+    }
+    if (c && c.module) { toast(`${c.name} fa parte del modulo ${c.module.name}: è in sola lettura`, 'warn'); return true; }
+    return false;
+  }
+  /* funzione importata da un modulo di sole funzioni */
+  function roFunc(f) { if (f && f.module) { toast(`${f.name}() fa parte del modulo ${f.module.name}: è in sola lettura`, 'warn'); return true; } return false; }
+  /* tipo di una cella con i parametri di tipo sostituiti (T -> Intero per un ArrayList<Intero>) */
+  function cellT(c) { return run.interp && run.interp.cellType ? run.interp.cellType(c) : c.type; }
 
   /* ----------------------------- Viste ----------------------------------- */
   /* il programma deve corrispondere alla vista: classe predefinita nella vista Oggetti */
@@ -138,8 +184,18 @@
     document.body.classList.toggle('umlmode', isUml());
     $('.hint-add').textContent = isUml() ? 'Doppio clic su un metodo per disegnarlo · clic destro su una classe per aggiungere membri · trascina le classi per spostarle' : 'Clic su una freccia per aggiungere un blocco · doppio clic per modificarlo · trascina per spostarlo';
     const bar = $('#crumbBar');
-    bar.hidden = !isOO() || st.uml;
-    if (!bar.hidden) { const f = func(); const c = M.classOf(st.prog, f); $('#crumbWhere').textContent = `${c ? c.name : ''} › ${f === st.prog.functions[0] ? 'Main (inizio del programma)' : f.ctor ? 'costruttore' : f.name + '()'}`; }
+    const fmod = !isUml() && func().module;
+    bar.hidden = (!isOO() || st.uml) && !fmod;
+    $('#backUml').hidden = !isOO();
+    if (!bar.hidden) {
+      const f = func(); const c = isOO() ? M.classOf(st.prog, f) : null; const m = M.moduleOfFunc(st.prog, f);
+      $('#crumbWhere').textContent = isOO() ? `${c ? M.classTitle(c) : ''} › ${f === st.prog.functions[0] ? 'Main (inizio del programma)' : f.ctor ? 'costruttore' : f.name + '()'}${m ? ` · modulo ${m.name}, sola lettura` : ''}` : `${f.name}() · modulo ${m.name}, sola lettura`;
+    }
+    document.body.classList.toggle('readonly', !bar.hidden && M.isModuleFunc(st.prog, func()));
+    const mods = isUml() ? M.modulesOf(st.prog).filter((m) => m.classes.length) : [];
+    $('#modBar').hidden = !mods.length;
+    document.body.classList.toggle('hasmods', !!mods.length);
+    if (mods.length) { const anyOpen = mods.some((m) => !st.modCollapsed.has(m.name)); $('#modToggle').textContent = anyOpen ? '⊟ Condensa i moduli' : '⊞ Espandi i moduli'; $('#modToggle').title = (anyOpen ? 'Mostra i moduli importati come riquadri compatti, con i soli nomi delle classi' : 'Mostra attributi e metodi delle classi dei moduli importati') + ' (Maiusc+M)'; }
   }
   /* metodo astratto: niente diagramma di flusso, solo le versioni delle sottoclassi */
   function abstractCard(f) {
@@ -158,6 +214,17 @@
     const holder = $('#chart'); holder.innerHTML = ''; holder.append(card);
   }
   function showUml() { st.uml = true; st.sel = null; render(); $('#canvasWrap').scrollTo(0, 0); }
+  /* moduli condensati nel diagramma delle classi (si ricordano per nome) */
+  function toggleModule(name) {
+    if (st.modCollapsed.has(name)) st.modCollapsed.delete(name); else st.modCollapsed.add(name);
+    store.set('modCollapsed', [...st.modCollapsed]); render();
+  }
+  function toggleAllModules() {
+    const ms = M.modulesOf(st.prog).filter((m) => m.classes.length).map((m) => m.name);
+    const anyOpen = ms.some((n) => !st.modCollapsed.has(n));
+    for (const n of ms) { if (anyOpen) st.modCollapsed.add(n); else st.modCollapsed.delete(n); }
+    store.set('modCollapsed', [...st.modCollapsed]); render();
+  }
 
   /* --------------------------- Disegno ----------------------------------- */
   let codeTimer = null;
@@ -165,7 +232,7 @@
     ensureView();
     const holder = $('#chart');
     if (isUml()) {
-      const out = UmlLib.render(st.prog, st.usel);
+      const out = UmlLib.render(st.prog, st.usel, { collapsed: st.modCollapsed });
       st.ins = []; st.edges = [];
       holder.innerHTML = out.svg;
       applyZoom();
@@ -221,11 +288,11 @@
       $('#funcLbl').textContent = 'Diagramma';
       sel.append(h('option', { value: 'uml', selected: st.uml }, '▦ Classi (UML)'));
       for (const c of st.prog.classes) {
-        const og = h('optgroup', { label: 'Classe ' + c.name });
+        const og = h('optgroup', { label: 'Classe ' + M.classTitle(c) + (c.module ? ` · modulo ${c.module.name}` : '') });
         const ms = M.membersOf(st.prog, c);
         for (const f of [...ms.filter((x) => x.ctor), ...ms.filter((x) => !x.ctor)]) {
           const i = st.prog.functions.indexOf(f);
-          og.append(h('option', { value: i, selected: !st.uml && i === st.fi }, i === 0 ? 'Inizio (principale)' : f.ctor ? `new ${c.name}(${f.params.map((p) => p.name).join(', ')}) · costruttore` : `${f.name}(${f.params.map((p) => p.name).join(', ')})${f.abstract ? ' · astratto' : ''}`));
+          og.append(h('option', { value: i, selected: !st.uml && i === st.fi }, i === 0 ? 'Inizio (principale)' : f.ctor ? `new ${c.name}(${f.params.map((p) => p.name).join(', ')}) · costruttore` : `${f.name}(${f.params.map((p) => p.name).join(', ')})${f.abstract ? ' · astratto' : ''}${f.module ? ' · modulo ' + f.module.name : ''}`));
         }
         sel.append(og);
       }
@@ -240,7 +307,7 @@
     $('#funcLbl').textContent = 'Funzione';
     add.title = 'Nuova funzione (N)'; edit.title = 'Modifica funzione o proprietà del programma (F2)'; del.title = 'Elimina funzione (Maiusc+Canc)';
     edit.disabled = false;
-    st.prog.functions.forEach((f, i) => sel.append(h('option', { value: i, selected: i === st.fi }, i === 0 ? 'Inizio (principale)' : `${f.name}(${f.params.map((p) => p.name).join(', ')})`)));
+    st.prog.functions.forEach((f, i) => sel.append(h('option', { value: i, selected: i === st.fi }, i === 0 ? 'Inizio (principale)' : `${f.name}(${f.params.map((p) => p.name).join(', ')})${f.module ? ' · modulo ' + f.module.name : ''}`)));
     del.disabled = st.fi === 0;
   }
   function showFunc(i) { if (i === st.fi && !st.uml) return; st.fi = i; st.uml = false; st.sel = null; render(); $('#canvasWrap').scrollTo(0, 0); }
@@ -345,27 +412,30 @@
   function addStmt(target, kind) {
     const s = M.makeStmt(kind);
     if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; }
+    if (roGuard()) return;
     stmtDialog(s, true, (vals) => mutate(() => { Object.assign(s, vals); target.arr.splice(target.idx, 0, s); st.sel = s.id; }));
   }
   function editStmt(id) {
     const f = M.findStmt(st.prog, id); if (!f) return;
     if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; }
+    if (roGuard()) return;
     stmtDialog(f.stmt, false, (vals) => mutate(() => Object.assign(f.stmt, vals)));
   }
   function deleteSel() {
-    if (!st.sel) return;
+    if (!st.sel || roGuard()) return;
     const f = M.findStmt(st.prog, st.sel); if (!f) return;
     mutate(() => { f.arr.splice(f.index, 1); st.sel = f.arr[f.index] ? f.arr[f.index].id : (f.arr[f.index - 1] ? f.arr[f.index - 1].id : null); });
   }
   function copySel(cut) {
     if (!st.sel) return;
     const f = M.findStmt(st.prog, st.sel); if (!f) return;
+    if (cut && roGuard()) return;
     st.clip = M.cloneStmt(f.stmt, true);
     if (cut) mutate(() => { f.arr.splice(f.index, 1); st.sel = null; });
     else toast('Blocco copiato: fai clic su una freccia e scegli «Incolla qui»');
   }
   function paste(target) {
-    if (!st.clip || (!target && (isUml() || func().abstract))) return;
+    if (!st.clip || (!target && (isUml() || func().abstract)) || roGuard()) return;
     const c = M.cloneStmt(st.clip);
     if (!target) {
       const f = st.sel && M.findStmt(st.prog, st.sel);
@@ -375,7 +445,7 @@
   }
   /* sposta il blocco selezionato di un posto (dir -1 su, +1 giù) nella stessa sequenza */
   function shiftSel(dir) {
-    if (!st.sel) return;
+    if (!st.sel || roGuard()) return;
     if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; }
     const f = M.findStmt(st.prog, st.sel); if (!f) return;
     const j = f.index + dir; if (j < 0 || j >= f.arr.length) return;
@@ -388,7 +458,7 @@
     addStmt(f ? { arr: f.arr, idx: f.index + 1 } : { arr: func().body, idx: func().body.length }, kind);
   }
   function duplicate() {
-    if (!st.sel) return;
+    if (!st.sel || roGuard()) return;
     const f = M.findStmt(st.prog, st.sel); if (!f) return;
     const c = M.cloneStmt(f.stmt);
     mutate(() => { f.arr.splice(f.index + 1, 0, c); st.sel = c.id; });
@@ -400,7 +470,7 @@
     return found;
   }
   function moveStmt(id, target) {
-    const f = M.findStmt(st.prog, id); if (!f) return;
+    const f = M.findStmt(st.prog, id); if (!f || roGuard()) return;
     if (containsArr(f.stmt, target.arr)) { toast('Non puoi spostare un blocco dentro se stesso', 'warn'); return; }
     let idx = target.idx;
     if (target.arr === f.arr && f.index < idx) idx--;
@@ -453,6 +523,12 @@
     let input;
     if (spec.type === 'select') {
       input = h('select', { id }, spec.options.map(([v, l]) => h('option', { value: v, selected: v === val }, l)));
+    } else if (spec.type === 'typepick') {
+      const tpk = typePicker(val, spec.ctx, null, spec.label);
+      tpk.sel.id = id;
+      wrap.append(h('label', { class: 'flabel', for: id }, spec.label), tpk.el);
+      wrap._get = tpk.get; wrap._input = tpk.sel; wrap._check = () => '';
+      return wrap;
     } else if (spec.type === 'check') {
       input = h('input', { id, type: 'checkbox', checked: !!val });
       wrap.append(h('label', { class: 'check', for: id }, input, h('span', null, spec.label)));
@@ -580,7 +656,7 @@
   function stmtDialog(s, isNew, done) {
     let form = STMT_FORMS[s.kind];
     // nella vista Oggetti si possono dichiarare variabili di tipo classe
-    if (s.kind === 'declare' && M.hasClasses(st.prog)) form = { ...form, fields: form.fields.map((f) => (f.key === 'type' ? { ...f, type: 'select', options: typeOpts() } : f)) };
+    if (s.kind === 'declare' && M.hasClasses(st.prog)) form = { ...form, fields: form.fields.map((f) => (f.key === 'type' ? { ...f, type: 'typepick', ctx: M.classOf(st.prog, func()) } : f)) };
     const vars = declaredNames(func());
     const body = h('div', { class: 'fields' });
     if (form.help) body.append(h('p', { class: 'help' }, form.help));
@@ -625,6 +701,7 @@
     const f = isNew ? M.makeFunction('') : st.prog.functions[index];
     const oo = isOO() && M.hasClasses(st.prog);
     const cls = oo ? (isNew ? opts.cls : M.classOf(st.prog, f)) : null;
+    if (roGuard(cls) || (!isNew && roFunc(f))) return;
     const ctor = oo && (isNew ? !!(opts && opts.ctor) : !!f.ctor);
     const params = f.params.map((p) => ({ ...p }));
     const body = h('div', { class: 'fields' });
@@ -653,7 +730,7 @@
       if (!params.length) plist.append(h('p', { class: 'muted small' }, 'Nessun parametro.'));
       params.forEach((p, i) => {
         const nm = h('input', { type: 'text', class: 'mono', value: p.name, 'aria-label': 'Nome parametro ' + (i + 1), placeholder: 'nome', oninput: (e) => { p.name = e.target.value.trim(); } });
-        const tp = h('select', { 'aria-label': 'Tipo parametro ' + (i + 1), onchange: (e) => { p.type = e.target.value; } }, typeOpts().map(([v, l]) => h('option', { value: v, selected: v === p.type }, l)));
+        const tp = typePicker(p.type, cls, (t) => { p.type = t; }, 'Tipo parametro ' + (i + 1)).el;
         const shape = p.array ? (p.dims || 1) : 0;
         const arr = h('select', { 'aria-label': 'Forma del parametro ' + (i + 1), title: 'Valore singolo o array', onchange: (e) => { const d = +e.target.value; p.array = d > 0; p.dims = Math.max(1, d); } }, [[0, 'valore'], [1, 'array [ ]'], [2, 'matrice [ , ]'], [3, '3 dimensioni'], [4, '4 dimensioni'], [5, '5 dimensioni']].map(([v, l]) => h('option', { value: v, selected: v === shape }, l)));
         plist.append(h('div', { class: 'prow' }, nm, tp, arr,
@@ -674,13 +751,13 @@
       rlist.innerHTML = '';
       if (!rets.length) rlist.append(h('p', { class: 'muted small' }, 'Nessun valore: è una procedura.'));
       rets.forEach((r, i) => {
-        const tp = h('select', { 'aria-label': 'Tipo del valore restituito ' + (i + 1), onchange: (e) => { r.type = e.target.value; } }, typeOpts().map(([v, l]) => h('option', { value: v, selected: v === r.type }, l)));
+        const tpk = typePicker(r.type, cls, (t) => { r.type = t; }, 'Tipo del valore restituito ' + (i + 1)), tp = tpk.el;
         const tag = h('span', { class: 'rtag', title: 'È un attributo della classe: il metodo lo restituisce direttamente, senza dichiarare una variabile' }, 'attributo');
         // scegliendo un attributo il tipo è il suo e non si cambia
         const syncAttr = () => {
           const a = attrOf(r.name);
-          if (a) { r.type = a.attr.type; tp.value = a.attr.type; }
-          tp.disabled = !!a; tag.hidden = !a;
+          if (a) { r.type = a.attr.type; tpk.set(a.attr.type); }
+          tpk.setDisabled(!!a); tag.hidden = !a;
         };
         const nm = h('input', { type: 'text', class: 'mono', value: r.name, list: retAttrs.length ? dlId : null, 'aria-label': 'Variabile restituita ' + (i + 1), placeholder: retAttrs.length ? 'variabile o attributo' : 'variabile', oninput: (e) => { r.name = e.target.value.trim(); syncAttr(); } });
         syncAttr();
@@ -779,7 +856,7 @@
   function deleteFunction(target) {
     const f = target || func();
     const i = st.prog.functions.indexOf(f);
-    if (i <= 0) return;
+    if (i <= 0 || roFunc(f) || roGuard(M.hasClasses(st.prog) ? M.classOf(st.prog, f) : null)) return;
     const what = f.ctor ? `Il costruttore ${f.name}(…)` : isOO() ? `Il metodo ${fname(f)}` : `La funzione ${f.name}`;
     confirmBox(f.ctor ? 'Eliminare il costruttore?' : isOO() ? 'Eliminare il metodo?' : 'Eliminare la funzione?', `${what} e tutti i suoi blocchi verranno eliminati.`, 'Elimina', () => mutate(() => {
       st.prog.functions.splice(i, 1);
@@ -816,7 +893,7 @@
   function renameClass(c, nu) {
     const old = c.name, lo = old.toLowerCase();
     if (old === nu) return;
-    const T = (t) => (String(t).toLowerCase() === lo ? nu : t);
+    const T = (t) => { const g = E.splitType(t); return E.joinType(g.base.toLowerCase() === lo ? nu : g.base, g.args.map(T)); };
     for (const k of st.prog.classes) {
       if ((k.parent || '').toLowerCase() === lo) k.parent = nu;
       for (const a of k.attributes) { a.type = T(a.type); a.init = renameInExpr(a.init || '', old, nu); a.size = renameInExpr(a.size || '', old, nu); }
@@ -834,12 +911,14 @@
   }
   function classDialog(c, pos) {
     const isNew = !c;
+    if (c && roGuard(c)) return;
     const nameW = field({ key: 'cname', label: 'Nome della classe', type: 'ident', required: true, placeholder: 'es. Punto', hint: 'Per convenzione inizia con la lettera maiuscola' }, c ? c.name : '');
     const banned = c ? [c, ...descendants(c)] : [];
-    const parW = field({ key: 'cpar', label: 'Eredita da (classe madre)', type: 'select', options: [['', '— nessuna —'], ...st.prog.classes.filter((k) => !banned.includes(k)).map((k) => [k.name, k.name])] }, c ? (c.parent || '') : '');
+    const parW = field({ key: 'cpar', label: 'Eredita da (classe madre)', type: 'select', options: [['', '— nessuna —'], ...st.prog.classes.filter((k) => !banned.includes(k) && !(k.tparams || []).length).map((k) => [k.name, k.name])] }, c ? (c.parent || '') : '');
+    const tpW = isMainClsOf(c) ? null : field({ key: 'ctp', label: 'Parametri di tipo (classe generica, facoltativo)', type: 'plain', placeholder: 'es. T   oppure   K, V', hint: 'Una classe generica lavora con un tipo scelto da chi la usa: ArrayList<T> diventa ArrayList<Intero>, ArrayList<Stringa>… Dentro la classe T si usa come un tipo.' }, c ? (c.tparams || []).join(', ') : '');
     const isMainCls = c && c === M.mainClass(st.prog);
     const absW = isMainCls ? null : field({ key: 'cabs', label: 'Astratta: non si creano oggetti di questa classe, solo delle sue sottoclassi', type: 'check' }, c ? !!c.abstract : false);
-    const body = h('div', { class: 'fields' }, h('p', { class: 'help' }, 'Una classe descrive un tipo di oggetti: i loro attributi (i dati) e i metodi (le operazioni). Con l\'ereditarietà la classe riceve attributi e metodi della classe madre e può ridefinire i metodi.'), nameW, parW, absW);
+    const body = h('div', { class: 'fields' }, h('p', { class: 'help' }, 'Una classe descrive un tipo di oggetti: i loro attributi (i dati) e i metodi (le operazioni). Con l\'ereditarietà la classe riceve attributi e metodi della classe madre e può ridefinire i metodi.'), nameW, parW, absW, tpW);
     openModal({
       title: isNew ? 'Nuova classe' : 'Modifica classe ' + c.name, body, okText: isNew ? 'Crea' : 'Salva',
       onOk: () => {
@@ -849,6 +928,15 @@
         if (st.prog.classes.some((k) => k !== c && k.name.toLowerCase() === name.toLowerCase())) return `Esiste già una classe chiamata ${name}`;
         const parent = parW._get();
         const abs = !!(absW && absW._get());
+        // parametri di tipo: nomi brevi, diversi dai tipi e dalle classi
+        const tps = tpW ? tpW._get().split(',').map((x) => x.trim()).filter(Boolean) : (c ? c.tparams || [] : []);
+        for (const t of tps) {
+          if (!E.validIdent(t)) return `"${t}" non è un nome valido per un parametro di tipo (di solito una lettera maiuscola: T)`;
+          if (E.TYPES.some((x) => x.toLowerCase() === t.toLowerCase()) || Object.values(TYPE_IT).some((x) => x.toLowerCase() === t.toLowerCase()) || M.classByName(st.prog, t)) return `${t} è già il nome di un tipo: scegli un altro nome, per esempio T`;
+        }
+        if (new Set(tps.map((t) => t.toLowerCase())).size !== tps.length) return 'I parametri di tipo devono avere nomi diversi';
+        if (tps.length && parent) return 'Una classe generica non può ereditare da un\'altra classe in FlowLab';
+        if (c && (c.tparams || []).join(',') !== tps.join(',') && classUsed(c)) return `${c.name} è già usata nel programma: per cambiarne i parametri di tipo togli prima le variabili e gli attributi di tipo ${c.name}`;
         if (c && !abs) { const am = M.membersOf(st.prog, c).filter((f) => f.abstract); if (am.length) return `${c.name} ha metodi astratti (${am.map((f) => f.name + '()').join(', ')}): per renderla concreta togli prima «astratto» da quei metodi`; }
         // gli attributi non possono avere lo stesso nome di quelli della nuova classe madre
         if (parent) {
@@ -857,10 +945,10 @@
         }
         mutate(() => {
           if (isNew) {
-            const nc = M.makeClass(name, Object.assign({ parent, abstract: abs }, UmlLib.freeSpot(st.prog, pos)));
+            const nc = M.makeClass(name, Object.assign({ parent, abstract: abs, tparams: tps }, UmlLib.freeSpot(st.prog, pos)));
             st.prog.classes.push(nc);
             st.usel = { cls: nc.id, kind: 'class' };
-          } else { renameClass(c, name); c.parent = parent; c.abstract = abs; }
+          } else { renameClass(c, name); c.parent = parent; c.abstract = abs; c.tparams = tps; }
         });
         return true;
       },
@@ -868,9 +956,10 @@
   }
   function attrDialog(c, index) {
     const isNew = index == null;
+    if (roGuard(c)) return;
     const a = isNew ? M.makeAttribute() : c.attributes[index];
     const nameW = field({ key: 'aname', label: 'Nome dell\'attributo', type: 'ident', required: true, placeholder: 'es. raggio' }, a.name);
-    const typeW = field({ key: 'atype', label: 'Tipo', type: 'select', options: typeOpts() }, a.type);
+    const typeW = field({ key: 'atype', label: 'Tipo', type: 'typepick', ctx: c }, a.type);
     const arrW = field({ key: 'aarr', label: 'Array', type: 'check' }, a.array);
     const sizeW = field({ key: 'asize', label: 'Numero di elementi', type: 'exprlist', placeholder: 'es. 10   oppure   3, 4' }, a.size);
     const visW = field({ key: 'avis', label: 'Accesso', type: 'seg', options: VIS_OPTS }, a.visibility);
@@ -897,6 +986,7 @@
     });
   }
   function deleteClass(c) {
+    if (c.module) { removeModule(c.module.name); return; }
     if (c === M.mainClass(st.prog)) { infoBox('Classe principale', `${c.name} è la classe principale: contiene Main, da cui parte il programma, e non si può eliminare.`); return; }
     const kids = st.prog.classes.filter((k) => (k.parent || '').toLowerCase() === c.name.toLowerCase());
     if (kids.length) { infoBox('Classe con sottoclassi', `Prima togli l'ereditarietà da ${kids.map((k) => k.name).join(', ')}: ereditano da ${c.name}.`); return; }
@@ -909,7 +999,7 @@
     }));
   }
   function deleteAttr(c, i) {
-    const a = c.attributes[i]; if (!a) return;
+    const a = c.attributes[i]; if (!a || roGuard(c)) return;
     mutate(() => { c.attributes.splice(i, 1); st.usel = { cls: c.id, kind: 'class' }; });
     toast(`Attributo ${a.name} eliminato (Ctrl+Z per annullare)`);
   }
@@ -939,9 +1029,18 @@
     const c = box && M.classById(st.prog, box.dataset.cls);
     const B = (label, fn, cls, key) => h('button', { type: 'button', class: cls || '', onclick: () => { closePop(); fn(); } }, h('span', null, label), key ? h('kbd', null, key) : null);
     let menuBox;
-    if (!c) {
+    const modEl = e.target.closest('.umod');
+    if (modEl && !c) {
+      const mn = modEl.dataset.module;
+      menuBox = h('div', { class: 'ctxmenu' }, h('div', { class: 'pophead' }, 'Modulo ' + mn), B('Aggiorna il modulo', () => updateModule(mn)), h('hr'), B('Rimuovi il modulo', () => removeModule(mn), 'danger'));
+    } else if (!c) {
       const pt = svgPoint(e);
-      menuBox = h('div', { class: 'ctxmenu' }, B('Nuova classe…', () => classDialog(null, pt), '', 'N'));
+      menuBox = h('div', { class: 'ctxmenu' }, B('Nuova classe…', () => classDialog(null, pt), '', 'N'), B('Importa un modulo…', moduleDialog, '', 'Ctrl+I'));
+    } else if (c.module) {
+      const f = row && row.dataset.kind === 'method' ? st.prog.functions.find((x) => x.id === row.dataset.fid) : null;
+      menuBox = h('div', { class: 'ctxmenu' }, h('div', { class: 'pophead' }, `${M.classTitle(c)} · modulo ${c.module.name}`),
+        f ? B('Apri il diagramma di flusso', () => openMethod(f.id), '', 'Invio') : null,
+        B('Aggiorna il modulo', () => updateModule(c.module.name)), h('hr'), B('Rimuovi il modulo', () => removeModule(c.module.name), 'danger'));
     } else if (row && row.dataset.kind === 'method') {
       const f = st.prog.functions.find((x) => x.id === row.dataset.fid);
       menuBox = h('div', { class: 'ctxmenu' },
@@ -989,7 +1088,7 @@
     const a = st.prog.attrs;
     const n = field({ key: 'pname', label: 'Nome del programma', type: 'plain' }, a.name);
     const au = field({ key: 'pauth', label: 'Autori', type: 'plain' }, a.authors);
-    const ab = field({ key: 'pabout', label: 'Descrizione', type: 'textarea' }, a.about);
+    const ab = field({ key: 'pabout', label: 'Descrizione', type: 'textarea', hint: 'Se il programma viene usato come modulo, è la descrizione mostrata quando lo si importa' }, a.about);
     openModal({ title: 'Proprietà del programma', body: h('div', { class: 'fields' }, n, au, ab), okText: 'Salva', onOk: () => {
       if (isRunning()) return 'Ferma il programma prima di modificarlo';
       mutate(() => {
@@ -1009,6 +1108,8 @@
     chart.addEventListener('click', (e) => {
       if (suppressClick) { suppressClick = false; return; }
       if (isUml()) {
+        const mt = e.target.closest('.umodtog');
+        if (mt) { toggleModule(mt.dataset.module); return; }
         const add = e.target.closest('.uadd');
         if (add) {
           const c = M.classById(st.prog, add.closest('.ubox').dataset.cls);
@@ -1029,7 +1130,10 @@
     });
     chart.addEventListener('dblclick', (e) => {
       if (isUml()) {
-        if (e.target.closest('.uadd')) return;
+        if (e.target.closest('.uadd') || e.target.closest('.umodtog')) return;
+        const mc = e.target.closest('.umodc');
+        if (mc) { toggleModule(mc.dataset.module); return; }
+        if (e.target.closest('.umod')) return; // riquadro di un modulo: niente nuova classe
         const row = e.target.closest('.urow'), box = e.target.closest('.ubox');
         if (row && row.dataset.kind === 'method') { openMethod(row.dataset.fid); return; }
         if (isRunning()) { toast('Ferma il programma per modificare il diagramma', 'warn'); return; }
@@ -1058,11 +1162,14 @@
     });
     chart.addEventListener('pointerdown', (e) => {
       if (isUml()) {
-        // le classi si spostano trascinandole
-        if (e.button !== 0 || isRunning() || e.target.closest('.uadd')) return;
-        const box = e.target.closest('.ubox'); if (!box) return;
-        const c = M.classById(st.prog, box.dataset.cls);
-        udrag = { c, x: e.clientX, y: e.clientY, ox: c.x, oy: c.y, on: false, raf: 0 };
+        // le classi si spostano trascinandole; un modulo (riquadro o etichetta) si sposta con tutte le sue classi
+        if (e.button !== 0 || isRunning() || e.target.closest('.uadd') || e.target.closest('.umodtog')) return;
+        const box = e.target.closest('.ubox'), mod = !box && e.target.closest('.umod');
+        let cs;
+        if (box) cs = [M.classById(st.prog, box.dataset.cls)];
+        else if (mod) { const m = M.modulesOf(st.prog).find((x) => x.name === mod.dataset.module); cs = m ? m.classes : []; }
+        if (!cs || !cs.length) return;
+        udrag = { items: cs.map((c) => ({ c, ox: c.x || 0, oy: c.y || 0 })), mod: mod ? mod.dataset.module : null, x: e.clientX, y: e.clientY, on: false, raf: 0 };
         return;
       }
       if (e.button !== 0 || isRunning() || e.target.closest('.ctoggle')) return;
@@ -1076,11 +1183,14 @@
           udrag.on = true;
           st.undo.push(snapshot()); if (st.undo.length > 150) st.undo.shift(); st.redo = [];
           document.body.classList.add('udragging');
-          st.usel = { cls: udrag.c.id, kind: 'class' };
+          st.usel = udrag.mod ? null : { cls: udrag.items[0].c.id, kind: 'class' };
         }
         if (udrag.on) {
-          udrag.c.x = Math.max(10, Math.round((udrag.ox + dx) / 10) * 10);
-          udrag.c.y = Math.max(10, Math.round((udrag.oy + dy) / 10) * 10);
+          // passo di 10 e mai oltre il bordo in alto o a sinistra (le classi di un modulo restano allineate tra loro)
+          const it = udrag.items;
+          const mx = Math.max(Math.round(dx / 10) * 10, 10 - Math.min(...it.map((i) => i.ox)));
+          const my = Math.max(Math.round(dy / 10) * 10, 10 - Math.min(...it.map((i) => i.oy)));
+          for (const i of it) { i.c.x = it.length > 1 ? i.ox + mx : Math.max(10, Math.round((i.ox + dx) / 10) * 10); i.c.y = it.length > 1 ? i.oy + my : Math.max(10, Math.round((i.oy + dy) / 10) * 10); }
           if (!udrag.raf) udrag.raf = requestAnimationFrame(() => { if (udrag) udrag.raf = 0; render(); });
         }
         return;
@@ -1547,7 +1657,7 @@
           h('div', { class: 'det-wrap' }, h('div', { class: 'det-inner', ...(ind(depth + 1) || {}) },
             h('button', { class: 'avlink', type: 'button', tabindex: st.varsOpen.has(okey) ? '0' : '-1', title: 'Apri una finestra con i valori dell\'array', onclick: openArr }, 'visualizza i valori')))));
         const car = makeCaret(okey, label, (open) => { detail.classList.toggle('open', open); detail.querySelector('.avlink').tabIndex = open ? 0 : -1; });
-        tb.append(h('tr', { class: 'arr' + (changed ? ' changed' : '') }, h('td', ind(depth), car.el, label, ...tags, icon), h('td', null, `${E.typeName(c.type)}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`)));
+        tb.append(h('tr', { class: 'arr' + (changed ? ' changed' : '') }, h('td', ind(depth), car.el, label, ...tags, icon), h('td', null, `${E.typeName(cellT(c))}[${dims.join(' × ')}]`), h('td', { class: 'muted' }, `${n} elementi`)));
         tb.append(detail);
         return;
       }
@@ -1560,7 +1670,7 @@
         const loop = seen.has(obj);
         const rows = [];
         const car = loop ? null : makeCaret(okey, label, () => renderVars());
-        tb.append(h('tr', { class: 'objrow' + (changed ? ' changed' : '') }, h('td', ind(depth), car ? car.el : h('span', { class: 'caret-sp' }), label, ...tags), h('td', null, E.typeName(c.type)), h('td', null, fmt(v, key), loop ? h('span', { class: 'muted small' }, ' ↺ già sopra') : null)));
+        tb.append(h('tr', { class: 'objrow' + (changed ? ' changed' : '') }, h('td', ind(depth), car ? car.el : h('span', { class: 'caret-sp' }), label, ...tags), h('td', null, E.typeName(cellT(c))), h('td', null, fmt(v, key), loop ? h('span', { class: 'muted small' }, ' ↺ già sopra') : null)));
         if (car && car.isOpen && depth < 6) {
           const s2 = new Set(seen); s2.add(obj);
           for (const fc of obj.fields.values()) addCell(fc, fc.name, depth + 1, path + '.' + fc.name, s2);
@@ -1568,7 +1678,7 @@
         }
         return;
       }
-      tb.append(h('tr', { class: changed ? 'changed' : '' }, h('td', ind(depth), depth || (v && v.t === 'Object') ? h('span', { class: 'caret-sp' }) : null, label, ...tags), h('td', null, E.typeName(c.type)), h('td', null, fmt(c.value))));
+      tb.append(h('tr', { class: changed ? 'changed' : '' }, h('td', ind(depth), depth || (v && v.t === 'Object') ? h('span', { class: 'caret-sp' }) : null, label, ...tags), h('td', null, E.typeName(cellT(c))), h('td', null, fmt(c.value))));
     };
     if (frame.self) addCell({ name: 'this', type: frame.self.cls.name, value: E.V.obj(frame.self) }, 'this', 0, 'this', new Set(), h('span', { class: 'ptag', title: 'l\'oggetto su cui lavora il metodo' }, 'oggetto'));
     for (const c of frame.vars.values()) addCell(c, c.name, 0, c.name, new Set());
@@ -1950,6 +2060,310 @@
     wrap.scrollLeft = (wrap.scrollWidth - wrap.clientWidth) / 2;
   }
   function openFile() { $('#fileInput').click(); }
+
+  /* ------------------------------ Moduli --------------------------------
+     Un modulo è un programma .fprg. Se ha delle classi, le classi si copiano nel programma;
+     se ha solo funzioni, si copiano le funzioni (e il programma resta nella sua vista).
+     In entrambi i casi restano in sola lettura, segnate con il nome del modulo e da dove
+     viene; il Main del modulo serve solo per provarlo e non si importa.
+     src: "lib:argomento/Nome" (raccolta ufficiale), "url:indirizzo", "file:nome.fprg"
+     Le raccolte di moduli sono cartelle GitHub: ogni sottocartella è un argomento
+     (strutture_dati -> «Strutture dati») e contiene i file .fprg dei moduli. */
+  const OFFICIAL_SRC = 'https://github.com/nicvac/flowlab/tree/main/moduli';
+  const isMainClsOf = (c) => !!c && c === M.mainClass(st.prog);
+  const topicTitle = (t) => { const x = String(t || '').replace(/[_-]+/g, ' ').trim(); return x ? x[0].toUpperCase() + x.slice(1) : 'Altri moduli'; };
+  /* la classe è usata come tipo da qualche parte nel programma? */
+  function classUsed(c) {
+    const lo = c.name.toLowerCase();
+    const uses = (t) => { const g = E.splitType(t); return g.base.toLowerCase() === lo || g.args.some(uses); };
+    for (const k of st.prog.classes) if (k !== c && k.attributes.some((a) => uses(a.type))) return true;
+    for (const f of st.prog.functions) {
+      if (f.cls === c.id) continue;
+      if (f.params.some((p) => uses(p.type)) || M.rets(f).some((r) => uses(r.type))) return true;
+      let u = false; M.walk(f.body, (x) => { if ((x.kind === 'declare' || x.kind === 'const') && uses(x.type)) u = true; }); if (u) return true;
+    }
+    return false;
+  }
+  /* la funzione è chiamata da qualche parte nel programma (fuori dal suo modulo)? */
+  function funcUsed(fn) {
+    const re = new RegExp(`(^|[^\\w.])${fn.name}\\s*\\(`, 'i');
+    let u = false;
+    for (const f of st.prog.functions) if (!f.module) M.walk(f.body, (x) => { for (const k of ['expression', 'variable', 'start', 'end']) if (typeof x[k] === 'string' && re.test(x[k])) u = true; });
+    return u;
+  }
+  /* cosa importare da un modulo: le classi (tranne quella del Main, se ha solo il Main)
+     oppure, se il modulo ha solo funzioni, le funzioni tranne il Main */
+  function moduleParts(text, src) {
+    const mp = M.parseFprg(text);
+    const name = (mp.attrs.name || String(src).replace(/^.*[/:]/, '').replace(/\.fprg$/i, '') || 'Modulo').trim();
+    const about = mp.attrs.about || '';
+    if (!M.hasClasses(mp) || M.isTrivialOO(mp)) {
+      const funcs = mp.functions.slice(1);
+      if (!funcs.length) throw new Error('il modulo non contiene funzioni da importare (il suo Main serve solo per provarlo)');
+      return { kind: 'functions', mp, name, about, classes: [], funcs };
+    }
+    const mc = M.mainClass(mp);
+    const classes = mp.classes.filter((c) => c !== mc || c.attributes.length || M.membersOf(mp, c).length > 1);
+    if (!classes.length) throw new Error('il modulo non contiene classi da importare (il suo Main serve solo per provarlo)');
+    const funcs = mp.functions.filter((f) => f !== mp.functions[0] && classes.some((c) => c.id === f.cls));
+    return { kind: 'classes', mp, name, about, classes, funcs };
+  }
+  const cloneFunc = (f) => { const nf = JSON.parse(JSON.stringify(f)); nf.id = M.newId(); nf.body.forEach((s) => M.reId(s)); return nf; };
+  /* copia il modulo nel programma (sostituisce una versione già importata) */
+  function importModule(text, src) {
+    if (isRunning()) { toast('Ferma il programma per importare un modulo', 'warn'); return false; }
+    let parts;
+    try { parts = moduleParts(text, src); } catch (e) { toast('Impossibile importare il modulo: ' + e.message, 'error'); return false; }
+    const { name, classes, funcs } = parts;
+    const same = (m) => m && m.name.toLowerCase() === name.toLowerCase();
+    const oldC = (st.prog.classes || []).filter((c) => same(c.module));
+    const oldF = st.prog.functions.filter((f) => same(M.moduleOfFunc(st.prog, f)));
+    const fail = (msg) => { infoBox('Modulo non importato', msg); return false; };
+    if (parts.kind === 'functions') {
+      // funzioni: stessi nomi non ammessi (nella vista Funzioni non c'è l'overloading)
+      for (const f of funcs) {
+        if (E.BUILTINS[f.name.toLowerCase()] || f.name.toLowerCase() === 'main') return fail(`Il modulo ${name} contiene la funzione ${f.name}, che ha il nome di una funzione integrata.`);
+        const clash = st.prog.functions.find((g) => !oldF.includes(g) && g.name.toLowerCase() === f.name.toLowerCase() && (!M.hasClasses(st.prog) || g.cls === M.mainClass(st.prog).id));
+        if (clash) return fail(`Il modulo ${name} contiene la funzione ${f.name}, ma nel programma c'è già una funzione con questo nome${clash.module ? ` (dal modulo ${clash.module.name})` : ''}. Rinomina la tua funzione e riprova.`);
+      }
+      mutate(() => {
+        const cur = func();
+        st.prog.functions = st.prog.functions.filter((f) => !oldF.includes(f));
+        const home = M.hasClasses(st.prog) ? M.mainClass(st.prog) : null;
+        for (const f of funcs) {
+          const nf = cloneFunc(f);
+          if (home) Object.assign(nf, { cls: home.id, static: true, visibility: 'public', ctor: false });
+          else { delete nf.cls; delete nf.visibility; delete nf.static; delete nf.ctor; delete nf.abstract; }
+          nf.module = { name, src };
+          st.prog.functions.push(nf);
+        }
+        st.fi = Math.max(0, st.prog.functions.indexOf(cur));
+      });
+      toast(oldF.length ? `Modulo ${name} aggiornato` : `Modulo ${name} importato: ${funcs.map((f) => f.name + '()').join(', ')}`, 'ok');
+      return true;
+    }
+    if (!M.hasClasses(st.prog)) M.wrapInClass(st.prog);
+    for (const c of classes) {
+      const clash = st.prog.classes.find((k) => !oldC.includes(k) && k.name.toLowerCase() === c.name.toLowerCase());
+      if (clash) return fail(`Il modulo ${name} contiene la classe ${c.name}, ma nel programma c'è già una classe con questo nome${clash.module ? ` (dal modulo ${clash.module.name})` : ''}. Rinomina la tua classe e riprova.`);
+    }
+    mutate(() => {
+      // posizione: quella della versione precedente, altrimenti a destra delle classi esistenti
+      const prevPos = new Map(oldC.map((c) => [c.name.toLowerCase(), { x: c.x, y: c.y }]));
+      st.prog.functions = st.prog.functions.filter((f) => !oldC.some((c) => c.id === f.cls));
+      st.prog.classes = st.prog.classes.filter((c) => !oldC.includes(c));
+      const boxes = [...UmlLib.layout(st.prog).values()];
+      const right = boxes.length ? Math.max(...boxes.map((b) => b.x + b.w)) + 90 : 40;
+      const minX = Math.min(...classes.map((c) => c.x || 0)), minY = Math.min(...classes.map((c) => c.y || 0));
+      const idMap = new Map();
+      for (const c of classes) {
+        const p = prevPos.get(c.name.toLowerCase());
+        const nc = M.makeClass(c.name, { parent: c.parent, abstract: c.abstract, tparams: (c.tparams || []).slice(), attributes: c.attributes.map((a) => ({ ...a })), module: { name, src },
+          x: p ? p.x : right + (c.x || 0) - minX, y: p ? p.y : 60 + (c.y || 0) - minY });
+        idMap.set(c.id, nc.id);
+        st.prog.classes.push(nc);
+      }
+      for (const f of funcs) { const nf = cloneFunc(f); nf.cls = idMap.get(f.cls); st.prog.functions.push(nf); }
+      st.view = 'objects'; store.set('view', 'objects');
+      st.uml = true; st.usel = null;
+    });
+    toast(oldC.length ? `Modulo ${name} aggiornato` : `Modulo ${name} importato: ${classes.map((c) => M.classTitle(c)).join(', ')}`, 'ok');
+    return true;
+  }
+  /* ---- raccolte di moduli su GitHub ---- */
+  /* "https://github.com/utente/repo/tree/ramo/cartella" -> { owner, repo, ref, path } */
+  function ghSource(u) {
+    const m = String(u).trim().match(/^https?:\/\/github\.com\/([^/\s]+)\/([^/\s#?]+)(?:\/tree\/([^/\s]+)(?:\/([^?#\s]*))?)?\/?(?:[?#].*)?$/i);
+    if (!m) return null;
+    return { owner: m[1], repo: m[2].replace(/\.git$/i, ''), ref: m[3] || 'HEAD', path: (m[4] || '').replace(/\/+$/, '') };
+  }
+  const srcLabel = (u) => { const g = ghSource(u); return g ? `${g.owner}/${g.repo}${g.path ? '/' + g.path : ''}` : u; };
+  function getSources() { const v = store.get('moduleSources'); return Array.isArray(v) ? v : [OFFICIAL_SRC]; }
+  function setSources(list) { store.set('moduleSources', list); }
+  /* moduli di una raccolta: [{ topic, id, text, src }] (con cache di qualche ora) */
+  const SRC_TTL = 6 * 3600 * 1000;
+  async function loadSource(u, force) {
+    const key = 'modsrc:' + u;
+    const cached = store.get(key);
+    if (!force && cached && Date.now() - cached.time < SRC_TTL) return { list: cached.list, cached: true };
+    const g = ghSource(u);
+    if (!g) throw new Error('non è il link di una cartella GitHub');
+    const r = await fetch(`https://api.github.com/repos/${g.owner}/${g.repo}/git/trees/${encodeURIComponent(g.ref)}?recursive=1`, { cache: 'no-cache' });
+    if (r.status === 403 || r.status === 429) throw new Error('GitHub ha raggiunto il limite di richieste: riprova tra qualche minuto');
+    if (!r.ok) throw new Error(r.status === 404 ? 'repository o cartella non trovati (deve essere pubblico)' : `GitHub risponde ${r.status}`);
+    const tree = (await r.json()).tree || [];
+    const pre = g.path ? g.path + '/' : '';
+    const files = tree.filter((x) => x.type === 'blob' && /\.fprg$/i.test(x.path) && x.path.startsWith(pre)).map((x) => x.path);
+    const official = u === OFFICIAL_SRC;
+    const list = [];
+    await Promise.all(files.map(async (p) => {
+      const rel = p.slice(pre.length).split('/');
+      const id = rel.pop().replace(/\.fprg$/i, ''), topic = rel.length ? rel[rel.length - 1] : '';
+      const raw = `https://raw.githubusercontent.com/${g.owner}/${g.repo}/${g.ref}/${p.split('/').map(encodeURIComponent).join('/')}`;
+      try { const t = await fetch(raw, { cache: 'no-cache' }); if (t.ok) list.push({ topic, id, text: await t.text(), src: official ? `lib:${topic}/${id}` : 'url:' + raw }); } catch (e) { /* file non leggibile: si salta */ }
+    }));
+    list.sort((a, b) => (a.topic + '/' + a.id).localeCompare(b.topic + '/' + b.id));
+    if (list.length) store.set(key, { time: Date.now(), list });
+    return { list, cached: false };
+  }
+  /* copia inclusa in FlowLab della raccolta ufficiale (per quando GitHub non risponde) */
+  const builtinList = () => ModuleLibrary.map((m) => ({ topic: m.topic, id: m.id, text: m.text, src: `lib:${m.topic}/${m.id}` }));
+  async function libText(src) {
+    const m = /^lib:(.+)\/([^/]+)$/.exec(src || ''); if (!m) return null;
+    const g = ghSource(OFFICIAL_SRC);
+    try {
+      const r = await fetch(`https://raw.githubusercontent.com/${g.owner}/${g.repo}/${g.ref}/${g.path}/${m[1]}/${m[2]}.fprg`, { cache: 'no-cache' });
+      if (r.ok) return await r.text();
+    } catch (e) { /* si usa la copia inclusa */ }
+    const b = ModuleLibrary.find((x) => x.topic === m[1] && x.id === m[2]);
+    return b ? b.text : null;
+  }
+  async function fetchText(u) {
+    const abs = new URL(rawUrl(u), location.href).href;
+    const r = await fetch(abs, { cache: 'no-cache' });
+    if (!r.ok) throw new Error(`il server risponde ${r.status}`);
+    return { text: await r.text(), abs };
+  }
+  async function importModuleUrl(u) {
+    try { const { text, abs } = await fetchText(u); return importModule(text, 'url:' + abs); }
+    catch (e) { toast(`Impossibile scaricare il modulo: ${e instanceof TypeError ? 'il sito non risponde oppure non permette di leggere il file (CORS)' : e.message}`, 'error'); return false; }
+  }
+  function importModuleFile() {
+    const inp = h('input', { type: 'file', accept: '.fprg,.xml', hidden: true });
+    inp.addEventListener('change', () => {
+      const file = inp.files[0]; if (!file) return;
+      const r = new FileReader(); r.onload = () => importModule(r.result, 'file:' + file.name); r.readAsText(file);
+    });
+    document.body.append(inp); inp.click(); setTimeout(() => inp.remove(), 60000);
+  }
+  async function updateModule(name) {
+    const m = M.modulesOf(st.prog).find((x) => x.name === name); if (!m) return;
+    const src = m.src || '';
+    if (src.startsWith('lib:')) { const t = await libText(src); if (t) importModule(t, src); else toast(`Il modulo ${name} non è più nella raccolta ufficiale`, 'error'); return; }
+    if (src.startsWith('url:')) { importModuleUrl(src.slice(4)); return; }
+    toast(`Scegli di nuovo il file del modulo ${name}`); importModuleFile();
+  }
+  function removeModule(name) {
+    if (isRunning()) { toast('Ferma il programma per rimuovere un modulo', 'warn'); return; }
+    const m = M.modulesOf(st.prog).find((x) => x.name === name); if (!m) return;
+    const used = m.classes.some((c) => classUsed(c)) || m.funcs.some((f) => !m.classes.length && funcUsed(f));
+    const what = m.classes.length ? `Le classi ${m.classes.map((c) => M.classTitle(c)).join(', ')}` : `Le funzioni ${m.funcs.map((f) => f.name + '()').join(', ')}`;
+    confirmBox('Rimuovere il modulo?', `${what} del modulo ${name} verranno tolte dal programma.${used ? ' Il programma le usa: andrà corretto.' : ''}`, 'Rimuovi', () => mutate(() => {
+      const cur = func();
+      st.prog.functions = st.prog.functions.filter((f) => !m.funcs.includes(f) && !m.classes.some((c) => c.id === f.cls));
+      if (m.classes.length) st.prog.classes = st.prog.classes.filter((k) => !m.classes.includes(k));
+      st.fi = Math.max(0, st.prog.functions.indexOf(cur)); st.usel = null;
+      if (m.classes.length) st.uml = true;
+    }));
+  }
+  /* dialogo: moduli nel programma, raccolte di moduli (GitHub) per argomento, altri moduli */
+  function moduleDialog() {
+    if (isRunning()) { toast('Ferma il programma per importare un modulo', 'warn'); return; }
+    let closeIt = null;
+    const done = (fn) => () => { if (closeIt) closeIt(); fn(); };
+    const have = () => new Map(M.modulesOf(st.prog).map((m) => [m.name.toLowerCase(), m]));
+    // moduli già importati
+    const mine = h('div', { class: 'modlib' });
+    const drawMine = () => {
+      mine.innerHTML = '';
+      const ms = M.modulesOf(st.prog);
+      if (!ms.length) return;
+      mine.append(h('h3', { class: 'modh' }, 'Moduli nel programma'));
+      for (const m of ms) mine.append(h('div', { class: 'modrow' },
+        h('div', { class: 'modinfo' }, h('strong', null, m.name), h('span', { class: 'modcls mono' }, m.classes.length ? m.classes.map((c) => M.classTitle(c)).join(' · ') : m.funcs.map((f) => f.name + '()').join(' · ')), h('span', { class: 'muted small' }, m.src.startsWith('lib:') ? 'raccolta ufficiale' : m.src.replace(/^(url|file):/, ''))),
+        h('button', { class: 'btn small', type: 'button', onclick: done(() => updateModule(m.name)) }, 'Aggiorna'),
+        h('button', { class: 'btn small danger', type: 'button', onclick: done(() => removeModule(m.name)) }, 'Rimuovi')));
+    };
+    drawMine();
+    // raccolte
+    const coll = h('div', { class: 'modlib' });
+    const row = (m) => {
+      let info; try { info = moduleParts(m.text, m.src); } catch (e) { return null; }
+      const got = have().get(info.name.toLowerCase());
+      return h('div', { class: 'modrow' },
+        h('div', { class: 'modinfo' }, h('strong', null, info.name), h('span', { class: 'modcls mono' }, info.kind === 'classes' ? info.classes.map((c) => M.classTitle(c)).join(' · ') : info.funcs.map((f) => f.name + '()').join(' · ')), info.about ? h('p', { class: 'muted small' }, info.about) : null),
+        h('button', { class: 'btn small' + (got ? '' : ' primary'), type: 'button', onclick: done(() => importModule(m.text, m.src)) }, got ? 'Aggiorna' : 'Importa'));
+    };
+    // albero espandibile: raccolta › argomento › moduli (lo stato aperto/chiuso si ricorda)
+    // la prima volta la raccolta ufficiale è già aperta, così si vede subito com'è fatta
+    const openSet = new Set(store.get('modOpen', [OFFICIAL_SRC]));
+    // barra cliccabile: freccia grande, icona, titolo, conteggio
+    const ICON_CHEV = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+    const ICON_REPO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v6l2-1.5L12 10V4"/><path d="M8 14h8M8 17h6"/></svg>';
+    const ICON_DIR = '<svg class="dir-closed" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><svg class="dir-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v2"/><path d="M3 18V6M3 18l2.6-7.2a1 1 0 0 1 .9-.8H21a.7.7 0 0 1 .7.9L19.4 18a1 1 0 0 1-1 .8H3"/></svg>';
+    const count = (n) => `${n} ${n === 1 ? 'modulo' : 'moduli'}`;
+    const keepOpen = (key, det) => det.addEventListener('toggle', () => { if (det.open) openSet.add(key); else openSet.delete(key); store.set('modOpen', [...openSet]); });
+    const fill = (box, list, u) => {
+      box.innerHTML = '';
+      if (!list.length) { box.append(h('p', { class: 'muted small' }, 'Nessun file .fprg in questa cartella.')); return; }
+      const topics = new Map();
+      for (const m of list) { if (!topics.has(m.topic)) topics.set(m.topic, []); topics.get(m.topic).push(m); }
+      for (const [topic, ms] of topics) {
+        const key = u + '|' + topic;
+        const rows = ms.map(row).filter(Boolean);
+        const det = h('details', { class: 'modtopic', open: openSet.has(key) },
+          h('summary', { class: 'modbar', title: 'Clic per mostrare o nascondere i moduli' }, h('span', { class: 'modchev', html: ICON_CHEV }), h('span', { class: 'modicon', html: ICON_DIR }),
+            h('span', { class: 'modtname' }, topicTitle(topic)), h('span', { class: 'modlist muted small' }, ms.map((m) => m.id).join(', ')), h('span', { class: 'grow' }), h('span', { class: 'modcount' }, count(rows.length))),
+          h('div', { class: 'modtopicbody' }, ...rows));
+        keepOpen(key, det);
+        box.append(det);
+      }
+    };
+    const drawSources = (force) => {
+      coll.innerHTML = '';
+      const srcs = getSources();
+      for (const u of srcs) {
+        const box = h('div', { class: 'modsrcbody' });
+        const badge = h('span', { class: 'modcount', hidden: true });
+        const showCount = () => { const n = box.querySelectorAll('.modrow').length; badge.textContent = count(n); badge.hidden = !n; };
+        const official = u === OFFICIAL_SRC;
+        let loaded = false;
+        const load = (again) => {
+          loaded = true;
+          box.innerHTML = ''; box.append(h('p', { class: 'muted small' }, 'Caricamento da GitHub…'));
+          const fallback = (why) => { fill(box, builtinList(), u); box.prepend(h('p', { class: 'muted small' }, `${why}: questa è la copia della raccolta inclusa in FlowLab.`)); showCount(); };
+          loadSource(u, again).then(({ list }) => { if (!list.length && official) fallback('La raccolta su GitHub è vuota o non ancora pubblicata'); else { fill(box, list, u); showCount(); } }).catch((e) => {
+            if (official) fallback(`GitHub non risponde (${e.message})`);
+            else { box.innerHTML = ''; box.append(h('p', { class: 'formerr' }, `Impossibile leggere la raccolta: ${e.message}`)); }
+          });
+        };
+        // i pulsanti nel titolo non devono aprire o chiudere la raccolta
+        const btn = (title, text, fn) => h('button', { class: 'iconbtn', type: 'button', title, 'aria-label': title, onclick: (e) => { e.preventDefault(); e.stopPropagation(); fn(); } }, text);
+        const det = h('details', { class: 'modsrc', open: openSet.has(u) },
+          h('summary', { class: 'modsrchead modbar', title: 'Clic per mostrare o nascondere gli argomenti della raccolta' }, h('span', { class: 'modchev', html: ICON_CHEV }), h('span', { class: 'modicon', html: ICON_REPO }),
+            h('span', { class: 'modsname mono' }, srcLabel(u)), official ? h('span', { class: 'ptag' }, 'ufficiale') : null, h('span', { class: 'grow' }), badge,
+            btn('Ricarica da GitHub', '↻', () => { det.open = true; load(true); }),
+            btn('Togli questa raccolta', '✕', () => { setSources(getSources().filter((x) => x !== u)); drawSources(); })),
+          box);
+        keepOpen(u, det);
+        det.addEventListener('toggle', () => { if (det.open && !loaded) load(force); });
+        coll.append(det);
+        if (det.open) load(force);
+      }
+      if (!srcs.includes(OFFICIAL_SRC)) coll.append(h('button', { class: 'btn small', type: 'button', onclick: () => { setSources([OFFICIAL_SRC, ...getSources()]); drawSources(); } }, 'Rimetti la raccolta ufficiale'));
+    };
+    drawSources(false);
+    const srcW = field({ key: 'msrc', label: 'Aggiungi una raccolta di moduli (link a una cartella GitHub)', type: 'plain', placeholder: 'https://github.com/utente/repo/tree/main/moduli', hint: 'Ogni sottocartella è un argomento (es. strutture_dati) e contiene i file .fprg dei moduli. Il repository deve essere pubblico.' }, '');
+    const addSrc = () => {
+      const u = srcW._get().trim(); if (!u) { toast('Incolla il link della cartella GitHub', 'warn'); return; }
+      if (!ghSource(u)) { toast('Serve il link di una cartella GitHub, es. https://github.com/utente/repo/tree/main/moduli', 'warn'); return; }
+      if (!getSources().includes(u)) setSources([...getSources(), u]);
+      srcW._input.value = ''; drawSources();
+    };
+    const addRow = h('div', { class: 'modadd' }, srcW, h('button', { class: 'btn small', type: 'button', onclick: addSrc }, 'Aggiungi la raccolta'));
+    srcW._input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); addSrc(); } });
+    // altri moduli
+    const urlW = field({ key: 'murl', label: 'Oppure da un indirizzo web', type: 'plain', placeholder: 'https://github.com/…/Modulo.fprg' }, '');
+    const other = h('div', { class: 'modother' },
+      h('button', { class: 'btn small', type: 'button', onclick: done(importModuleFile) }, 'Importa da un file .fprg…'),
+      urlW, h('button', { class: 'btn small', type: 'button', onclick: () => { const u = urlW._get().trim(); if (!u) { toast('Scrivi l\'indirizzo del modulo', 'warn'); return; } if (closeIt) closeIt(); importModuleUrl(u); } }, 'Importa dall\'indirizzo'));
+    const body = h('div', { class: 'fields' },
+      h('p', { class: 'help' }, 'Un modulo è un programma .fprg da riusare: le sue classi o funzioni si importano nel tuo programma in sola lettura (il Main del modulo serve solo per provarlo). La descrizione di un modulo è quella scritta in Proprietà del programma.'),
+      mine, h('h3', { class: 'modh' }, 'Raccolte di moduli'), coll, addRow, h('h3', { class: 'modh' }, 'Altri moduli'), other);
+    closeIt = openModal({ title: 'Importa un modulo', body, wide: true, okText: 'Chiudi', noCancel: true }).close;
+    setTimeout(() => { const mb = body.closest('.modal-body'); if (mb) mb.scrollTop = 0; const b = body.querySelector('.modsrc > summary'); if (b) b.focus(); }, 20);
+  }
+
   function readFileObj(file) {
     if (!file) return;
     const r = new FileReader();
@@ -1980,7 +2394,7 @@
     const svg = (source || $('#chart svg')).cloneNode(true);
     svg.setAttribute('width', svg.dataset.w); svg.setAttribute('height', svg.dataset.h);
     svg.insertBefore(h('style', null, css || exportCss()), svg.firstChild);
-    $$('.hits, .ctoggle, .uadd, .uhit', svg).forEach((x) => x.remove());
+    $$('.hits, .ctoggle, .uadd, .uhit, .umodtog', svg).forEach((x) => x.remove());
     return new XMLSerializer().serializeToString(svg);
   }
 
@@ -2185,6 +2599,8 @@
       { label: 'Copia XML negli appunti', key: 'Ctrl+Maiusc+X', do: copyXml },
       { label: 'Copia il link a questo programma', key: 'Ctrl+Maiusc+L', do: copyShareLink },
       '-',
+      { label: 'Importa un modulo…', key: 'Ctrl+I', do: moduleDialog },
+      '-',
       { label: 'Esporta diagramma SVG', key: 'Ctrl+Maiusc+G', do: exportSvgFile },
       { label: 'Esporta diagramma PNG', key: 'Ctrl+Maiusc+E', do: exportPng },
       { label: 'Esporta tutto il progetto in PDF', key: 'Ctrl+P', do: exportPdf },
@@ -2213,6 +2629,8 @@
       ['this.x', 'Attributo dell\'oggetto su cui si sta lavorando (in un metodo basta x)'], ['Punto.contatore   Punto.crea()', 'Attributo o metodo statico: si usa con il nome della classe'],
       ['super(nome)', 'Blocco Chiamata, primo blocco del costruttore: esegue il costruttore della classe madre'], ['super.descrivi()', 'Esegue la versione del metodo della classe madre'],
       ['null   p = null', 'Nessun oggetto: si può assegnare e confrontare'], ['«abstract»', 'Classe astratta: non si creano oggetti. Un metodo astratto non ha corpo e lo definiscono le sottoclassi'], ['+  -  #', 'Accesso pubblico, privato, protetto (controllato durante l\'esecuzione)'],
+      ['ArrayList<T>', 'Classe generica: T è un tipo scelto da chi la usa (parametri di tipo nel dialogo della classe)'], ['l ← new ArrayList<Intero>()', 'Oggetto di una classe generica; con new ArrayList<>() il tipo si ricava dalla variabile'],
+      ['a ← b', 'Con due array: a diventa lo stesso array di b (come in Java)'], ['Ctrl+I', 'Importa un modulo: classi già pronte (ArrayList, Stack, Queue, ordinamento…) da riusare in sola lettura'],
     ].map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
     const keys = SHORTCUTS.flatMap(([g, rows]) => [h('tr', { class: 'kgroup' }, h('td', { colspan: 2 }, g)), ...rows.map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)))]);
     const body = h('div', { class: 'help-body' },
@@ -2229,7 +2647,7 @@
   const SHORTCUTS = [
     ['File', [
       ['Ctrl+Alt+N', 'Nuovo programma'], ['Ctrl+O', 'Apri file .fprg'], ['Ctrl+Maiusc+O', 'Apri da indirizzo web'], ['Ctrl+S', 'Salva come .fprg'],
-      ['Ctrl+Maiusc+X', 'Copia XML negli appunti'], ['Ctrl+Maiusc+L', 'Copia il link al programma'],
+      ['Ctrl+Maiusc+X', 'Copia XML negli appunti'], ['Ctrl+Maiusc+L', 'Copia il link al programma'], ['Ctrl+I', 'Importa un modulo'],
       ['Ctrl+Maiusc+G  ·  Ctrl+Maiusc+E', 'Esporta il diagramma in SVG, in PNG'], ['Ctrl+P', 'Esporta tutto il progetto in PDF'], ['Ctrl+Maiusc+S', 'Scarica il codice sorgente'],
       ['Alt+Invio', 'Proprietà del programma'],
     ]],
@@ -2251,6 +2669,7 @@
       ['Maiusc+Canc', 'Elimina la funzione o il metodo'], ['Pag↑  Pag↓', 'Diagramma precedente, successivo'], ['U', 'Diagramma delle classi'],
       ['A  M  C', 'Diagramma delle classi: nuovo attributo, metodo, costruttore della classe selezionata'],
       ['Invio  ·  Canc', 'Diagramma delle classi: apri o modifica, elimina l\'elemento selezionato'],
+      ['Maiusc+M', 'Diagramma delle classi: condensa o espandi i moduli importati'],
     ]],
     ['Vista', [
       ['Ctrl+Alt+F  ·  Ctrl+Alt+O', 'Vista Funzioni, vista Oggetti'], ['Alt+1  2  3  4', 'Schede Console, Variabili, Codice, File'], ['Ctrl+B', 'Mostra o nascondi il pannello'],
@@ -2304,6 +2723,7 @@
         if (shift && k === 'g') return go(exportSvgFile);
         if (shift && k === 'x' && !typing) return go(copyXml);
         if (shift && k === 'l') return go(copyShareLink);
+        if (!shift && k === 'i') return go(moduleDialog);
       }
       if (alt && !ctrl && e.key === 'Enter') return go(() => { if (!busy()) editProgram(); });
       if (typing) return;
@@ -2336,6 +2756,7 @@
       if (isUml()) {
         if ((e.key === 'Delete' || e.key === 'Backspace') && st.usel && !isRunning()) { e.preventDefault(); deleteUmlSel(); }
         else if (e.key === 'Enter' && st.usel) { e.preventDefault(); if (st.usel.kind === 'method') openMethod(st.usel.fid); else if (!isRunning()) editUmlSel(); }
+        else if (lab === 'Maiusc+M') { e.preventDefault(); toggleAllModules(); }
         else if (lab === 'A' || lab === 'M' || lab === 'C') {
           e.preventDefault();
           if (busy()) return;
@@ -2363,6 +2784,8 @@
   function bindUi() {
     $('#fileBtn').addEventListener('click', (e) => fileMenu(e.currentTarget));
     $('#exBtn').addEventListener('click', (e) => examplesMenu(e.currentTarget));
+    $('#modBtn').addEventListener('click', moduleDialog);
+    $('#modToggle').addEventListener('click', toggleAllModules);
     $('#openBtn').addEventListener('click', openFile);
     $('#saveBtn').addEventListener('click', saveFile);
     $('#undoBtn').addEventListener('click', undo);

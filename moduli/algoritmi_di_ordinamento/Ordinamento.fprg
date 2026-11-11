@@ -1,0 +1,92 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Ordinamento"/>
+        <attribute name="authors" value="FlowLab"/>
+        <attribute name="about" value="Funzioni per ordinare in modo crescente un array di interi: bubbleSort(v, n), selectionSort(v, n) e insertionSort(v, n), dove n è il numero di elementi da ordinare."/>
+        <attribute name="saved" value="2026-11-11 08:00:00 AM"/>
+        <attribute name="created" value="Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Prova del modulo: questo Main non viene importato"/>
+            <declare name="v" type="Integer" array="True" size="8"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <for variable="i" start="0" end="7" direction="inc" step="1">
+                <assign variable="v[i]" expression="(i * 37 + 11) mod 50"/>
+            </for>
+            <call expression="insertionSort(v, 8)"/>
+            <for variable="i" start="0" end="7" direction="inc" step="1">
+                <output expression="v[i] &amp; &quot; &quot;" newline="False"/>
+            </for>
+            <output expression="&quot;&quot;" newline="True"/>
+        </body>
+    </function>
+    <function name="bubbleSort" type="None" variable="">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Confronta gli elementi vicini e li scambia: a ogni passata il più grande va in fondo"/>
+            <declare name="i, j, t" type="Integer" array="False" size=""/>
+            <for variable="i" start="0" end="n - 2" direction="inc" step="1">
+                <for variable="j" start="0" end="n - 2 - i" direction="inc" step="1">
+                    <if expression="v[j] &gt; v[j + 1]">
+                        <then>
+                            <assign variable="t" expression="v[j]"/>
+                            <assign variable="v[j]" expression="v[j + 1]"/>
+                            <assign variable="v[j + 1]" expression="t"/>
+                        </then>
+                        <else/>
+                    </if>
+                </for>
+            </for>
+        </body>
+    </function>
+    <function name="selectionSort" type="None" variable="">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Cerca il minimo della parte non ordinata e lo mette al suo posto"/>
+            <declare name="i, j, m, t" type="Integer" array="False" size=""/>
+            <for variable="i" start="0" end="n - 2" direction="inc" step="1">
+                <assign variable="m" expression="i"/>
+                <for variable="j" start="i + 1" end="n - 1" direction="inc" step="1">
+                    <if expression="v[j] &lt; v[m]">
+                        <then>
+                            <assign variable="m" expression="j"/>
+                        </then>
+                        <else/>
+                    </if>
+                </for>
+                <assign variable="t" expression="v[i]"/>
+                <assign variable="v[i]" expression="v[m]"/>
+                <assign variable="v[m]" expression="t"/>
+            </for>
+        </body>
+    </function>
+    <function name="insertionSort" type="None" variable="">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Inserisce ogni elemento al suo posto nella parte già ordinata, spostando avanti quelli più grandi"/>
+            <declare name="i, j, x" type="Integer" array="False" size=""/>
+            <for variable="i" start="1" end="n - 1" direction="inc" step="1">
+                <assign variable="x" expression="v[i]"/>
+                <assign variable="j" expression="i - 1"/>
+                <while expression="j &gt;= 0 and v[j] &gt; x">
+                    <assign variable="v[j + 1]" expression="v[j]"/>
+                    <assign variable="j" expression="j - 1"/>
+                </while>
+                <assign variable="v[j + 1]" expression="x"/>
+            </for>
+        </body>
+    </function>
+</flowgorithm>

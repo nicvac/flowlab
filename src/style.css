@@ -426,8 +426,8 @@ table.vars .avlink:hover, table.vars .avlink:focus-visible { color: var(--ink); 
 .chip { border: 1px solid var(--line); background: var(--paper); border-radius: 20px; padding: 1px 9px; font: 12px var(--font-mono); cursor: pointer; color: var(--muted); }
 .chip:hover { border-color: var(--accent); color: var(--ink); }
 .params { display: flex; flex-direction: column; gap: 6px; }
-.prow { display: grid; grid-template-columns: minmax(0, 1fr) 110px auto 30px 30px; gap: 6px; align-items: center; }
-.prow.rrow { grid-template-columns: minmax(0, 1fr) 110px 30px 30px; }
+.prow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(110px, max-content) auto 30px 30px; gap: 6px; align-items: center; }
+.prow.rrow { grid-template-columns: minmax(0, 1fr) minmax(110px, max-content) 30px 30px; }
 .prow input[type=text], .prow select { border: 1px solid var(--line); background: var(--paper); border-radius: 7px; padding: 6px 8px; min-width: 0; height: 34px; }
 .confirm { margin: 4px 0 8px; }
 .help-body { font-size: 13.5px; }
@@ -446,14 +446,14 @@ body.filedrag #canvasWrap { outline: 3px dashed var(--accent); outline-offset: -
 
 /* ---------- Schermi stretti ---------- */
 @media (max-width: 1700px) {
-  .funcbox label, .speed .lbl, #exBtn .lbl { display: none; }
+  .funcbox label, .speed .lbl, #exBtn .lbl, #modBtn .lbl { display: none; }
   select.fsel { max-width: 170px; }
 }
 @media (max-width: 1480px) {
   .funcbox label, .speed .lbl { display: none; }
   .bar { gap: 4px; }
   select.fsel { max-width: 150px; }
-  #exBtn .lbl { display: none; }
+  #exBtn .lbl, #modBtn .lbl { display: none; }
 }
 @media (max-width: 1400px) {
   #stepBtn .lbl { display: none; }
@@ -463,7 +463,7 @@ body.filedrag #canvasWrap { outline: 3px dashed var(--accent); outline-offset: -
   .viewsw .vbtn { padding: 0 7px; }
 }
 @media (max-width: 1120px) {
-  #stepBtn .lbl, #exBtn .lbl, #fileBtn .lbl { display: none; }
+  #stepBtn .lbl, #exBtn .lbl, #modBtn .lbl, #fileBtn .lbl { display: none; }
 }
 @media (max-width: 900px) {
   body { overflow: auto; }
@@ -600,3 +600,85 @@ svg.wlinks { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1
 .insbtn .ikey { font: 600 10px var(--font-mono); color: var(--faint); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; line-height: 1.5; }
 .insbtn:hover .ikey, .insbtn:focus-visible .ikey { color: var(--ink); border-color: var(--accent); }
 table.ref tr.kgroup td { font-weight: 700; color: var(--muted); padding-top: 12px; border-bottom-color: var(--line); }
+
+/* ---------- Moduli importati ---------- */
+.uml .umodbg { fill: var(--f-inc); fill-opacity: 0.45; stroke: var(--s-inc); stroke-width: 1.4; stroke-dasharray: 7 4; }
+.uml .umodtab { fill: var(--s-inc); }
+.uml .umodlab { font: 700 11.5px var(--font-ui); fill: var(--paper); letter-spacing: 0.02em; pointer-events: none; }
+.uml .ubox.mod .ubg { stroke: var(--s-inc); }
+.uml .ubox.mod .uheadbg { fill: var(--f-inc); }
+.uml .ubox.mod .usep { stroke: var(--s-inc); }
+body.readonly .chart .ins { display: none; }
+body.readonly #crumbWhere { color: var(--s-inc); }
+.modlib { display: flex; flex-direction: column; gap: 4px; }
+.modtopic h3, .modh { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 12px 0 4px; }
+.modrow { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--paper); }
+.modrow + .modrow { margin-top: 6px; }
+.modinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.modinfo p { margin: 2px 0 0; }
+.modcls { font-size: 12px; color: var(--s-call); }
+.modother { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.modother .field { align-self: stretch; }
+
+.modsrc { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 10px; background: var(--panel); }
+.modsrc + .modsrc { margin-top: 10px; }
+.modsrchead { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.modsrchead .grow { flex: 1; }
+.modtopic h4 { font-size: 12.5px; margin: 10px 0 6px; color: var(--ink); }
+.modadd { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; margin-top: 10px; }
+.modadd .field { align-self: stretch; }
+#crumbBar button[hidden] { display: none; }
+
+/* scelta del tipo: i parametri delle classi generiche sotto, rientrati (ad albero) */
+.tpick { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+.tpargs { display: flex; flex-direction: column; gap: 5px; margin-left: 8px; padding-left: 10px; border-left: 2px solid var(--line); }
+.tpargs:empty { display: none; }
+.tparg { display: flex; align-items: flex-start; gap: 6px; }
+.tpname { font: 600 12px var(--font-mono); color: var(--s-call); min-width: 18px; padding-top: 9px; }
+.field .tpick select, .prow .tpick select { width: auto; min-width: 110px; max-width: 100%; }
+.prow .tpick select { min-height: 34px; }
+.prow .tpname { padding-top: 8px; }
+.prow { align-items: start; }
+
+/* moduli condensati e pulsante per condensarli/espanderli */
+.uml .umodtog { cursor: pointer; }
+.uml .umodtog circle { fill: var(--paper); stroke: var(--paper); }
+.uml .umodtog path { stroke: var(--s-inc); stroke-width: 1.8; stroke-linecap: round; fill: none; }
+.uml .umodtog:hover circle { fill: var(--accent); stroke: var(--accent); }
+.uml .umodtog:hover path { stroke: var(--accent-ink); }
+.uml .umodc { cursor: pointer; }
+.uml .umodc .umodbg { fill-opacity: 0.9; }
+.uml .umodcls { font: 700 13px var(--font-ui); fill: var(--sh-text); pointer-events: none; }
+#modBar { position: absolute; left: 12px; top: 10px; z-index: 3; }
+#modBar[hidden] { display: none; }
+#modBar button { height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font-weight: 700; font-size: 12.5px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+#modBar button:hover { border-color: var(--accent); color: var(--accent); }
+body.umlmode.hasmods #canvasWrap { padding-top: 34px; }
+
+/* libreria dei moduli ad albero: ogni livello è una barra cliccabile con freccia, icona e conteggio */
+details.modsrc { border: 0; padding: 0; background: none; }
+details.modsrc + details.modsrc { margin-top: 10px; }
+.modbar { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); cursor: pointer; list-style: none; user-select: none; transition: background .12s, border-color .12s; }
+.modbar::-webkit-details-marker { display: none; }
+.modbar:hover, .modbar:focus-visible { background: var(--accent-soft); border-color: var(--accent); outline: none; }
+details[open] > .modbar { border-color: var(--accent); }
+.modchev { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); }
+.modchev svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .15s; }
+details[open] > .modbar .modchev svg { transform: rotate(90deg); }
+.modicon { flex: none; display: grid; place-items: center; color: var(--s-call); }
+.modicon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.modicon .dir-open, details[open] > .modbar .modicon .dir-closed { display: none; }
+details[open] > .modbar .modicon .dir-open { display: block; }
+.modsname { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.modtname { font-size: 14px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.modlist { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+details[open] > .modbar .modlist { display: none; }
+.modcount { flex: none; font: 700 11.5px var(--font-ui); color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 9px; }
+.modcount[hidden] { display: none; }
+.modbar .grow { flex: 1; }
+.modsrcbody, .modtopicbody { margin: 8px 0 4px 22px; padding-left: 12px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+details.modtopic { margin: 0; }
+details.modtopic > .modbar { padding: 6px 10px; }
+.uml .umod { cursor: grab; }
+body.udragging .uml .umod { cursor: grabbing; }
+.modtopicbody > .modrow + .modrow { margin-top: 0; }

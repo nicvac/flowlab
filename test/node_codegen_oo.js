@@ -7,6 +7,15 @@ const progs = { punto: P.punto(), forme: P.forme(), lista: P.lista(), vettore: P
 global.ExprLib = require('../src/expr.js'); global.ModelLib = M;
 const Examples = eval(fs.readFileSync(path.join(__dirname, '../src/examples.js'), 'utf8') + ';Examples');
 for (const ex of Examples.list) { const p = ex.make(); if (M.hasClasses(p)) progs['es_' + ex.id] = p; }
+// moduli della libreria: classi generiche scritte nel codice (mod_) e, importate, classi native del linguaggio (nat_)
+const { MODULES } = require('../tools/moduli.js');
+for (const m of MODULES) {
+  progs['mod_' + m.id] = m.make();
+  const p = m.make();
+  if (M.hasClasses(p)) { const mc = M.mainClass(p); for (const c of p.classes) if (c !== mc) c.module = { name: m.id, src: `lib:${m.topic}/${m.id}` }; }
+  else for (const f of p.functions.slice(1)) f.module = { name: m.id, src: `lib:${m.topic}/${m.id}` };
+  progs['nat_' + m.id] = p;
+}
 const dir = 'test/out/oo'; fs.mkdirSync(dir, { recursive: true });
 function interp(prog) {
   let out = '';
@@ -15,14 +24,15 @@ function interp(prog) {
   return out;
 }
 const sh = (c, cwd) => { try { return cp.execSync(c, { cwd, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000 }).toString(); } catch (e) { return 'ERRORE: ' + (e.stderr || e.stdout || e.message).toString().slice(0, 1500); } };
-const only = process.argv[3];
+const only = process.argv[3], onlyProg = process.argv[4] ? new RegExp(process.argv[4]) : null;
 let bad = 0;
 for (const [name, prog] of Object.entries(progs)) {
+  if (onlyProg && !onlyProg.test(name)) continue;
   const want = interp(prog);
   for (const lang of Object.keys(C.LANGS)) {
     if (only && lang !== only) continue;
     const code = C.generate(prog, lang);
-    const main = M.mainClass(prog).name;
+    const main = M.hasClasses(prog) ? M.mainClass(prog).name : 'Main';
     const d = path.join(dir, name, lang); fs.mkdirSync(d, { recursive: true });
     const file = lang === 'java' ? main + '.java' : 'prog.' + C.LANGS[lang].ext;
     fs.writeFileSync(path.join(d, file), code);

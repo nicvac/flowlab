@@ -1,0 +1,102 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Stack"/>
+        <attribute name="authors" value="FlowLab"/>
+        <attribute name="about" value="Pila (LIFO) di elementi di tipo T, come java.util.Stack: l'ultimo elemento inserito con push è il primo tolto con pop. Usa un array che cresce quando è pieno."/>
+        <attribute name="saved" value="2026-11-11 08:00:00 AM"/>
+        <attribute name="created" value="Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx"/>
+    </attributes>
+    <flowlab-classes>
+        <class name="ProvaStack" parent="" x="40" y="360"/>
+        <class name="Stack" parent="" tparams="T" x="40" y="40">
+            <attribute name="elementi" type="T" array="True" size="10" visibility="private" static="False" init=""/>
+            <attribute name="quanti" type="Integer" array="False" size="" visibility="private" static="False" init="0"/>
+        </class>
+    </flowlab-classes>
+    <function name="Main" type="None" variable="" flowlab-class="ProvaStack" flowlab-visibility="public" flowlab-static="True">
+        <parameters/>
+        <body>
+            <comment text="Prova del modulo: questo Main non viene importato"/>
+            <declare name="pila" type="Stack&lt;String&gt;" array="False" size=""/>
+            <assign variable="pila" expression="new Stack&lt;String&gt;()"/>
+            <call expression="pila.push(&quot;primo&quot;)"/>
+            <call expression="pila.push(&quot;secondo&quot;)"/>
+            <call expression="pila.push(&quot;terzo&quot;)"/>
+            <output expression="&quot;In cima: &quot; &amp; pila.peek()" newline="True"/>
+            <while expression="not pila.isEmpty()">
+                <output expression="pila.pop()" newline="True"/>
+            </while>
+        </body>
+    </function>
+    <function name="Stack" type="None" variable="" flowlab-class="Stack" flowlab-visibility="public" flowlab-static="False" flowlab-ctor="True">
+        <parameters/>
+        <body>
+            <comment text="Pila vuota, come new Stack&lt;&gt;() in Java"/>
+        </body>
+    </function>
+    <function name="push" type="None" variable="" flowlab-class="Stack" flowlab-visibility="public" flowlab-static="False">
+        <parameters>
+            <parameter name="x" type="T" array="False"/>
+        </parameters>
+        <body>
+            <if expression="quanti = Size(elementi)">
+                <then>
+                    <call expression="cresci()"/>
+                </then>
+                <else/>
+            </if>
+            <assign variable="elementi[quanti]" expression="x"/>
+            <assign variable="quanti" expression="quanti + 1"/>
+        </body>
+    </function>
+    <function name="pop" type="T" variable="cima" flowlab-class="Stack" flowlab-visibility="public" flowlab-static="False">
+        <parameters/>
+        <body>
+            <declare name="cima" type="T" array="False" size=""/>
+            <assign variable="quanti" expression="quanti - 1"/>
+            <assign variable="cima" expression="elementi[quanti]"/>
+        </body>
+    </function>
+    <function name="peek" type="T" variable="cima" flowlab-class="Stack" flowlab-visibility="public" flowlab-static="False">
+        <parameters/>
+        <body>
+            <declare name="cima" type="T" array="False" size=""/>
+            <assign variable="cima" expression="elementi[quanti - 1]"/>
+        </body>
+    </function>
+    <function name="size" type="Integer" variable="n" flowlab-class="Stack" flowlab-visibility="public" flowlab-static="False">
+        <parameters/>
+        <body>
+            <declare name="n" type="Integer" array="False" size=""/>
+            <assign variable="n" expression="quanti"/>
+        </body>
+    </function>
+    <function name="isEmpty" type="Boolean" variable="vuota" flowlab-class="Stack" flowlab-visibility="public" flowlab-static="False">
+        <parameters/>
+        <body>
+            <declare name="vuota" type="Boolean" array="False" size=""/>
+            <assign variable="vuota" expression="quanti = 0"/>
+        </body>
+    </function>
+    <function name="cresci" type="None" variable="" flowlab-class="Stack" flowlab-visibility="private" flowlab-static="False">
+        <parameters/>
+        <body>
+            <comment text="Array pieno: se ne crea uno più grande (una volta e mezza, come ArrayList di Java) e si copiano gli elementi"/>
+            <declare name="nuovaCapacita, k" type="Integer" array="False" size=""/>
+            <assign variable="nuovaCapacita" expression="Size(elementi) + Int(Size(elementi) / 2)"/>
+            <if expression="nuovaCapacita &lt; Size(elementi) + 1">
+                <then>
+                    <assign variable="nuovaCapacita" expression="Size(elementi) + 1"/>
+                </then>
+                <else/>
+            </if>
+            <declare name="nuovo" type="T" array="True" size="nuovaCapacita"/>
+            <for variable="k" start="0" end="quanti - 1" direction="inc" step="1">
+                <assign variable="nuovo[k]" expression="elementi[k]"/>
+            </for>
+            <assign variable="elementi" expression="nuovo"/>
+        </body>
+    </function>
+</flowgorithm>

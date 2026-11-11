@@ -30,6 +30,7 @@
     <label class="speed" for="speed"><span class="lbl">Velocità</span> <input id="speed" type="range" min="0" max="3" step="1" value="2"><output id="speedVal">Media</output></label>
     <span class="grow"></span>
     <button class="tb" id="exBtn" type="button" aria-haspopup="menu" title="Programmi di esempio"><svg viewBox="0 0 24 24"><path d="M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z"/></svg><span class="lbl">Esempi</span></button>
+    <button class="tb" id="modBtn" type="button" title="Importa un modulo: classi e funzioni già pronte da riusare (Ctrl+I)"><svg viewBox="0 0 24 24"><path d="M9 3h6v3a2 2 0 1 0 4 0V5h2v6h-3a2 2 0 1 0 0 4h3v6h-6v-3a2 2 0 1 0-4 0v3H5v-6h1a2 2 0 1 0 0-4H5V5h4z"/></svg><span class="lbl">Importa modulo</span></button>
     <button class="tb icon" id="helpBtn" type="button" title="Guida rapida (F1)" aria-label="Guida rapida"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.6V14M12 17.5v.01"/></svg></button>
     <button class="tb icon" id="themeBtn" type="button" title="Tema chiaro/scuro" aria-label="Cambia tema"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor"/></svg></button>
   </header>
@@ -37,7 +38,7 @@
   <main class="work">
     <section class="canvas-col" aria-label="Diagramma di flusso">
       <div id="canvasWrap"><div id="chart"></div></div>
-      <div id="crumbBar" hidden><button type="button" id="backUml" title="Torna al diagramma delle classi (U)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>Diagramma delle classi</button><span id="crumbWhere"></span></div>
+      <div id="modBar" hidden><button type="button" id="modToggle">⊟ Condensa i moduli</button></div><div id="crumbBar" hidden><button type="button" id="backUml" title="Torna al diagramma delle classi (U)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>Diagramma delle classi</button><span id="crumbWhere"></span></div>
       <div class="zoombar" role="group" aria-label="Zoom">
         <button type="button" id="zoomOut" aria-label="Riduci">−</button>
         <button type="button" id="zoomVal" title="Torna al 100% (Ctrl+0)">100%</button>

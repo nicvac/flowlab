@@ -78,7 +78,7 @@ await cancel();
 const dl = page.waitForEvent('download', { timeout: 15000 });
 await key('Control+Shift+s'); ok('Ctrl+Maiusc+S: scarica il codice ' + (await dl).suggestedFilename(), true);
 await page.click('#fileBtn'); await wait(80);
-ok('menu File: ' + (await page.locator('#pop kbd').count()) + ' tasti', (await page.locator('#pop kbd').count()) === 11);
+ok('menu File: ' + (await page.locator('#pop kbd').count()) + ' tasti', (await page.locator('#pop kbd').count()) === 12);
 await cancel();
 console.log('ERR', errs);
 await browser.close();

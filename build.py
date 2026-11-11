@@ -2,6 +2,13 @@ import re, pathlib
 src = pathlib.Path('src')
 js_files = ['expr.js','model.js','interp.js','codegen.js','render.js','uml.js','pdf.js','examples.js','arrayview.js','app.js']
 js = '\n'.join((src/f).read_text() for f in js_files)
+# libreria dei moduli (moduli/<argomento>/<Nome>.fprg) inclusa nella pagina: serve quando GitHub non è raggiungibile
+import json
+mod_root = pathlib.Path('moduli')
+title = lambda t: (lambda x: x[:1].upper() + x[1:])(re.sub(r'[_-]+', ' ', t).strip())
+lib = [{'topic': t.name, 'topicTitle': title(t.name), 'id': f.stem, 'text': f.read_text()}
+       for t in sorted(p for p in mod_root.iterdir() if p.is_dir()) for f in sorted(t.glob('*.fprg'))]
+js = 'const ModuleLibrary = ' + json.dumps(lib, ensure_ascii=False).replace('</', '<\\/') + ';\n' + js
 assert '</script' not in js
 css = (src/'style.css').read_text()
 body = (src/'body.html').read_text()

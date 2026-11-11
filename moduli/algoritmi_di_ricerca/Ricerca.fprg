@@ -1,0 +1,77 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Ricerca"/>
+        <attribute name="authors" value="FlowLab"/>
+        <attribute name="about" value="Funzioni per cercare un valore x in un array di interi: ricercaLineare(v, n, x) per un array qualsiasi e ricercaBinaria(v, n, x) per un array ordinato. Restituiscono la posizione del valore oppure -1 se non c'è."/>
+        <attribute name="saved" value="2026-11-11 08:00:00 AM"/>
+        <attribute name="created" value="Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx"/>
+        <attribute name="edited" value="Zmxvd2xhYjttb2R1bGk7MjAyNi0xMS0xMSAwODowMDowMCBBTTsx"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Prova del modulo: questo Main non viene importato"/>
+            <declare name="v" type="Integer" array="True" size="6"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <for variable="i" start="0" end="5" direction="inc" step="1">
+                <assign variable="v[i]" expression="i * 3"/>
+            </for>
+            <output expression="&quot;15 è in posizione &quot; &amp; ricercaBinaria(v, 6, 15) &amp; &quot;, 7 in posizione &quot; &amp; ricercaLineare(v, 6, 7)" newline="True"/>
+        </body>
+    </function>
+    <function name="ricercaLineare" type="Integer" variable="posizione">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+            <parameter name="x" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Controlla gli elementi uno dopo l'altro"/>
+            <declare name="posizione, i" type="Integer" array="False" size=""/>
+            <assign variable="posizione" expression="-1"/>
+            <assign variable="i" expression="0"/>
+            <while expression="posizione = -1 and i &lt; n">
+                <if expression="v[i] = x">
+                    <then>
+                        <assign variable="posizione" expression="i"/>
+                    </then>
+                    <else/>
+                </if>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="ricercaBinaria" type="Integer" variable="posizione">
+        <parameters>
+            <parameter name="v" type="Integer" array="True"/>
+            <parameter name="n" type="Integer" array="False"/>
+            <parameter name="x" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="L'array deve essere ordinato: a ogni passo si dimezza la parte in cui cercare"/>
+            <declare name="posizione, inizio, fine, medio" type="Integer" array="False" size=""/>
+            <assign variable="posizione" expression="-1"/>
+            <assign variable="inizio" expression="0"/>
+            <assign variable="fine" expression="n - 1"/>
+            <while expression="posizione = -1 and inizio &lt;= fine">
+                <assign variable="medio" expression="Int((inizio + fine) / 2)"/>
+                <if expression="v[medio] = x">
+                    <then>
+                        <assign variable="posizione" expression="medio"/>
+                    </then>
+                    <else>
+                        <if expression="v[medio] &lt; x">
+                            <then>
+                                <assign variable="inizio" expression="medio + 1"/>
+                            </then>
+                            <else>
+                                <assign variable="fine" expression="medio - 1"/>
+                            </else>
+                        </if>
+                    </else>
+                </if>
+            </while>
+        </body>
+    </function>
+</flowgorithm>

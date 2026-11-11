@@ -63,9 +63,26 @@ function setRets(f, list) {
 const VISIBILITY = { public: '+', private: '-', protected: '#' };
 const VIS_IT = { public: 'pubblico', private: 'privato', protected: 'protetto' };
 
+/* tparams: parametri di tipo di una classe generica (es. ["T"]);
+   module: { name, src } se la classe viene da un modulo importato (sola lettura) */
 function makeClass(name, props) {
-  return Object.assign({ id: newId(), name, parent: '', abstract: false, attributes: [], x: 40, y: 40 }, props || {});
+  return Object.assign({ id: newId(), name, parent: '', abstract: false, tparams: [], module: null, attributes: [], x: 40, y: 40 }, props || {});
 }
+/* "T" è un parametro di tipo della classe c? */
+const isTypeParam = (c, t) => !!c && (c.tparams || []).some((p) => p.toLowerCase() === String(t).toLowerCase());
+/* nome della classe con i parametri di tipo: ArrayList<T> */
+const classTitle = (c) => (c.tparams && c.tparams.length ? `${c.name}<${c.tparams.join(', ')}>` : c.name);
+/* moduli importati: { name, src, classes: [...], funcs: [...] } (un modulo di sole funzioni ha solo funcs) */
+function modulesOf(prog) {
+  const out = new Map();
+  const get = (m) => { if (!out.has(m.name)) out.set(m.name, { name: m.name, src: m.src, classes: [], funcs: [] }); return out.get(m.name); };
+  for (const c of prog.classes || []) if (c.module) get(c.module).classes.push(c);
+  for (const f of prog.functions) if (f.module) get(f.module).funcs.push(f);
+  return [...out.values()];
+}
+/* modulo da cui viene una funzione o un metodo (null se è del programma) */
+const moduleOfFunc = (prog, f) => { if (!f) return null; if (f.module) return f.module; const c = classOf(prog, f); return c && c.module ? c.module : null; };
+const isModuleFunc = (prog, f) => !!moduleOfFunc(prog, f);
 function makeAttribute(props) {
   return Object.assign({ name: '', type: 'Integer', array: false, size: '', visibility: 'private', static: false, init: '' }, props || {});
 }
@@ -105,7 +122,7 @@ function isTrivialOO(prog) {
   if (!hasClasses(prog)) return true;
   if (prog.classes.length !== 1) return false;
   const c = prog.classes[0];
-  if (c.parent || c.abstract || c.attributes.length) return false;
+  if (c.parent || c.abstract || c.attributes.length || (c.tparams || []).length || c.module) return false;
   return prog.functions.every((f) => f.cls === c.id && f.static && !f.ctor && (f.visibility || 'public') === 'public');
 }
 /* come sopra e con il nome predefinito: si salva nel formato standard senza perdere nulla */
@@ -169,14 +186,17 @@ function parseFprg(text) {
   const root = doc.documentElement;
   if (root.nodeName.toLowerCase() !== FPRG_ROOT) throw new Error('Il file non è un programma .fprg valido (elemento principale mancante).');
   _skipped = [];
-  _classNames = new Map();
+  _classNames = new Map(); _typeParams = new Set();
   const prog = { attrs: { name: '', authors: '', about: '', created: '', edited: '' }, functions: [], fileversion: root.getAttribute('fileversion') || '' };
   // estensione FlowLab: classi (lette per prime, perché i tipi le possono nominare)
   const clsEl = [...root.children].find((el) => el.nodeName.toLowerCase() === 'flowlab-classes');
   if (clsEl) {
     prog.classes = [];
     for (const c of clsEl.children) if (c.nodeName.toLowerCase() === 'class') {
-      const cl = makeClass((c.getAttribute('name') || '').trim(), { parent: (c.getAttribute('parent') || '').trim(), abstract: boolAttr(c.getAttribute('abstract'), false), x: +c.getAttribute('x') || 40, y: +c.getAttribute('y') || 40 });
+      const tp = (c.getAttribute('tparams') || '').split(',').map((x) => x.trim()).filter((x) => /^[A-Za-z_]\w*$/.test(x));
+      const mod = (c.getAttribute('module') || '').trim();
+      const cl = makeClass((c.getAttribute('name') || '').trim(), { parent: (c.getAttribute('parent') || '').trim(), abstract: boolAttr(c.getAttribute('abstract'), false), tparams: tp, module: mod ? { name: mod, src: c.getAttribute('module-src') || '' } : null, x: +c.getAttribute('x') || 40, y: +c.getAttribute('y') || 40 });
+      for (const t of tp) _typeParams.add(t.toLowerCase());
       if (!cl.name || _classNames.has(cl.name.toLowerCase())) continue;
       _classNames.set(cl.name.toLowerCase(), cl.name);
       prog.classes.push(cl);
@@ -205,6 +225,9 @@ function parseFprg(text) {
         type: normType(el.getAttribute('type'), true),
         variable: el.getAttribute('variable') || '',
       });
+      // funzione importata da un modulo di sole funzioni
+      const fm = (el.getAttribute('flowlab-module') || '').trim();
+      if (fm) f.module = { name: fm, src: el.getAttribute('flowlab-module-src') || '' };
       if (prog.classes) {
         const owner = classByName(prog, el.getAttribute('flowlab-class'));
         if (owner) f.cls = owner.id;
@@ -246,12 +269,18 @@ function parseFprg(text) {
     Object.assign(prog.functions[0], { static: true, ctor: false, visibility: 'public' });
   }
   _classNames = new Map();
+  _typeParams = new Set();
   return prog;
 }
 
 let _classNames = new Map();
+let _typeParams = new Set(); // parametri di tipo delle classi generiche del file
 function normType(t, allowNone) {
-  const l = String(t || '').toLowerCase();
+  // tipo generico: ArrayList<Integer>, Coppia<T, String>
+  const g = _MX.splitType(t);
+  if (g.args.length) return _MX.joinType(normType(g.base), g.args.map((a) => normType(a)));
+  const l = String(t || '').trim().toLowerCase();
+  if (_typeParams.has(l)) return String(t).trim();
   if (_classNames.has(l)) return _classNames.get(l);
   if (l === 'integer') return 'Integer';
   if (l === 'real') return 'Real';
@@ -374,7 +403,9 @@ function serializeFprg(prog) {
   if (oo) {
     L.push('    <flowlab-classes>');
     for (const c of prog.classes) {
-      const head = `        <class name="${xmlEsc(c.name)}" parent="${xmlEsc(c.parent || '')}"${c.abstract ? ' abstract="True"' : ''} x="${Math.round(c.x || 0)}" y="${Math.round(c.y || 0)}"`;
+      const gen = (c.tparams || []).length ? ` tparams="${xmlEsc(c.tparams.join(','))}"` : '';
+      const mod = c.module ? ` module="${xmlEsc(c.module.name)}" module-src="${xmlEsc(c.module.src || '')}"` : '';
+      const head = `        <class name="${xmlEsc(c.name)}" parent="${xmlEsc(c.parent || '')}"${c.abstract ? ' abstract="True"' : ''}${gen}${mod} x="${Math.round(c.x || 0)}" y="${Math.round(c.y || 0)}"`;
       if (!c.attributes.length) { L.push(head + '/>'); continue; }
       L.push(head + '>');
       for (const a of c.attributes) L.push(`            <attribute name="${xmlEsc(a.name)}" type="${xmlEsc(a.type)}" array="${TF(a.array)}" size="${xmlEsc(a.array ? fgExpr(a.size) : '')}" visibility="${a.visibility}" static="${TF(a.static)}" init="${xmlEsc(fgExpr(a.init || ''))}"/>`);
@@ -385,12 +416,13 @@ function serializeFprg(prog) {
   for (const f of prog.functions) {
     const rs = rets(f);
     let extra = rs.length > 1 ? ` flowlab-returns="${xmlEsc(rs.map((r) => r.name + ':' + r.type).join(';'))}"` : '';
+    if (f.module) extra += ` flowlab-module="${xmlEsc(f.module.name)}" flowlab-module-src="${xmlEsc(f.module.src || '')}"`;
     if (oo) { const c = classOf(prog, f); extra += ` flowlab-class="${xmlEsc(c ? c.name : '')}" flowlab-visibility="${f.visibility || 'public'}" flowlab-static="${TF(!!f.static)}"${f.ctor ? ' flowlab-ctor="True"' : ''}${f.abstract ? ' flowlab-abstract="True"' : ''}`; }
     // per le procedure si conserva il nome eventualmente lasciato in "variable" da altri editor
-    L.push(`    <function name="${xmlEsc(f.name)}" type="${rs.length ? rs[0].type : 'None'}" variable="${xmlEsc(rs.length ? rs[0].name : (f.variable || ''))}"${extra}>`);
+    L.push(`    <function name="${xmlEsc(f.name)}" type="${xmlEsc(rs.length ? rs[0].type : 'None')}" variable="${xmlEsc(rs.length ? rs[0].name : (f.variable || ''))}"${extra}>`);
     if (f.params.length) {
       L.push('        <parameters>');
-      for (const p of f.params) L.push(`            <parameter name="${xmlEsc(p.name)}" type="${p.type}" array="${TF(p.array)}"${p.array && (p.dims || 1) > 1 ? ` flowlab-dims="${p.dims}"` : ''}/>`);
+      for (const p of f.params) L.push(`            <parameter name="${xmlEsc(p.name)}" type="${xmlEsc(p.type)}" array="${TF(p.array)}"${p.array && (p.dims || 1) > 1 ? ` flowlab-dims="${p.dims}"` : ''}/>`);
       L.push('        </parameters>');
     } else L.push('        <parameters/>');
     if (f.body.length) {
@@ -457,6 +489,8 @@ function writeBlock(stmts, L, depth) {
 function extendedFeatures(prog) {
   const out = new Set();
   if (!isPlainOO(prog)) out.add('classi e oggetti');
+  if ((prog.classes || []).some((c) => (c.tparams || []).length)) out.add('classi generiche');
+  if ((prog.classes || []).some((c) => c.module) || prog.functions.some((f) => f.module)) out.add('moduli importati');
   for (const f of prog.functions) {
     if (rets(f).length > 1) out.add('funzioni con più valori restituiti');
     if (f.params.some((p) => p.array && (p.dims || 1) > 1)) out.add('array a più dimensioni');
@@ -488,5 +522,5 @@ function isIncomplete(s) {
   }
 }
 
-const ModelLib = { FPRG_ROOT, KINDS, VISIBILITY, VIS_IT, makeClass, makeAttribute, hasClasses, classById, classByName, classOf, mainClass, membersOf, chainOf, isSubclass, defaultClassName, wrapInClass, isTrivialOO, isPlainOO, missingAbstract, unwrapClasses, typeList, extendedFeatures, rets, setRets, fgExpr, newId, makeStmt, makeFunction, newProgram, cloneStmt, reId, walk, findStmt, parseFprg, serializeFprg, isIncomplete, normType };
+const ModelLib = { FPRG_ROOT, KINDS, VISIBILITY, VIS_IT, makeClass, isTypeParam, classTitle, modulesOf, isModuleFunc, moduleOfFunc, makeAttribute, hasClasses, classById, classByName, classOf, mainClass, membersOf, chainOf, isSubclass, defaultClassName, wrapInClass, isTrivialOO, isPlainOO, missingAbstract, unwrapClasses, typeList, extendedFeatures, rets, setRets, fgExpr, newId, makeStmt, makeFunction, newProgram, cloneStmt, reId, walk, findStmt, parseFprg, serializeFprg, isIncomplete, normType };
 if (typeof module !== 'undefined') module.exports = ModelLib;

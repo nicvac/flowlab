@@ -13,6 +13,83 @@ const _CM = (typeof module !== 'undefined') ? require('./model.js') : ModelLib;
 const P = { or: 1, and: 2, notLow: 3, rel: 4, add: 5, mul: 6, un: 7, pow: 8, atom: 10 };
 const REL = ['==', '!=', '<', '<=', '>', '>='];
 
+/* ------------------- Generici e classi native dei moduli -------------------
+   GEN si imposta a ogni generazione: le classi dei moduli della libreria che
+   hanno un equivalente nel linguaggio (native) non si scrivono nel codice, si
+   usano quelle del linguaggio; i parametri di tipo (T) restano tipi. */
+let GEN = { native: new Map(), skip: new Set(), tparams: new Set(), helpers: new Set() };
+const isTP = (t) => GEN.tparams.has(String(t).toLowerCase());
+const nativeOf = (base) => GEN.native.get(String(base).toLowerCase()) || null;
+const need = (h) => GEN.helpers.add(h);
+const Wp = (x) => (x.p < P.atom ? `(${x.s})` : x.s);
+/* *altra in C++ (l'oggetto puntato) */
+const deref = (a) => (/^[\w.>-]+$/.test(a) ? '*' + a : `*(${a})`);
+/* costruttore con un intero: capacità iniziale; con un oggetto: copia */
+const isCap = (ty) => ty[0] === 'Integer';
+const rel = (s) => ({ s, p: P.rel });
+/* per ogni modulo: tipo, costruttore e metodi nei vari linguaggi (o = oggetto, a = argomenti {s, p}) */
+const NATIVE = {
+  'strutture_dati/ArrayList': {
+    cls: 'ArrayList',
+    java: { type: (t) => `ArrayList<${t[0]}>`, ctor: (t, a) => `new ArrayList<>(${a})` },
+    python: { ctor: (t, a, ty) => (!a || isCap(ty) ? '[]' : `list(${a})`), m: {
+      add: (o, a) => (a.length === 2 ? `${o}.insert(${a[0].s}, ${a[1].s})` : `${o}.append(${a[0].s})`),
+      get: (o, a) => `${o}[${a[0].s}]`, set: (o, a) => `${o}[${a[0].s}] = ${a[1].s}`, remove: (o, a) => `${o}.pop(${a[0].s})`,
+      size: (o) => `len(${o})`, isEmpty: (o) => rel(`len(${o}) == 0`), clear: (o) => `${o}.clear()`,
+      indexOf: (o, a) => `(${o}.index(${Wp(a[0])}) if ${Wp(a[0])} in ${o} else -1)`, contains: (o, a) => rel(`${Wp(a[0])} in ${o}`) } },
+    cpp: { type: (t) => `vector<${t[0]}>*`, ctor: (t, a, ty) => `new vector<${t ? t[0] : 'int'}>(${!a || isCap(ty) ? '' : deref(a)})`, m: {
+      add: (o, a) => (a.length === 2 ? `${o}->insert(${o}->begin() + ${Wp(a[0])}, ${a[1].s})` : `${o}->push_back(${a[0].s})`),
+      get: (o, a) => `(*${o})[${a[0].s}]`, set: (o, a) => `(*${o})[${a[0].s}] = ${a[1].s}`, remove: (o, a) => { need('rimuoviIn'); return `rimuoviIn(${o}, ${a[0].s})`; },
+      size: (o) => ({ s: `(int) ${o}->size()`, p: P.un }), isEmpty: (o) => `${o}->empty()`, clear: (o) => `${o}->clear()`,
+      indexOf: (o, a) => { need('indiceDi'); return `indiceDi(${o}, ${a[0].s})`; }, contains: (o, a) => { need('indiceDi'); return rel(`indiceDi(${o}, ${a[0].s}) >= 0`); } } },
+    csharp: { type: (t) => `List<${t[0]}>`, ctor: (t, a) => `new List<${t ? t[0] : 'int'}>(${a})`, m: {
+      add: (o, a) => (a.length === 2 ? `${o}.Insert(${a[0].s}, ${a[1].s})` : `${o}.Add(${a[0].s})`),
+      get: (o, a) => `${o}[${a[0].s}]`, set: (o, a) => `${o}[${a[0].s}] = ${a[1].s}`, remove: (o, a) => { need('Aiuti'); return `Aiuti.RimuoviIn(${o}, ${a[0].s})`; },
+      size: (o) => `${o}.Count`, isEmpty: (o) => rel(`${o}.Count == 0`), clear: (o) => `${o}.Clear()`,
+      indexOf: (o, a) => `${o}.IndexOf(${a[0].s})`, contains: (o, a) => `${o}.Contains(${a[0].s})` } },
+    javascript: { ctor: (t, a, ty) => (!a || isCap(ty) ? '[]' : `[...${a}]`), m: {
+      add: (o, a) => (a.length === 2 ? `${o}.splice(${a[0].s}, 0, ${a[1].s})` : `${o}.push(${a[0].s})`),
+      get: (o, a) => `${o}[${a[0].s}]`, set: (o, a) => `${o}[${a[0].s}] = ${a[1].s}`, remove: (o, a) => `${o}.splice(${a[0].s}, 1)[0]`,
+      size: (o) => `${o}.length`, isEmpty: (o) => rel(`${o}.length === 0`), clear: (o) => `${o}.length = 0`,
+      indexOf: (o, a) => `${o}.indexOf(${a[0].s})`, contains: (o, a) => `${o}.includes(${a[0].s})` } },
+  },
+  'strutture_dati/Stack': {
+    cls: 'Stack',
+    java: { type: (t) => `Stack<${t[0]}>`, ctor: () => 'new Stack<>()' },
+    python: { ctor: () => '[]', m: { push: (o, a) => `${o}.append(${a[0].s})`, pop: (o) => `${o}.pop()`, peek: (o) => `${o}[-1]`, size: (o) => `len(${o})`, isEmpty: (o) => rel(`len(${o}) == 0`) } },
+    cpp: { type: (t) => { need('stack'); return `stack<${t[0]}>*`; }, ctor: (t) => { need('stack'); return `new stack<${t ? t[0] : 'int'}>()`; }, m: {
+      push: (o, a) => `${o}->push(${a[0].s})`, pop: (o) => { need('togliCima'); return `togliCima(${o})`; }, peek: (o) => `${o}->top()`,
+      size: (o) => ({ s: `(int) ${o}->size()`, p: P.un }), isEmpty: (o) => `${o}->empty()` } },
+    csharp: { type: (t) => `Stack<${t[0]}>`, ctor: (t) => `new Stack<${t ? t[0] : 'int'}>()`, m: { push: (o, a) => `${o}.Push(${a[0].s})`, pop: (o) => `${o}.Pop()`, peek: (o) => `${o}.Peek()`, size: (o) => `${o}.Count`, isEmpty: (o) => rel(`${o}.Count == 0`) } },
+    javascript: { ctor: () => '[]', m: { push: (o, a) => `${o}.push(${a[0].s})`, pop: (o) => `${o}.pop()`, peek: (o) => `${o}[${o}.length - 1]`, size: (o) => `${o}.length`, isEmpty: (o) => rel(`${o}.length === 0`) } },
+  },
+  'strutture_dati/Queue': {
+    cls: 'Queue',
+    java: { type: (t) => `Queue<${t[0]}>`, ctor: (t, a) => `new LinkedList<>(${a})` },
+    python: { ctor: (t, a) => { need('deque'); return `deque(${a})`; }, m: { add: (o, a) => `${o}.append(${a[0].s})`, remove: (o) => `${o}.popleft()`, peek: (o) => `${o}[0]`, size: (o) => `len(${o})`, isEmpty: (o) => rel(`len(${o}) == 0`) } },
+    cpp: { type: (t) => { need('queue'); return `queue<${t[0]}>*`; }, ctor: (t, a) => { need('queue'); return `new queue<${t ? t[0] : 'int'}>(${a ? deref(a) : ''})`; }, m: {
+      add: (o, a) => `${o}->push(${a[0].s})`, remove: (o) => { need('togliPrimo'); return `togliPrimo(${o})`; }, peek: (o) => `${o}->front()`,
+      size: (o) => ({ s: `(int) ${o}->size()`, p: P.un }), isEmpty: (o) => `${o}->empty()` } },
+    csharp: { type: (t) => `Queue<${t[0]}>`, ctor: (t, a) => `new Queue<${t ? t[0] : 'int'}>(${a})`, m: { add: (o, a) => `${o}.Enqueue(${a[0].s})`, remove: (o) => `${o}.Dequeue()`, peek: (o) => `${o}.Peek()`, size: (o) => `${o}.Count`, isEmpty: (o) => rel(`${o}.Count == 0`) } },
+    javascript: { ctor: (t, a) => (a ? `[...${a}]` : '[]'), m: { add: (o, a) => `${o}.push(${a[0].s})`, remove: (o) => `${o}.shift()`, peek: (o) => `${o}[0]`, size: (o) => `${o}.length`, isEmpty: (o) => rel(`${o}.length === 0`) } },
+  },
+};
+/* prepara GEN per un programma e un linguaggio */
+function setupGen(prog, lang) {
+  const native = new Map(), skip = new Set();
+  const cs = _CM.hasClasses(prog) ? prog.classes : [];
+  if (lang !== 'pseudo') for (const c of cs) {
+    const src = c.module && c.module.src || '';
+    const spec = src.startsWith('lib:') ? NATIVE[src.slice(4)] : null;
+    if (!spec || !spec[lang]) continue;
+    skip.add(c.id);
+    if (c.name === spec.cls) native.set(c.name.toLowerCase(), spec);
+  }
+  GEN = { native, skip, tparams: new Set(cs.flatMap((c) => (c.tparams || []).map((t) => t.toLowerCase()))), helpers: new Set() };
+}
+/* durante l'assegnazione il tipo atteso permette di scrivere new ArrayList<Integer>() anche se nel diagramma c'è new ArrayList() */
+function withExpect(sc, t, fn) { const old = sc.expect; sc.expect = t; try { return fn(); } finally { sc.expect = old; } }
+
 function buildScope(prog, func) {
   const vars = new Map();
   for (const p of func.params) vars.set(p.name.toLowerCase(), { type: p.type, array: p.array, dims: p.array ? (p.dims || 1) : 0, name: p.name });
@@ -33,7 +110,14 @@ function buildScope(prog, func) {
 
 /* Strumenti per le classi: attributi e metodi ereditati, accessi statici, tipi delle espressioni */
 function ooScope(prog, sc) {
-  const classNamed = (n) => _CM.classByName(prog, n);
+  const classNamed = (n) => _CM.classByName(prog, _CE.splitType(n).base);
+  // tipo di un membro di una classe generica: T sostituito con il tipo dell'oggetto (ArrayList<Integer> -> Integer)
+  const subst = (type, objNode, c) => {
+    if (!(c.tparams || []).length) return type;
+    const g = _CE.splitType(_CE.inferType(objNode, sc)); if (!g.args.length) return type;
+    const map = {}; c.tparams.forEach((p, i) => { map[p.toLowerCase()] = g.args[i]; });
+    return _CE.substType(type, map);
+  };
   const fieldHit = (c, low) => { for (const k of _CM.chainOf(prog, c)) { const a = k.attributes.find((x) => x.name.toLowerCase() === low); if (a) return { attr: a, owner: k }; } return null; };
   const methodHit = (c, low) => { for (const k of _CM.chainOf(prog, c)) { const f = _CM.membersOf(prog, k).find((x) => !x.ctor && x.name.toLowerCase() === low); if (f) return { f, owner: k }; } return null; };
   const implicitField = (name) => { const low = String(name).toLowerCase(); return !sc.vars.has(low) && sc.cls ? fieldHit(sc.cls, low) : null; };
@@ -45,9 +129,9 @@ function ooScope(prog, sc) {
       switch (node.k) {
         case 'var': { const h = implicitField(node.name); return h ? h.attr.type : 'Unknown'; }
         case 'this': return sc.cls ? sc.cls.name : 'Unknown';
-        case 'new': { const c = classNamed(node.cls); return c ? c.name : node.cls; }
-        case 'member': { const c = objClass(node.obj); const h = c && fieldHit(c, node.name.toLowerCase()); return h ? h.attr.type : 'Unknown'; }
-        case 'mcall': { const c = objClass(node.obj); const h = c && methodHit(c, node.name.toLowerCase()); return h ? h.f.type : 'Unknown'; }
+        case 'new': { const c = classNamed(node.cls); return c ? (node.targs && node.targs.length ? _CE.joinType(c.name, node.targs) : c.name) : node.cls; }
+        case 'member': { const c = objClass(node.obj); const h = c && fieldHit(c, node.name.toLowerCase()); return h ? subst(h.attr.type, node.obj, c) : 'Unknown'; }
+        case 'mcall': { const c = objClass(node.obj); const h = c && methodHit(c, node.name.toLowerCase()); return h ? subst(h.f.type, node.obj, c) : 'Unknown'; }
       }
       return undefined;
     },
@@ -79,7 +163,7 @@ const OO = {
     const main = _CM.mainClass(prog);
     const out = [], done = new Set();
     const visit = (c) => { if (!c || done.has(c)) return; done.add(c); visit(_CM.classByName(prog, c.parent)); out.push(c); };
-    const rest = prog.classes.filter((c) => c !== main);
+    const rest = prog.classes.filter((c) => c !== main && !GEN.skip.has(c.id));
     if (mainFirst) { visit(main); rest.forEach(visit); } else { rest.forEach(visit); visit(main); }
     return out;
   },
@@ -162,7 +246,14 @@ function exprPrinter(L) {
       case 'new': {
         const c = sc.classNamed ? sc.classNamed(n.cls) : null; const nm = c ? c.name : n.cls;
         const a = n.args.map((x) => pr(x, sc).s).join(', ');
-        return { s: L.newObj ? L.newObj(nm, a) : `new ${nm}(${a})`, p: P.atom };
+        // argomenti di tipo: quelli scritti, altrimenti quelli della variabile a cui si assegna
+        let targs = n.targs && n.targs.length ? n.targs : null;
+        const gen = c && (c.tparams || []).length;
+        if (!targs && gen && sc.expect) { const g = _CE.splitType(sc.expect); if (g.base.toLowerCase() === c.name.toLowerCase() && g.args.length) targs = g.args; }
+        const nat = c && L.lang && nativeOf(c.name);
+        if (nat && nat[L.lang]) return { s: nat[L.lang].ctor(targs && L.targ ? targs.map(L.targ) : null, a, n.args.map((x) => _CE.inferType(x, sc))), p: P.atom };
+        const full = gen && L.targ ? (targs ? `${nm}<${targs.map(L.targ).join(', ')}>` : nm + (L.diamond || '')) : nm;
+        return { s: L.newObj ? L.newObj(full, a) : `new ${full}(${a})`, p: P.atom };
       }
       case 'supercall': { const a = n.args.map((x) => pr(x, sc).s).join(', '); return { s: L.superCtor ? L.superCtor(a, sc) : `super(${a})`, p: P.atom }; }
       case 'member': {
@@ -184,6 +275,10 @@ function exprPrinter(L) {
         }
         const ref = objRef(n.obj, sc);
         const c = ref.cls || (sc.objClass && sc.objClass(n.obj));
+        // metodo di una classe nativa: si usa quello del linguaggio
+        const nat = c && !ref.cls && L.lang && nativeOf(c.name);
+        const nm0 = nat && nat[L.lang] && nat[L.lang].m && (sc.methodHit(c, n.name.toLowerCase()) || {}).f;
+        if (nm0 && nat[L.lang].m[nm0.name]) { const r = nat[L.lang].m[nm0.name](ref.s, n.args.map((x) => pr(x, sc))); return typeof r === 'string' ? { s: r, p: P.atom } : r; }
         const h = c && sc.methodHit(c, n.name.toLowerCase());
         const nm = h ? h.f.name : n.name;
         return { s: ref.cls ? `${L.staticSep ? L.staticSep(ref.cls.name, nm) : ref.cls.name + '.' + nm}(${a})` : `${ref.s}${L.arrow || '.'}${nm}(${a})`, p: P.atom };
@@ -297,12 +392,13 @@ LANGS.pseudo = {
     };
     const pr = exprPrinter(L);
     const o = new Out('   ');
+    const TP = (t) => { const g = _CE.splitType(t); const b = TIPO[g.base] || g.base; return g.args.length ? `${b}<${g.args.map(TP).join(', ')}>` : b; };
     const E = (src, sc) => { const t = tryParse(src); return t ? pr(t, sc).s : src; };
     const block = (stmts, sc) => {
       for (const s of stmts) {
         switch (s.kind) {
-          case 'const': o.line(`COSTANTE ${s.name} : ${TIPO[s.type] || s.type} = ${E(s.expression, sc)}`); break;
-          case 'declare': o.line(`DICHIARA ${s.array ? `ARRAY ${s.name.split(',').map((x) => x.trim() + '[' + dimsOf(s, E, sc).join(', ') + ']').join(', ')} DI ${TIPO[s.type] || s.type}` : `${s.name} : ${TIPO[s.type] || s.type}${String(s.init || '').trim() ? ' = ' + E(s.init, sc) : ''}`}`); break;
+          case 'const': o.line(`COSTANTE ${s.name} : ${TP(s.type)} = ${E(s.expression, sc)}`); break;
+          case 'declare': o.line(`DICHIARA ${s.array ? `ARRAY ${s.name.split(',').map((x) => x.trim() + '[' + dimsOf(s, E, sc).join(', ') + ']').join(', ')} DI ${TP(s.type)}` : `${s.name} : ${TP(s.type)}${String(s.init || '').trim() ? ' = ' + E(s.init, sc) : ''}`}`); break;
           case 'assign': o.line(`${targetsOf(s).map((x) => E(x, sc)).join(', ')} ← ${E(s.expression, sc)}`); break;
           case 'input': o.line(`LEGGI ${E(s.variable, sc)}`); break;
           case 'output': o.line(`SCRIVI ${E(s.expression, sc)}${s.newline ? '' : '   // senza a capo'}`); break;
@@ -327,14 +423,14 @@ LANGS.pseudo = {
         }
       }
     };
-    const T = (t) => TIPO[t] || t;
+    const T = TP;
     const psig = (f) => f.params.map((p) => `${p.name} : ${p.array ? ((p.dims || 1) > 1 ? `array a ${p.dims} dimensioni di ` : 'array di ') : ''}${T(p.type)}`).join(', ');
     if (_CM.hasClasses(prog)) {
       const main = _CM.mainClass(prog);
       const V = (v) => _CM.VISIBILITY[v || 'public'];
       OO.ordered(prog, true).forEach((c, ci) => {
         if (ci) o.line('');
-        o.line(`${c.abstract ? 'CLASSE ASTRATTA' : 'CLASSE'} ${c.name}${c.parent ? ' EREDITA DA ' + c.parent : ''}${c === main ? '   // classe principale: il programma parte da Main' : ''}`);
+        o.line(`${c.abstract ? 'CLASSE ASTRATTA' : 'CLASSE'} ${_CM.classTitle(c)}${c.module ? '   // dal modulo ' + c.module.name : ''}${c.parent ? ' EREDITA DA ' + c.parent : ''}${c === main ? '   // classe principale: il programma parte da Main' : ''}`);
         o.in();
         if (c.attributes.length) {
           o.line('ATTRIBUTI'); o.in();
@@ -386,7 +482,7 @@ LANGS.python = {
     const L = {
       str: (s) => escStr(s, '"'), T: 'True', F: 'False', pi: 'math.pi', use: (x) => used.add(x === 'pi' ? 'math' : x), not: 'not ', notPrec: P.notLow, or: 'or', and: 'and', pow: '**',
       rel: { '==': '==', '!=': '!=', '<': '<', '<=': '<=', '>': '>', '>=': '>=' },
-      nul: 'None', self: 'self', newObj: (c, a) => `${c}(${a})`, superCtor: (a) => `super().__init__(${a})`, superMethod: (m, a) => `super().${m}(${a})`,
+      lang: 'python', nul: 'None', self: 'self', newObj: (c, a) => `${c}(${a})`, superCtor: (a) => `super().__init__(${a})`, superMethod: (m, a) => `super().${m}(${a})`,
       field: (h, sc) => (h.attr.static ? `${h.owner.name}.${h.attr.name}` : `self.${h.attr.name}`),
       bin(n, sc, pr, generic) {
         // confronto con None: is / is not
@@ -443,7 +539,7 @@ LANGS.python = {
           case 'declare': {
             if (!s.array && String(s.init || '').trim()) { for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(`${nm} = ${asReal(s.init, s.type, E, sc)}`); break; }
             const init = initOf(s, stmts[si + 1]);
-            if (init != null) { o.line(`${s.name.trim()} = ${asReal(init, s.type, E, sc)}`); si++; break; }
+            if (init != null) { o.line(`${s.name.trim()} = ${withExpect(sc, s.type, () => asReal(init, s.type, E, sc))}`); si++; break; }
             for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) {
               if (!s.array) { o.line(`${nm} = ${DEFT(s.type)}`); continue; }
               const D = dimsOf(s, E, sc);
@@ -453,7 +549,7 @@ LANGS.python = {
             }
             break;
           }
-          case 'assign': { const tg = targetsOf(s); o.line(`${tg.map((x) => E(x, sc)).join(', ')} = ${tg.length === 1 ? asReal(s.expression, lvType(s.variable, sc), E, sc) : E(s.expression, sc)}`); break; }
+          case 'assign': { const tg = targetsOf(s); const lt = tg.length === 1 ? lvType(s.variable, sc) : null; o.line(`${tg.map((x) => E(x, sc)).join(', ')} = ${tg.length === 1 ? withExpect(sc, lt, () => asReal(s.expression, lt, E, sc)) : E(s.expression, sc)}`); break; }
           case 'input': o.line(`${E(s.variable, sc)} = ${CAST[lvType(s.variable, sc)]}`); break;
           case 'output': o.line(s.newline ? `print(${E(s.expression, sc)})` : `print(${E(s.expression, sc)}, end="")`); break;
           case 'if': {
@@ -517,6 +613,7 @@ LANGS.python = {
       if (used.has('math')) hd.push('import math');
       if (used.has('random')) hd.push('import random');
       if (used.has('abc')) hd.push('from abc import ABC, abstractmethod');
+      if (GEN.helpers.has('deque')) hd.push('from collections import deque');
       if (hd.length) hd.push('');
       if (used.has('eof')) hd.push('def fine_file():', '    pos = file_lettura.tell()', '    riga = file_lettura.readline()', '    file_lettura.seek(pos)', '    return riga == ""', '', '');
       return hd.join('\n') + (hd.length ? '\n' : '');
@@ -527,7 +624,7 @@ LANGS.python = {
       const main = _CM.mainClass(prog);
       const attrInit = (a, sc) => (a.array ? pyArr(_CE.splitTop(a.size).map((x) => E(x, sc)), DEFT(a.type)) : (String(a.init || '').trim() ? E(a.init, sc) : DEFT(a.type)));
       const pyType = { Integer: (x) => `type(${x}) is int`, Real: (x) => `isinstance(${x}, (int, float))`, String: (x) => `isinstance(${x}, str)`, Boolean: (x) => `isinstance(${x}, bool)` };
-      const test = { len: (n) => `len(args) == ${n}`, type: (p, i) => (p.array ? `isinstance(args[${i}], list)` : (pyType[p.type] || ((x) => `isinstance(${x}, ${p.type})`))(`args[${i}]`)) };
+      const test = { len: (n) => `len(args) == ${n}`, type: (p, i) => (p.array ? `isinstance(args[${i}], list)` : isTP(p.type) ? 'True' : (pyType[p.type] || ((x) => `isinstance(${x}, ${_CE.splitType(p.type).base})`))(`args[${i}]`)) };
       for (const c of OO.ordered(prog, false)) {
         // classe astratta: deriva da ABC (se la madre non lo è già)
         const par = _CM.classByName(prog, c.parent);
@@ -630,6 +727,7 @@ function cFamily(cfg) {
         idx: cfg.idx, str: (s) => cfg.strLit(s), T: 'true', F: 'false', pi: cfg.pi, use: () => used.add('pi'),
         not: '!', notPrec: P.un, or: '||', and: '&&', pow: '**',
         rel: { '==': cfg.eq || '==', '!=': cfg.neq || '!=', '<': '<', '<=': '<=', '>': '>', '>=': '>=' },
+        lang: cfg.lang, targ: cfg.targ, diamond: cfg.diamond,
         nul: cfg.nul, self: cfg.self, arrow: cfg.arrow, staticSep: cfg.staticSep, newObj: cfg.newObj, superCtor: cfg.superCtor, superMethod: cfg.superMethod, field: cfg.field,
         bin(n, sc, pr) {
           const lt = _CE.inferType(n.l, sc), rt = _CE.inferType(n.r, sc);
@@ -674,16 +772,16 @@ function cFamily(cfg) {
           switch (s.kind) {
             case 'const': o.line(cfg.constDecl(s.name.trim(), s.type, E(s.expression, sc), isLiteralExpr(s.expression))); break;
             case 'declare': {
-              if (!s.array && String(s.init || '').trim() && cfg.declareInit) { for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declareInit(nm, s.type, asReal(s.init, s.type, E, sc))); break; }
+              if (!s.array && String(s.init || '').trim() && cfg.declareInit) { for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declareInit(nm, s.type, withExpect(sc, s.type, () => asReal(s.init, s.type, E, sc)))); break; }
               const init = initOf(s, stmts[si + 1]);
-              if (init != null && cfg.declareInit) { o.line(cfg.declareInit(s.name.trim(), s.type, asReal(init, s.type, E, sc))); si++; break; }
+              if (init != null && cfg.declareInit) { o.line(cfg.declareInit(s.name.trim(), s.type, withExpect(sc, s.type, () => asReal(init, s.type, E, sc)))); si++; break; }
               for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declare(nm, s.type, s.array, s.array ? dimsOf(s, E, sc) : null, used));
               break;
             }
             case 'assign': {
               const tg = targetsOf(s);
               if (tg.length > 1) cfg.multiAssign(o, tg.map((x) => E(x, sc)), E(s.expression, sc), calleeOf(s, sc), sc, used);
-              else o.line(`${E(s.variable, sc)} = ${asReal(s.expression, lvInfo(s.variable, sc).type, E, sc)};`);
+              else { const lt = lvInfo(s.variable, sc).type; o.line(`${E(s.variable, sc)} = ${withExpect(sc, lt, () => asReal(s.expression, lt, E, sc))};`); }
               break;
             }
             case 'input': cfg.input(o, E(s.variable, sc), lvInfo(s.variable, sc).type, used); break;
@@ -729,7 +827,31 @@ function cFamily(cfg) {
 }
 
 const T_CPP = { Integer: 'int', Real: 'double', String: 'string', Boolean: 'bool', None: 'void' };
-const tCpp = (t) => T_CPP[t] || t + '*'; // gli oggetti in C++ sono puntatori (creati con new)
+/* gli oggetti in C++ sono puntatori (creati con new); T resta T; ArrayList<int> nativo diventa vector<int>* */
+const tCpp = (t) => {
+  const g = _CE.splitType(t);
+  if (!g.args.length) return T_CPP[t] || (isTP(t) ? t : t + '*');
+  const a = g.args.map(tCpp), n = nativeOf(g.base);
+  return n && n.cpp ? n.cpp.type(a) : `${g.base}<${a.join(', ')}>*`;
+};
+const tplOf = (c) => ((c.tparams || []).length ? `template <${c.tparams.map((t) => 'typename ' + t).join(', ')}>` : '');
+const qualOf = (c) => ((c.tparams || []).length ? `${c.name}<${c.tparams.join(', ')}>` : c.name);
+const CPP_HELPERS = {
+  rimuoviIn: ['// toglie l\'elemento in posizione i e lo restituisce', 'template <typename T> T rimuoviIn(vector<T>* v, int i) { T x = (*v)[i]; v->erase(v->begin() + i); return x; }'],
+  indiceDi: ['// posizione di x nel vector, -1 se non c\'è', 'template <typename T, typename U> int indiceDi(vector<T>* v, const U& x) { for (int i = 0; i < (int) v->size(); i++) if ((*v)[i] == x) return i; return -1; }'],
+  togliCima: ['// toglie e restituisce l\'elemento in cima alla pila', 'template <typename T> T togliCima(stack<T>* s) { T x = s->top(); s->pop(); return x; }'],
+  togliPrimo: ['// toglie e restituisce il primo elemento della coda', 'template <typename T> T togliPrimo(queue<T>* q) { T x = q->front(); q->pop(); return x; }'],
+};
+function cppHeaderExtras(o) {
+  if (GEN.helpers.has('stack')) o.line('#include <stack>');
+  if (GEN.helpers.has('queue')) o.line('#include <queue>');
+}
+function cppHelpers(o) {
+  const hs = Object.keys(CPP_HELPERS).filter((k) => GEN.helpers.has(k));
+  if (!hs.length) return;
+  o.line('');
+  for (const k of hs) CPP_HELPERS[k].forEach((l) => o.line(l));
+}
 const DEF_CPP = { Integer: '0', Real: '0.0', String: '""', Boolean: 'false' };
 const usesFiles = (prog) => prog.functions.some((f) => { let u = false; _CM.walk(f.body, (s) => { if (['open', 'close', 'read', 'write'].includes(s.kind)) u = true; }); return u; });
 const cap = (n) => n[0].toUpperCase() + n.slice(1);
@@ -741,6 +863,7 @@ function cppParts(t, arr, D) {
   return { ty: ty(0), args: init(0) };
 }
 LANGS.cpp = cFamily({
+  lang: 'cpp', targ: (t) => tCpp(t),
   label: 'C++', ext: 'cpp', intDiv: true, fmod: true, powFn: 'pow', intCast: '(int) ', wrapOut: true,
   keywords: ['int', 'double', 'string', 'bool', 'void', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'using', 'namespace', 'std', 'include', 'cout', 'cin', 'endl', 'vector', 'const', 'main', 'class', 'public', 'private', 'protected', 'static', 'virtual', 'new', 'this', 'nullptr'],
   pi: 'PI',
@@ -774,7 +897,7 @@ LANGS.cpp = cFamily({
     return null;
   },
   declare: (n, t, arr, D) => {
-    if (!arr) return T_CPP[t] ? `${T_CPP[t]} ${n};` : `${tCpp(t)} ${n} = nullptr;`;
+    if (!arr) return T_CPP[t] ? `${T_CPP[t]} ${n};` : isTP(t) ? `${t} ${n}{};` : `${tCpp(t)} ${n} = nullptr;`;
     const c = cppParts(t, arr, D);
     return `${c.ty} ${n}(${c.args});`;
   },
@@ -841,8 +964,8 @@ LANGS.cpp = cFamily({
       for (const a of c.attributes) {
         const sc = OO.classScope(prog, c, a.static);
         const pt = cppParts(a.type, a.array, a.array ? _CE.splitTop(a.size).map((x) => g.E(x, sc)) : null);
-        const init = a.array ? `${pt.ty}(${pt.args})` : (String(a.init || '').trim() ? g.E(a.init, sc) : (DEF_CPP[a.type] || 'nullptr'));
-        if (a.static) { vis(a.visibility).push(`static ${pt.ty} ${a.name};`); statics.push(`${pt.ty} ${c.name}::${a.name} = ${init};`); }
+        const init = a.array ? `${pt.ty}(${pt.args})` : (String(a.init || '').trim() ? g.E(a.init, sc) : (DEF_CPP[a.type] || (isTP(a.type) ? a.type + '()' : 'nullptr')));
+        if (a.static) { vis(a.visibility).push(`static ${pt.ty} ${a.name};`); statics.push(`${tplOf(c) ? tplOf(c) + ' ' : ''}${pt.ty} ${qualOf(c)}::${a.name} = ${init};`); }
         else vis(a.visibility).push(`${pt.ty} ${a.name} = ${init};`);
       }
       for (const f of OO.methods(prog, c)) {
@@ -851,6 +974,7 @@ LANGS.cpp = cFamily({
         vis(f.visibility).push(`${f.static ? 'static ' : (poly || f.abstract ? 'virtual ' : '')}${retT(f)} ${nm}(${params(f)})${f.abstract ? ' = 0' : ''};`);
       }
       decls.line('');
+      if (tplOf(c)) decls.line(tplOf(c));
       decls.line(`class ${c.name}${c.parent ? ' : public ' + c.parent : ''} {${c.abstract ? ' // classe astratta' : ''}`);
       for (const v of ['public', 'protected', 'private']) if (sec[v].length) { decls.line(v + ':'); decls.in(); sec[v].forEach((l) => decls.line(l)); decls.out(); }
       decls.line('};');
@@ -859,13 +983,14 @@ LANGS.cpp = cFamily({
         if (f.abstract) continue;
         const sc = g.buildScope(f);
         defs.line('');
+        if (tplOf(c)) defs.line(tplOf(c));
         if (f.ctor) {
           const sp = OO.splitSuper(f);
-          defs.line(`${c.name}::${c.name}(${params(f)})${sp.args ? ` : ${c.parent}(${sp.args.map((x) => g.pr(x, sc).s).join(', ')})` : ''} {`);
+          defs.line(`${qualOf(c)}::${c.name}(${params(f)})${sp.args ? ` : ${c.parent}(${sp.args.map((x) => g.pr(x, sc).s).join(', ')})` : ''} {`);
           defs.in(); g.block(defs, sp.rest, sc); defs.out(); defs.line('}');
           continue;
         }
-        defs.line(`${retT(f)} ${c.name}::${OO.isMain(prog, f) ? 'Main' : f.name}(${params(f)}) {`);
+        defs.line(`${retT(f)} ${qualOf(c)}::${OO.isMain(prog, f) ? 'Main' : f.name}(${params(f)}) {`);
         defs.in(); g.block(defs, f.body, sc);
         const rl = _CM.rets(f);
         if (rl.length) { defs.line(rl.length > 1 ? `return make_tuple(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
@@ -874,6 +999,7 @@ LANGS.cpp = cFamily({
     }
     const o = new g.Out(); const u = g.used;
     o.line('#include <iostream>'); o.line('#include <string>'); o.line('#include <vector>'); o.line('#include <cmath>');
+    cppHeaderExtras(o);
     if (u.has('rand')) { o.line('#include <cstdlib>'); o.line('#include <ctime>'); }
     if (u.has('fmt') || u.has('fixed')) { o.line('#include <sstream>'); o.line('#include <iomanip>'); }
     if (u.has('fstream')) o.line('#include <fstream>');
@@ -883,8 +1009,9 @@ LANGS.cpp = cFamily({
     if (u.has('fstream')) { o.line('ifstream fileLettura;'); o.line('ofstream fileScrittura;'); }
     if (u.has('fmt')) { o.line(''); o.line('string formatta(double x) {'); o.line('    ostringstream s;'); o.line('    s << setprecision(15) << x;'); o.line('    return s.str();'); o.line('}'); }
     if (u.has('fixed')) { o.line(''); o.line('string aDecimali(double x, int cifre) {'); o.line('    ostringstream s;'); o.line('    s << fixed << setprecision(cifre) << x;'); o.line('    return s.str();'); o.line('}'); }
+    cppHelpers(o);
     o.line(''); o.line('// Classi (gli oggetti si creano con new e si usano tramite puntatori)');
-    o.line(ordered.map((c) => `class ${c.name};`).join(' '));
+    o.line(ordered.map((c) => `${tplOf(c) ? tplOf(c) + ' ' : ''}class ${c.name};`).join(' '));
     o.lines.push(...decls.lines);
     if (statics.length) { o.line(''); o.line('// Attributi statici'); statics.forEach((l) => o.line(l)); }
     o.line(''); o.line('int main() {');
@@ -898,10 +1025,20 @@ LANGS.cpp = cFamily({
 });
 
 const T_JAVA = { Integer: 'int', Real: 'double', String: 'String', Boolean: 'boolean', None: 'void' };
-const tJava = (t) => T_JAVA[t] || t;
+const BOX_J = { Integer: 'Integer', Real: 'Double', String: 'String', Boolean: 'Boolean' };
+/* tipi Java: ArrayList<Integer> con i tipi base "inscatolati"; i moduli nativi usano le classi di java.util */
+const tJava = (t) => {
+  const g = _CE.splitType(t);
+  if (!g.args.length) return T_JAVA[t] || t;
+  const a = g.args.map((x) => BOX_J[x] || tJava(x)), n = nativeOf(g.base);
+  return n && n.java ? n.java.type(a) : `${g.base}<${a.join(', ')}>`;
+};
+/* array di T in Java: non si può scrivere new T[n] */
+const newArrJava = (t, D) => (isTP(t) ? `(${t}${'[]'.repeat(D.length)}) new Object${D.map((d) => `[${d}]`).join('')}` : `new ${tJava(t)}${D.map((d) => `[${d}]`).join('')}`);
 let J_PFX = ''; // dalle altre classi lo Scanner e i file stanno nella classe principale
 const DEF_C = { Integer: '0', Real: '0.0', String: '""', Boolean: 'false' };
 LANGS.java = cFamily({
+  lang: 'java', targ: (t) => BOX_J[t] || tJava(t), diamond: '<>',
   label: 'Java', ext: 'java', intDiv: true, powFn: 'Math.pow', intCast: '(int) ', concatPrefix: '""',
   keywords: ['public', 'static', 'void', 'class', 'int', 'double', 'String', 'boolean', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'new', 'import', 'Scanner', 'System', 'Math', 'private', 'protected', 'extends', 'this', 'super', 'null', 'final', 'record', 'throws', 'abstract'],
   pi: 'Math.PI',
@@ -937,7 +1074,7 @@ LANGS.java = cFamily({
     }
     return null;
   },
-  declare: (n, t, arr, D) => (arr ? `${tJava(t)}${'[]'.repeat(D.length)} ${n} = new ${tJava(t)}${D.map((d) => `[${d}]`).join('')};` : `${tJava(t)} ${n} = ${DEF_C[t] || 'null'};`),
+  declare: (n, t, arr, D) => (arr ? `${tJava(t)}${'[]'.repeat(D.length)} ${n} = ${newArrJava(t, D)};` : `${tJava(t)} ${n} = ${DEF_C[t] || 'null'};`),
   constDecl: (n, t, e) => `final ${tJava(t)} ${n} = ${e};`,
   declareInit: (n, t, e) => `${tJava(t)} ${n} = ${e};`,
   input: (o, v, t) => { const i = J_PFX + 'input'; o.line(`${v} = ${t === 'Integer' ? `Integer.parseInt(${i}.nextLine())` : t === 'Real' ? `Double.parseDouble(${i}.nextLine())` : t === 'Boolean' ? `Boolean.parseBoolean(${i}.nextLine())` : `${i}.nextLine()`};`); },
@@ -1010,7 +1147,7 @@ LANGS.java = cFamily({
       for (const a of c.attributes) {
         const sc = OO.classScope(prog, c, a.static);
         const D = a.array ? _CE.splitTop(a.size).map((x) => g.E(x, sc)) : null;
-        const init = a.array ? ` = new ${tJava(a.type)}${D.map((d) => `[${d}]`).join('')}` : (String(a.init || '').trim() ? ' = ' + g.E(a.init, sc) : (a.type === 'String' ? ' = ""' : ''));
+        const init = a.array ? ` = ${newArrJava(a.type, D)}` : (String(a.init || '').trim() ? ' = ' + g.E(a.init, sc) : (a.type === 'String' ? ' = ""' : ''));
         o.line(`${V(a.visibility)}${a.static ? 'static ' : ''}${tJava(a.type)}${a.array ? '[]'.repeat(D.length) : ''} ${a.name}${init};`);
       }
       for (const f of [...OO.ctors(prog, c), ...OO.methods(prog, c)]) {
@@ -1033,7 +1170,8 @@ LANGS.java = cFamily({
     o.line('import java.util.*;');
     for (const { c, lines } of parts) {
       o.line('');
-      o.line(`${c === main ? 'public ' : ''}${c.abstract ? 'abstract ' : ''}class ${c.name}${c.parent ? ' extends ' + c.parent : ''} {`);
+      if ((c.tparams || []).length) o.line('@SuppressWarnings("unchecked")');
+      o.line(`${c === main ? 'public ' : ''}${c.abstract ? 'abstract ' : ''}class ${_CM.classTitle(c)}${c.parent ? ' extends ' + c.parent : ''} {`);
       o.lines.push(...lines);
       o.line('}');
     }
@@ -1041,9 +1179,15 @@ LANGS.java = cFamily({
   },
 });
 
-const tCs = (t) => T_CPP[t] || t;
+const tCs = (t) => {
+  const g = _CE.splitType(t);
+  if (!g.args.length) return T_CPP[t] || t;
+  const a = g.args.map(tCs), n = nativeOf(g.base);
+  return n && n.csharp ? n.csharp.type(a) : `${g.base}<${a.join(', ')}>`;
+};
 let CS_PFX = '';
 LANGS.csharp = cFamily({
+  lang: 'csharp', targ: (t) => tCs(t),
   label: 'C#', ext: 'cs', intDiv: true, powFn: 'Math.Pow', intCast: '(int) ',
   keywords: ['using', 'class', 'static', 'void', 'int', 'double', 'string', 'bool', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'new', 'Console', 'Math', 'System', 'public', 'private', 'protected', 'this', 'base', 'null', 'virtual', 'override', 'const', 'abstract'],
   pi: 'Math.PI',
@@ -1075,7 +1219,7 @@ LANGS.csharp = cFamily({
     return null;
   },
   idx: idxComma,
-  declare: (n, t, arr, D) => (arr ? `${tCs(t)}[${','.repeat(D.length - 1)}] ${n} = new ${tCs(t)}[${D.join(', ')}];` : `${tCs(t)} ${n} = ${DEF_C[t] || 'null'};`),
+  declare: (n, t, arr, D) => (arr ? `${tCs(t)}[${','.repeat(D.length - 1)}] ${n} = new ${tCs(t)}[${D.join(', ')}];` : `${tCs(t)} ${n} = ${DEF_C[t] || (isTP(t) ? `default(${t})` : 'null')};`),
   // in C# const vuole un valore noto in compilazione; altrimenti una variabile normale
   constDecl: (n, t, e, lit) => (lit ? `const ${tCs(t)} ${n} = ${e};` : `${tCs(t)} ${n} = ${e}; // costante`),
   declareInit: (n, t, e) => `${tCs(t)} ${n} = ${e};`,
@@ -1156,9 +1300,16 @@ LANGS.csharp = cFamily({
     CS_PFX = '';
     const o = new g.Out();
     o.line('using System;');
+    if (GEN.native.size) o.line('using System.Collections.Generic;');
+    if (GEN.helpers.has('Aiuti')) {
+      o.line(''); o.line('static class Aiuti {');
+      o.line('    // toglie l\'elemento in posizione i e lo restituisce');
+      o.line('    public static T RimuoviIn<T>(List<T> lista, int i) { T x = lista[i]; lista.RemoveAt(i); return x; }');
+      o.line('}');
+    }
     for (const { c, lines } of parts) {
       o.line('');
-      o.line(`${c.abstract ? 'abstract ' : ''}class ${c.name}${c.parent ? ' : ' + c.parent : ''} {`);
+      o.line(`${c.abstract ? 'abstract ' : ''}class ${_CM.classTitle(c)}${c.parent ? ' : ' + c.parent : ''} {`);
       if (c === main) {
         if (g.used.has('rnd')) o.line('    public static Random rnd = new Random();');
         if (g.used.has('files')) { o.line('    public static System.IO.StreamReader fileLettura;'); o.line('    public static System.IO.StreamWriter fileScrittura;'); }
@@ -1172,6 +1323,7 @@ LANGS.csharp = cFamily({
 });
 
 LANGS.javascript = cFamily({
+  lang: 'javascript',
   label: 'JavaScript', ext: 'js',
   keywords: ['let', 'const', 'function', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'new', 'Math', 'console', 'prompt', 'parseInt', 'parseFloat', 'String', 'Array', 'class', 'extends', 'constructor', 'static', 'this', 'super', 'null', 'throw', 'args', 'typeof', 'instanceof'],
   pi: 'Math.PI', eq: '===', neq: '!==', concatPrefix: '""',
@@ -1245,7 +1397,7 @@ LANGS.javascript = cFamily({
     o.line('}');
     const test = {
       len: (n) => `args.length === ${n}`,
-      type: (p, i) => { const a = `args[${i}]`; if (p.array) return `Array.isArray(${a})`; return { Integer: `Number.isInteger(${a})`, Real: `typeof ${a} === "number"`, String: `typeof ${a} === "string"`, Boolean: `typeof ${a} === "boolean"` }[p.type] || `${a} instanceof ${p.type}`; },
+      type: (p, i) => { const a = `args[${i}]`; if (p.array) return `Array.isArray(${a})`; if (isTP(p.type)) return 'true'; return { Integer: `Number.isInteger(${a})`, Real: `typeof ${a} === "number"`, String: `typeof ${a} === "string"`, Boolean: `typeof ${a} === "boolean"` }[p.type] || `${a} instanceof ${_CE.splitType(p.type).base}`; },
     };
     let multiDim = false;
     for (const c of OO.ordered(prog, false)) {
@@ -1301,7 +1453,7 @@ LANGS.javascript = cFamily({
 const CodeGen = {
   LANGS,
   generate(prog, lang) {
-    try { return LANGS[lang].generate(prog); } catch (e) { return `// Impossibile generare il codice: ${e.message}\n`; }
+    try { setupGen(prog, lang); return LANGS[lang].generate(prog); } catch (e) { return `// Impossibile generare il codice: ${e.message}\n`; }
   },
 };
 if (typeof module !== 'undefined') module.exports = CodeGen;
