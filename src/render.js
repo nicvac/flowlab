@@ -400,7 +400,7 @@ class Renderer {
     const o = opts || {};
     const isMain = o.isMain != null ? o.isMain : f.name.toLowerCase() === 'main';
     const ps = f.params.map((p) => `${p.name}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''}: ${ExprLib.typeName(p.type)}`).join(', ');
-    const sig = isMain ? 'Inizio' : f.ctor ? `new ${f.name}(${ps})` : `${o.owner ? o.owner + '.' : ''}${f.name}(${ps})`;
+    const sig = isMain ? 'Inizio' : f.ctor ? `new ${f.name}(${ps})` : `${o.owner ? o.owner + '.' : ''}${f.name}${(f.tparams || []).length ? `<${f.tparams.join(', ')}>` : ''}(${ps})`;
     const rsl = ModelLib.rets(f);
     const endText = rsl.length ? `Restituisci ${rsl.map((x) => x.name || '?').join(', ')}` : 'Fine';
     const sw = this.boxW(sig, 'rect') + 10, ew = this.boxW(endText, 'rect') + 10;

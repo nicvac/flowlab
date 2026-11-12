@@ -54,6 +54,7 @@
     if (!c) return f.name;
     return f.ctor ? 'new ' + c.name : c.name + '.' + f.name;
   };
+  const tplTxt = (f) => ((f.tparams || []).length ? `<${f.tparams.join(', ')}>` : '');
   const isRunning = () => ['running', 'paused', 'input'].includes(run.state);
 
   function snapshot() { return JSON.stringify({ prog: st.prog, fi: st.fi }); }
@@ -96,8 +97,8 @@
     const sel = h('select', { 'aria-label': aria || 'Tipo' });
     const sub = h('span', { class: 'tpargs' });
     const cs = M.hasClasses(st.prog) ? st.prog.classes : [];
-    const tps = ctx ? ctx.tparams || [] : [];
-    const opts = [...E.TYPES.map((t) => [t, TYPE_IT[t]]), ...tps.map((t) => [t, `${t} (tipo generico di ${ctx.name})`]), ...cs.map((c) => [c.name, `${M.classTitle(c)} (${c.module ? 'modulo' : 'classe'})`])];
+    const tps = ctx ? ctx.tlist || (ctx.tparams || []).map((t) => [t, ctx.name]) : [];
+    const opts = [...E.TYPES.map((t) => [t, TYPE_IT[t]]), ...tps.map(([t, o]) => [t, `${t} (tipo generico di ${o})`]), ...cs.map((c) => [c.name, `${M.classTitle(c)} (${c.module ? 'modulo' : 'classe'})`])];
     const genOf = (b) => { const c = M.classByName(st.prog, b); return c && (c.tparams || []).length ? c : null; };
     let kids = [];
     const get = () => { const c = genOf(sel.value); return c ? E.joinType(c.name, kids.map((k) => k.get())) : sel.value; };
@@ -122,6 +123,13 @@
     el.append(sel, sub);
     set(value);
     return { el, sel, get, set, setDisabled(d) { el.querySelectorAll('select').forEach((x) => { x.disabled = d; }); } };
+  }
+  /* tipi generici visibili in una funzione: quelli della sua classe e quelli suoi (funzione generica) */
+  function typeCtx(f, ftp) {
+    const c = f && M.hasClasses(st.prog) ? M.classOf(st.prog, f) : null;
+    const own = ftp || (f && f.tparams) || [];
+    const tlist = [...(c ? (c.tparams || []).map((t) => [t, c.name]) : []), ...own.map((t) => [t, (f && f.name) || 'questa funzione'])];
+    return tlist.length ? { name: c ? c.name : '', tlist } : c;
   }
   /* ---- moduli: le loro classi sono in sola lettura ---- */
   function roGuard(c) {
@@ -292,7 +300,7 @@
         const ms = M.membersOf(st.prog, c);
         for (const f of [...ms.filter((x) => x.ctor), ...ms.filter((x) => !x.ctor)]) {
           const i = st.prog.functions.indexOf(f);
-          og.append(h('option', { value: i, selected: !st.uml && i === st.fi }, i === 0 ? 'Inizio (principale)' : f.ctor ? `new ${c.name}(${f.params.map((p) => p.name).join(', ')}) · costruttore` : `${f.name}(${f.params.map((p) => p.name).join(', ')})${f.abstract ? ' · astratto' : ''}${f.module ? ' · modulo ' + f.module.name : ''}`));
+          og.append(h('option', { value: i, selected: !st.uml && i === st.fi }, i === 0 ? 'Inizio (principale)' : f.ctor ? `new ${c.name}(${f.params.map((p) => p.name).join(', ')}) · costruttore` : `${f.name}${tplTxt(f)}(${f.params.map((p) => p.name).join(', ')})${f.abstract ? ' · astratto' : ''}${f.module ? ' · modulo ' + f.module.name : ''}`));
         }
         sel.append(og);
       }
@@ -307,7 +315,7 @@
     $('#funcLbl').textContent = 'Funzione';
     add.title = 'Nuova funzione (N)'; edit.title = 'Modifica funzione o proprietà del programma (F2)'; del.title = 'Elimina funzione (Maiusc+Canc)';
     edit.disabled = false;
-    st.prog.functions.forEach((f, i) => sel.append(h('option', { value: i, selected: i === st.fi }, i === 0 ? 'Inizio (principale)' : `${f.name}(${f.params.map((p) => p.name).join(', ')})${f.module ? ' · modulo ' + f.module.name : ''}`)));
+    st.prog.functions.forEach((f, i) => sel.append(h('option', { value: i, selected: i === st.fi }, i === 0 ? 'Inizio (principale)' : `${f.name}${tplTxt(f)}(${f.params.map((p) => p.name).join(', ')})${f.module ? ' · modulo ' + f.module.name : ''}`)));
     del.disabled = st.fi === 0;
   }
   function showFunc(i) { if (i === st.fi && !st.uml) return; st.fi = i; st.uml = false; st.sel = null; render(); $('#canvasWrap').scrollTo(0, 0); }
@@ -765,7 +773,7 @@
   function stmtDialog(s, isNew, done) {
     let form = STMT_FORMS[s.kind];
     // nella vista Oggetti si possono dichiarare variabili di tipo classe
-    if (s.kind === 'declare' && M.hasClasses(st.prog)) form = { ...form, fields: form.fields.map((f) => (f.key === 'type' ? { ...f, type: 'typepick', ctx: M.classOf(st.prog, func()) } : f)) };
+    if (s.kind === 'declare' && (M.hasClasses(st.prog) || (func().tparams || []).length)) form = { ...form, fields: form.fields.map((f) => (f.key === 'type' ? { ...f, type: 'typepick', ctx: typeCtx(func()) } : f)) };
     const vars = declaredNames(func());
     const body = h('div', { class: 'fields' });
     if (form.help) body.append(h('p', { class: 'help' }, form.help));
@@ -833,13 +841,29 @@
         absW._input.addEventListener('change', syncAbs); syncAbs();
       }
     }
+    // funzione generica: parametri di tipo (solo funzioni e metodi statici)
+    let ftp = (f.tparams || []).slice();
+    const parseTP = (txt) => txt.split(',').map((x) => x.trim()).filter(Boolean);
+    let tpfW = null;
+    if (!ctor && index !== 0) {
+      tpfW = field({ key: 'ftp', label: `Parametri di tipo (${oo ? 'metodo' : 'funzione'} generica, facoltativo)`, type: 'plain', placeholder: 'es. T', hint: `Una funzione generica lavora con un tipo qualsiasi, indicato con T: massimo(v: T[], n: Intero) trova il massimo in un array di Interi, di Reali o di Stringhe. Alla chiamata T si ricava dagli argomenti; i valori di tipo T si confrontano con = < >.${oo ? ' Solo per i metodi statici.' : ''}` }, ftp.join(', '));
+      body.append(tpfW);
+      const syncTP = () => { const nu = parseTP(tpfW._get()).filter((t) => E.validIdent(t)); if (nu.join(',') !== ftp.join(',')) { ftp = nu; drawParams(); drawRets(); } };
+      tpfW._input.addEventListener('input', syncTP);
+      if (statW) {
+        const syncSt = () => { const on = statW._get(); tpfW._input.disabled = !on; tpfW.title = on ? '' : 'Solo i metodi statici possono essere generici'; };
+        statW._input.addEventListener('change', syncSt); syncSt();
+        if (absW) absW._input.addEventListener('change', syncSt);
+      }
+    }
+    const tctx = () => typeCtx(isNew ? { cls: cls ? cls.id : undefined, name: nameW._get().trim() } : f, ftp);
     const plist = h('div', { class: 'params' });
     const drawParams = () => {
       plist.innerHTML = '';
       if (!params.length) plist.append(h('p', { class: 'muted small' }, 'Nessun parametro.'));
       params.forEach((p, i) => {
         const nm = h('input', { type: 'text', class: 'mono', value: p.name, 'aria-label': 'Nome parametro ' + (i + 1), placeholder: 'nome', oninput: (e) => { p.name = e.target.value.trim(); } });
-        const tp = typePicker(p.type, cls, (t) => { p.type = t; }, 'Tipo parametro ' + (i + 1)).el;
+        const tp = typePicker(p.type, tctx(), (t) => { p.type = t; }, 'Tipo parametro ' + (i + 1)).el;
         const shape = p.array ? (p.dims || 1) : 0;
         const arr = h('select', { 'aria-label': 'Forma del parametro ' + (i + 1), title: 'Valore singolo o array', onchange: (e) => { const d = +e.target.value; p.array = d > 0; p.dims = Math.max(1, d); } }, [[0, 'valore'], [1, 'array [ ]'], [2, 'matrice [ , ]'], [3, '3 dimensioni'], [4, '4 dimensioni'], [5, '5 dimensioni']].map(([v, l]) => h('option', { value: v, selected: v === shape }, l)));
         plist.append(h('div', { class: 'prow' }, nm, tp, arr,
@@ -860,7 +884,7 @@
       rlist.innerHTML = '';
       if (!rets.length) rlist.append(h('p', { class: 'muted small' }, 'Nessun valore: è una procedura.'));
       rets.forEach((r, i) => {
-        const tpk = typePicker(r.type, cls, (t) => { r.type = t; }, 'Tipo del valore restituito ' + (i + 1)), tp = tpk.el;
+        const tpk = typePicker(r.type, tctx(), (t) => { r.type = t; }, 'Tipo del valore restituito ' + (i + 1)), tp = tpk.el;
         const tag = h('span', { class: 'rtag', title: 'È un attributo della classe: il metodo lo restituisce direttamente, senza dichiarare una variabile' }, 'attributo');
         // scegliendo un attributo il tipo è il suo e non si cambia
         const syncAttr = () => {
@@ -924,6 +948,19 @@
             if (a && isStatic && !a.attr.static) return `${a.attr.name} è un attributo d'istanza: un metodo statico non lo può restituire`;
           }
         }
+        // parametri di tipo della funzione generica
+        const tps = tpfW && !tpfW._input.disabled ? parseTP(tpfW._get()) : [];
+        for (const t of tps) {
+          if (!E.validIdent(t)) return `"${t}" non è un nome valido per un parametro di tipo (di solito una lettera maiuscola: T)`;
+          if (E.TYPES.some((x) => x.toLowerCase() === t.toLowerCase()) || Object.values(TYPE_IT).some((x) => x.toLowerCase() === t.toLowerCase()) || M.classByName(st.prog, t)) return `${t} è già il nome di un tipo: scegli un altro nome, per esempio T`;
+          if (cls && M.isTypeParam(cls, t)) return `${t} è già un parametro di tipo della classe ${cls.name}: scegli un altro nome, per esempio E`;
+        }
+        if (new Set(tps.map((t) => t.toLowerCase())).size !== tps.length) return 'I parametri di tipo devono avere nomi diversi';
+        // i tipi usati devono esistere: tipi base, classi, T della classe o della funzione
+        const known = (t) => { const g = E.splitType(t); return (E.TYPES.includes(g.base) || M.classByName(st.prog, g.base) || tps.some((x) => x.toLowerCase() === g.base.toLowerCase()) || (cls && M.isTypeParam(cls, g.base))) && g.args.every(known); };
+        for (const x of [...params, ...rets]) if (!known(x.type)) return `Il tipo ${E.typeName(x.type)} di "${x.name || '?'}" non esiste${E.splitType(x.type).args.length ? '' : ': è un parametro di tipo che hai tolto?'}`;
+        const usesTP = (t) => { const g = E.splitType(t); return tps.some((x) => x.toLowerCase() === g.base.toLowerCase()) || g.args.some(usesTP); };
+        if (tps.length && !params.some((p) => usesTP(p.type))) return `Nessun parametro usa ${tps.join(', ')}: T si ricava dagli argomenti, quindi almeno un parametro deve essere di tipo ${tps[0]} (o ${tps[0]}[], Classe<${tps[0]}>…)`;
         const seen = new Set();
         for (const p of params) {
           if (!E.validIdent(p.name)) return `Parametro "${p.name || '(vuoto)'}": nome non valido`;
@@ -933,6 +970,7 @@
         mutate(() => {
           const target = isNew ? M.makeFunction(name, { params }) : f;
           Object.assign(target, { name, params });
+          if (tps.length) target.tparams = tps; else delete target.tparams;
           if (oo) Object.assign(target, { cls: cls.id, visibility: visW ? visW._get() : 'public', static: isStatic || target === st.prog.functions[0], ctor, abstract: isAbs });
           // un attributo restituito si scrive come è dichiarato (i linguaggi distinguono le maiuscole)
           for (const r of rets) { const a = attrOf(r.name); if (a) { r.name = a.attr.name; r.type = a.attr.type; } }
@@ -2742,6 +2780,7 @@
       ['+  -  *  /', 'Aritmetica. La divisione / dà sempre un numero reale'], ['mod  %', 'Resto della divisione'], ['^', 'Potenza (2 ^ 3 = 8)'],
       ['&', 'Unisce testi e numeri: "Totale: " & t'], ['=  ==   !=  <>', 'Uguale, diverso'], ['<  <=  >  >=', 'Confronti'],
       ['and  &&   or  ||   not  !', 'Operatori logici'], ['true  false  Pi', 'Costanti'], ['v[i]', 'Elemento i di un array (da 0)'],
+      ['massimo<T>(v: T[], n)', 'Funzione generica: T è un tipo qualsiasi, ricavato dagli argomenti (parametri di tipo nel dialogo della funzione)'],
     ].map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
     const oo = [
       ['p ← new Punto(1, 2)', 'Crea un oggetto: esegue il costruttore con quei parametri'], ['p.x   p.sposta(3, 4)', 'Attributo e metodo di un oggetto'],

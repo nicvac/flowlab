@@ -228,6 +228,10 @@ function parseFprg(text) {
       // funzione importata da un modulo di sole funzioni
       const fm = (el.getAttribute('flowlab-module') || '').trim();
       if (fm) f.module = { name: fm, src: el.getAttribute('flowlab-module-src') || '' };
+      // funzione generica: parametri di tipo, validi nei suoi parametri e nel suo corpo
+      const ftp = (el.getAttribute('flowlab-tparams') || '').split(',').map((x) => x.trim()).filter((x) => /^[A-Za-z_]\w*$/.test(x));
+      const savedTP = _typeParams;
+      if (ftp.length) { f.tparams = ftp;  _typeParams = new Set([..._typeParams, ...ftp.map((t) => t.toLowerCase())]); f.type = normType(el.getAttribute('type'), true); }
       if (prog.classes) {
         const owner = classByName(prog, el.getAttribute('flowlab-class'));
         if (owner) f.cls = owner.id;
@@ -254,6 +258,7 @@ function parseFprg(text) {
           f.body = parseBlock(c);
         }
       }
+      _typeParams = savedTP;
       prog.functions.push(f);
     }
   }
@@ -416,6 +421,7 @@ function serializeFprg(prog) {
   for (const f of prog.functions) {
     const rs = rets(f);
     let extra = rs.length > 1 ? ` flowlab-returns="${xmlEsc(rs.map((r) => r.name + ':' + r.type).join(';'))}"` : '';
+    if ((f.tparams || []).length) extra += ` flowlab-tparams="${xmlEsc(f.tparams.join(','))}"`;
     if (f.module) extra += ` flowlab-module="${xmlEsc(f.module.name)}" flowlab-module-src="${xmlEsc(f.module.src || '')}"`;
     if (oo) { const c = classOf(prog, f); extra += ` flowlab-class="${xmlEsc(c ? c.name : '')}" flowlab-visibility="${f.visibility || 'public'}" flowlab-static="${TF(!!f.static)}"${f.ctor ? ' flowlab-ctor="True"' : ''}${f.abstract ? ' flowlab-abstract="True"' : ''}`; }
     // per le procedure si conserva il nome eventualmente lasciato in "variable" da altri editor
@@ -490,6 +496,7 @@ function extendedFeatures(prog) {
   const out = new Set();
   if (!isPlainOO(prog)) out.add('classi e oggetti');
   if ((prog.classes || []).some((c) => (c.tparams || []).length)) out.add('classi generiche');
+  if (prog.functions.some((f) => (f.tparams || []).length)) out.add('funzioni generiche');
   if ((prog.classes || []).some((c) => c.module) || prog.functions.some((f) => f.module)) out.add('moduli importati');
   for (const f of prog.functions) {
     if (rets(f).length > 1) out.add('funzioni con più valori restituiti');

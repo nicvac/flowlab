@@ -85,8 +85,122 @@ function setupGen(prog, lang) {
     skip.add(c.id);
     if (c.name === spec.cls) native.set(c.name.toLowerCase(), spec);
   }
-  GEN = { native, skip, tparams: new Set(cs.flatMap((c) => (c.tparams || []).map((t) => t.toLowerCase()))), helpers: new Set() };
+  const tps = [...cs.flatMap((c) => c.tparams || []), ...prog.functions.flatMap((f) => f.tparams || [])].map((t) => t.toLowerCase());
+  GEN = { native, skip, tparams: new Set(tps), helpers: new Set(), bound: new Set(), boxed: new Set(), cur: null };
+  if (tps.length) analyzeGenerics(prog, lang);
 }
+/* ---- generici: chi possiede un parametro di tipo (la funzione o la classe) ---- */
+const FKEY = (f, t) => 'f:' + f.id + ':' + String(t).toLowerCase();
+const CKEY = (c, t) => 'c:' + c.id + ':' + String(t).toLowerCase();
+function tpKey(t, f, c) {
+  if (!isTP(t)) return null;
+  const low = String(t).toLowerCase(), has = (x) => (x.tparams || []).some((y) => y.toLowerCase() === low);
+  if (f && has(f)) return FKEY(f, t);
+  if (c && has(c)) return CKEY(c, t);
+  return null;
+}
+/* T deve essere confrontabile (< > su T): Comparable in Java, IComparable in C# */
+const isBound = (t, f, c) => { const k = tpKey(t, f, c); return !!k && GEN.bound.has(k); };
+const boundHere = (t) => !!GEN.cur && isBound(t, GEN.cur.f, GEN.cur.c);
+/* testi delle espressioni di un blocco */
+function exprSources(s) {
+  switch (s.kind) {
+    case 'declare': return [..._CE.splitTop(s.array ? s.size || '' : ''), s.init || ''];
+    case 'const': case 'output': case 'write': case 'if': case 'while': case 'do': case 'call': case 'open': return [s.expression];
+    case 'breakpoint': return s.always ? [] : [s.expression];
+    case 'assign': return [..._CE.splitTop(s.variable), s.expression];
+    case 'input': case 'read': return [s.variable];
+    case 'for': return [s.variable, s.start, s.end, s.step];
+  }
+  return [];
+}
+function walkNodes(n, fn) {
+  if (!n || typeof n !== 'object') return;
+  if (Array.isArray(n)) { n.forEach((x) => walkNodes(x, fn)); return; }
+  if (n.k) fn(n);
+  for (const v of Object.values(n)) if (v && typeof v === 'object') walkNodes(v, fn);
+}
+/* funzione o metodo chiamato da un nodo (call, mcall, new) */
+function calleeNode(n, sc, prog) {
+  const low = String(n.name || '').toLowerCase();
+  if (n.k === 'call') { const e = sc.funcs.get(low); return e ? e.f : null; }
+  if (n.k === 'mcall' && sc.methodHit && strip(n.obj).k !== 'super') { const c = sc.classRef(n.obj) || sc.objClass(n.obj); const h = c && sc.methodHit(c, low); return h ? h.f : null; }
+  if (n.k === 'new' && sc.classNamed) { const c = sc.classNamed(n.cls); return c ? OO.ctors(prog, c).find((f) => f.params.length === n.args.length) || null : null; }
+  return null;
+}
+/* analisi del programma: quali T devono essere confrontabili e (Java) quali array di tipi base passano a parametri T[] */
+function analyzeGenerics(prog, lang) {
+  const oo = _CM.hasClasses(prog), cs = oo ? prog.classes.filter((c) => !GEN.skip.has(c.id)) : [];
+  const info = prog.functions.filter((f) => !(oo && GEN.skip.has(f.cls))).map((f) => {
+    const it = { f, c: oo ? _CM.classOf(prog, f) : null, sc: buildScope(prog, f), nodes: [], decls: [], assigns: [] };
+    _CM.walk(f.body, (st) => {
+      if (st.kind === 'declare') it.decls.push(st);
+      if (st.kind === 'assign') it.assigns.push(st);
+      for (const src of exprSources(st)) { const t = String(src || '').trim() && tryParse(src); if (t) walkNodes(t, (n) => it.nodes.push(n)); }
+    });
+    return it;
+  });
+  const bound = GEN.bound;
+  // confronti < <= > >= tra valori di tipo T
+  for (const it of info) for (const n of it.nodes) {
+    if (n.k !== 'bin' || !['<', '<=', '>', '>='].includes(n.op)) continue;
+    for (const x of [n.l, n.r]) { const k = tpKey(_CE.inferType(x, it.sc), it.f, it.c); if (k) bound.add(k); }
+  }
+  // il vincolo si propaga: Coppia<T> con T confrontabile, chiamate a funzioni generiche con T confrontabile
+  for (let changed = true, guard = 0; changed && guard < 20; guard++) {
+    changed = false;
+    const add = (k) => { if (k && !bound.has(k)) { bound.add(k); changed = true; } };
+    const typeUse = (t, f, c) => {
+      const g = _CE.splitType(t); if (!g.args.length) return;
+      const k = _CM.classByName(prog, g.base);
+      g.args.forEach((a, i) => { if (k && (k.tparams || [])[i] && bound.has(CKEY(k, k.tparams[i]))) add(tpKey(a, f, c)); typeUse(a, f, c); });
+    };
+    for (const it of info) [...it.f.params.map((p) => p.type), ..._CM.rets(it.f).map((r) => r.type), ...it.decls.map((d) => d.type)].forEach((t) => typeUse(t, it.f, it.c));
+    for (const c of cs) for (const a of c.attributes) typeUse(a.type, null, c);
+    for (const it of info) for (const n of it.nodes) {
+      const g = calleeNode(n, it.sc, prog);
+      if (!g || !(g.tparams || []).length) continue;
+      g.params.forEach((p, i) => { if (n.args[i] && isBound(p.type, g, null)) add(tpKey(_CE.inferType(n.args[i], it.sc), it.f, it.c)); });
+    }
+  }
+  if (lang === 'java') analyzeBoxing(prog, info, cs);
+}
+/* Java: un array di int non si può passare a un parametro T[]; quegli array diventano Integer[] (e quelli collegati a loro) */
+function analyzeBoxing(prog, info, cs) {
+  const parent = new Map();
+  const find = (k) => { while (parent.has(k)) k = parent.get(k); return k; };
+  const union = (a, b) => { if (!a || !b) return; const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
+  const elem = new Map(), sinks = [];
+  const akey = (c, a) => 'attr:' + c.id + ':' + a.name.toLowerCase();
+  for (const c of cs) for (const a of c.attributes) if (a.array) elem.set(akey(c, a), a.type);
+  for (const it of info) {
+    for (const p of it.f.params) if (p.array) { const k = it.f.id + ':' + p.name.toLowerCase(); elem.set(k, p.type); if (isTP(p.type)) sinks.push(k); }
+    for (const d of it.decls) if (d.array) for (const n of d.name.split(',').map((x) => x.trim()).filter(Boolean)) elem.set(it.f.id + ':' + n.toLowerCase(), d.type);
+  }
+  const slot = (node, it) => {
+    const x = strip(node); if (!x || x.indices) return null;
+    if (x.k === 'var') {
+      const v = it.sc.vars.get(x.name.toLowerCase());
+      if (v) return v.array ? it.f.id + ':' + x.name.toLowerCase() : null;
+      const h = it.sc.implicitField && it.sc.implicitField(x.name);
+      return h && h.attr.array ? akey(h.owner, h.attr) : null;
+    }
+    if (x.k === 'member' && it.sc.objClass) { const c = it.sc.objClass(x.obj); const h = c && it.sc.fieldHit(c, x.name.toLowerCase()); return h && h.attr.array ? akey(h.owner, h.attr) : null; }
+    return null;
+  };
+  for (const it of info) {
+    for (const n of it.nodes) {
+      const g = calleeNode(n, it.sc, prog);
+      if (g) g.params.forEach((p, i) => { if (p.array && n.args[i]) union(slot(n.args[i], it), g.id + ':' + p.name.toLowerCase()); });
+    }
+    // a ← b tra array: lo stesso array
+    for (const st of it.assigns) { const l = tryParse(st.variable), r = tryParse(st.expression); if (l && r) { const a = slot(l, it), b = slot(r, it); if (a && b) union(a, b); } }
+  }
+  const roots = new Set(sinks.map(find));
+  for (const [k, t] of elem) if (BOX_J[t] && t !== 'String' && roots.has(find(k))) GEN.boxed.add(k);
+}
+/* Java: elemento di un array Integer[] (per == si usa Objects.equals) */
+const boxedElem = (n, sc) => { const x = strip(n); return !!x && x.k === 'var' && !!x.indices && !!sc.func && GEN.boxed.has(sc.func.id + ':' + x.name.toLowerCase()); };
 /* durante l'assegnazione il tipo atteso permette di scrivere new ArrayList<Integer>() anche se nel diagramma c'è new ArrayList() */
 function withExpect(sc, t, fn) { const old = sc.expect; sc.expect = t; try { return fn(); } finally { sc.expect = old; } }
 
@@ -131,7 +245,12 @@ function ooScope(prog, sc) {
         case 'this': return sc.cls ? sc.cls.name : 'Unknown';
         case 'new': { const c = classNamed(node.cls); return c ? (node.targs && node.targs.length ? _CE.joinType(c.name, node.targs) : c.name) : node.cls; }
         case 'member': { const c = objClass(node.obj); const h = c && fieldHit(c, node.name.toLowerCase()); return h ? subst(h.attr.type, node.obj, c) : 'Unknown'; }
-        case 'mcall': { const c = objClass(node.obj); const h = c && methodHit(c, node.name.toLowerCase()); return h ? subst(h.f.type, node.obj, c) : 'Unknown'; }
+        case 'mcall': {
+          const c = objClass(node.obj); const h = c && methodHit(c, node.name.toLowerCase());
+          if (!h) return 'Unknown';
+          const t = subst(h.f.type, node.obj, c);
+          return (h.f.tparams || []).length ? _CE.substType(t, _CE.genericMap(h.f, node.args, sc)) : t;
+        }
       }
       return undefined;
     },
@@ -266,7 +385,7 @@ function exprPrinter(L) {
         return { s, p: P.atom };
       }
       case 'mcall': {
-        const a = n.args.map((x) => pr(x, sc).s).join(', ');
+        let a = n.args.map((x) => pr(x, sc).s).join(', ');
         const o = strip(n.obj);
         if (o.k === 'super') {
           const par = sc.classNamed && sc.classNamed(sc.cls && sc.cls.parent); const h = par && sc.methodHit(par, n.name.toLowerCase());
@@ -281,6 +400,7 @@ function exprPrinter(L) {
         if (nm0 && nat[L.lang].m[nm0.name]) { const r = nat[L.lang].m[nm0.name](ref.s, n.args.map((x) => pr(x, sc))); return typeof r === 'string' ? { s: r, p: P.atom } : r; }
         const h = c && sc.methodHit(c, n.name.toLowerCase());
         const nm = h ? h.f.name : n.name;
+        if (L.garg && h && (h.f.tparams || []).length) a = n.args.map((x) => L.garg(x, pr(x, sc).s)).join(', ');
         return { s: ref.cls ? `${L.staticSep ? L.staticSep(ref.cls.name, nm) : ref.cls.name + '.' + nm}(${a})` : `${ref.s}${L.arrow || '.'}${nm}(${a})`, p: P.atom };
       }
       case 'un':
@@ -445,8 +565,9 @@ LANGS.pseudo = {
           const rl = _CM.rets(f);
           o.line('');
           const kw = f.ctor ? 'COSTRUTTORE' : (f.static ? 'METODO STATICO' : f.abstract ? 'METODO ASTRATTO' : 'METODO');
-          if (f.abstract) { o.line(`${kw} ${V(f.visibility)} ${f.name}(${psig(f)})${rl.length ? ' : ' + rl.map((r) => T(r.type)).join(', ') : ''}   // senza corpo: lo definiscono le sottoclassi`); continue; }
-          o.line(`${kw} ${V(f.visibility)} ${f.name}(${psig(f)})${rl.length ? ' : ' + rl.map((r) => T(r.type)).join(', ') : ''}`);
+          const fnm = f.name + ((f.tparams || []).length ? `<${f.tparams.join(', ')}>` : '');
+          if (f.abstract) { o.line(`${kw} ${V(f.visibility)} ${fnm}(${psig(f)})${rl.length ? ' : ' + rl.map((r) => T(r.type)).join(', ') : ''}   // senza corpo: lo definiscono le sottoclassi`); continue; }
+          o.line(`${kw} ${V(f.visibility)} ${fnm}(${psig(f)})${rl.length ? ' : ' + rl.map((r) => T(r.type)).join(', ') : ''}`);
           o.in(); block(f.body, sc);
           if (rl.length) o.line(`RESTITUISCI ${rl.map((r) => r.name).join(', ')}`);
           o.out(); o.line(f.ctor ? 'FINE COSTRUTTORE' : 'FINE METODO');
@@ -460,9 +581,10 @@ LANGS.pseudo = {
       if (i > 0) o.line('');
       if (i === 0) o.line(`ALGORITMO ${prog.attrs.name ? prog.attrs.name.replace(/\s+/g, '_') : 'Main'}`);
       else {
-        const ps = f.params.map((p) => `${p.name} : ${p.array ? ((p.dims || 1) > 1 ? `array a ${p.dims} dimensioni di ` : 'array di ') : ''}${TIPO[p.type]}`).join(', ');
+        const ps = f.params.map((p) => `${p.name} : ${p.array ? ((p.dims || 1) > 1 ? `array a ${p.dims} dimensioni di ` : 'array di ') : ''}${TP(p.type)}`).join(', ');
         const rl = _CM.rets(f);
-        o.line(!rl.length ? `PROCEDURA ${f.name}(${ps})` : `FUNZIONE ${f.name}(${ps}) : ${rl.map((r) => TIPO[r.type]).join(', ')}`);
+        const nm = f.name + ((f.tparams || []).length ? `<${f.tparams.join(', ')}>` : '');
+        o.line(!rl.length ? `PROCEDURA ${nm}(${ps})` : `FUNZIONE ${nm}(${ps}) : ${rl.map((r) => TP(r.type)).join(', ')}`);
       }
       o.in(); block(f.body, sc);
       if (i > 0 && _CM.rets(f).length) o.line(`RESTITUISCI ${_CM.rets(f).map((r) => r.name).join(', ')}`);
@@ -727,7 +849,7 @@ function cFamily(cfg) {
         idx: cfg.idx, str: (s) => cfg.strLit(s), T: 'true', F: 'false', pi: cfg.pi, use: () => used.add('pi'),
         not: '!', notPrec: P.un, or: '||', and: '&&', pow: '**',
         rel: { '==': cfg.eq || '==', '!=': cfg.neq || '!=', '<': '<', '<=': '<=', '>': '>', '>=': '>=' },
-        lang: cfg.lang, targ: cfg.targ, diamond: cfg.diamond,
+        lang: cfg.lang, targ: cfg.targ, diamond: cfg.diamond, garg: cfg.garg,
         nul: cfg.nul, self: cfg.self, arrow: cfg.arrow, staticSep: cfg.staticSep, newObj: cfg.newObj, superCtor: cfg.superCtor, superMethod: cfg.superMethod, field: cfg.field,
         bin(n, sc, pr) {
           const lt = _CE.inferType(n.l, sc), rt = _CE.inferType(n.r, sc);
@@ -749,11 +871,15 @@ function cFamily(cfg) {
             const l = pr(n.l, sc), r = pr(n.r, sc);
             return { s: `${l.p <= P.pow ? '(' + l.s + ')' : l.s} ** ${r.p < P.pow ? '(' + r.s + ')' : r.s}`, p: P.pow };
           }
+          // confronti tra valori di tipo T: equals / compareTo
+          if (REL.includes(n.op) && cfg.cmpT && (isTP(lt) || isTP(rt) || (['==', '!='].includes(n.op) && boxedElem(n.l, sc) && boxedElem(n.r, sc)))) return cfg.cmpT(n.op, pr(n.l, sc), pr(n.r, sc));
           if (REL.includes(n.op) && lt === 'String' && rt === 'String' && cfg.strCmp) return cfg.strCmp(n.op, pr(n.l, sc), pr(n.r, sc));
           return null;
         },
         call(n, sc, pr) {
           const a = n.args.map((x) => pr(x, sc));
+          const uf = sc.funcs.get(n.name.toLowerCase());
+          if (uf && cfg.garg && (uf.f.tparams || []).length) a.forEach((x, i) => { x.s = cfg.garg(n.args[i], x.s); });
           if (sc.funcs.has(n.name.toLowerCase())) return { s: `${cfg.qualifyCalls ? ucall(sc.funcs.get(n.name.toLowerCase()), sc, 'this') : ''}${fname(n.name, sc)}(${a.map((x) => x.s).join(', ')})`, p: P.atom };
           const low = n.name.toLowerCase();
           const r = cfg.builtin(low, a, n, sc, used);
@@ -775,7 +901,7 @@ function cFamily(cfg) {
               if (!s.array && String(s.init || '').trim() && cfg.declareInit) { for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declareInit(nm, s.type, withExpect(sc, s.type, () => asReal(s.init, s.type, E, sc)))); break; }
               const init = initOf(s, stmts[si + 1]);
               if (init != null && cfg.declareInit) { o.line(cfg.declareInit(s.name.trim(), s.type, withExpect(sc, s.type, () => asReal(init, s.type, E, sc)))); si++; break; }
-              for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declare(nm, s.type, s.array, s.array ? dimsOf(s, E, sc) : null, used));
+              for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declare(nm, s.type, s.array, s.array ? dimsOf(s, E, sc) : null, used, sc));
               break;
             }
             case 'assign': {
@@ -835,6 +961,8 @@ const tCpp = (t) => {
   return n && n.cpp ? n.cpp.type(a) : `${g.base}<${a.join(', ')}>*`;
 };
 const tplOf = (c) => ((c.tparams || []).length ? `template <${c.tparams.map((t) => 'typename ' + t).join(', ')}>` : '');
+/* funzione generica: template <typename T> davanti alla firma */
+const tplF = (f) => ((f.tparams || []).length ? `template <${f.tparams.map((t) => 'typename ' + t).join(', ')}> ` : '');
 const qualOf = (c) => ((c.tparams || []).length ? `${c.name}<${c.tparams.join(', ')}>` : c.name);
 const CPP_HELPERS = {
   rimuoviIn: ['// toglie l\'elemento in posizione i e lo restituisce', 'template <typename T> T rimuoviIn(vector<T>* v, int i) { T x = (*v)[i]; v->erase(v->begin() + i); return x; }'],
@@ -864,6 +992,8 @@ function cppParts(t, arr, D) {
 }
 LANGS.cpp = cFamily({
   lang: 'cpp', targ: (t) => tCpp(t),
+  // funzioni generiche: "testo" è un const char*, con string("testo") T diventa string
+  garg: (node, s) => (strip(node) && strip(node).k === 'str' ? `string(${s})` : s),
   label: 'C++', ext: 'cpp', intDiv: true, fmod: true, powFn: 'pow', intCast: '(int) ', wrapOut: true,
   keywords: ['int', 'double', 'string', 'bool', 'void', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'using', 'namespace', 'std', 'include', 'cout', 'cin', 'endl', 'vector', 'const', 'main', 'class', 'public', 'private', 'protected', 'static', 'virtual', 'new', 'this', 'nullptr'],
   pi: 'PI',
@@ -918,7 +1048,7 @@ LANGS.cpp = cFamily({
   program(prog, g) {
     const o = new g.Out();
     const retT = (f) => { const rl = _CM.rets(f); if (rl.length > 1) { g.used.add('tuple'); return `tuple<${rl.map((r) => tCpp(r.type)).join(', ')}>`; } return f.type === 'None' ? 'void' : tCpp(f.type); };
-    const sig = (f) => `${retT(f)} ${f.name}(${f.params.map((p) => (p.array ? `${'vector<'.repeat(p.dims || 1)}${tCpp(p.type)}${'>'.repeat(p.dims || 1)}& ${p.name}` : `${tCpp(p.type)} ${p.name}`)).join(', ')})`;
+    const sig = (f) => `${tplF(f)}${retT(f)} ${f.name}(${f.params.map((p) => (p.array ? `${'vector<'.repeat(p.dims || 1)}${tCpp(p.type)}${'>'.repeat(p.dims || 1)}& ${p.name}` : `${tCpp(p.type)} ${p.name}`)).join(', ')})`;
     const fns = prog.functions.slice(1);
     const bodyOut = new g.Out();
     for (const f of fns) {
@@ -971,7 +1101,7 @@ LANGS.cpp = cFamily({
       for (const f of OO.methods(prog, c)) {
         const nm = OO.isMain(prog, f) ? 'Main' : f.name;
         // metodo astratto: virtuale puro, senza definizione
-        vis(f.visibility).push(`${f.static ? 'static ' : (poly || f.abstract ? 'virtual ' : '')}${retT(f)} ${nm}(${params(f)})${f.abstract ? ' = 0' : ''};`);
+        vis(f.visibility).push(`${tplF(f)}${f.static ? 'static ' : (poly || f.abstract ? 'virtual ' : '')}${retT(f)} ${nm}(${params(f)})${f.abstract ? ' = 0' : ''};`);
       }
       decls.line('');
       if (tplOf(c)) decls.line(tplOf(c));
@@ -990,7 +1120,7 @@ LANGS.cpp = cFamily({
           defs.in(); g.block(defs, sp.rest, sc); defs.out(); defs.line('}');
           continue;
         }
-        defs.line(`${retT(f)} ${qualOf(c)}::${OO.isMain(prog, f) ? 'Main' : f.name}(${params(f)}) {`);
+        defs.line(`${tplF(f)}${retT(f)} ${qualOf(c)}::${OO.isMain(prog, f) ? 'Main' : f.name}(${params(f)}) {`);
         defs.in(); g.block(defs, f.body, sc);
         const rl = _CM.rets(f);
         if (rl.length) { defs.line(rl.length > 1 ? `return make_tuple(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
@@ -1034,7 +1164,17 @@ const tJava = (t) => {
   return n && n.java ? n.java.type(a) : `${g.base}<${a.join(', ')}>`;
 };
 /* array di T in Java: non si può scrivere new T[n] */
-const newArrJava = (t, D) => (isTP(t) ? `(${t}${'[]'.repeat(D.length)}) new Object${D.map((d) => `[${d}]`).join('')}` : `new ${tJava(t)}${D.map((d) => `[${d}]`).join('')}`);
+/* (se T deve essere confrontabile l'array è di Comparable) */
+const newArrJava = (t, D, box) => (isTP(t) ? `(${t}${'[]'.repeat(D.length)}) new ${boundHere(t) ? 'Comparable' : 'Object'}${D.map((d) => `[${d}]`).join('')}` : `new ${box ? BOX_J[t] : tJava(t)}${D.map((d) => `[${d}]`).join('')}`);
+/* array passato a una funzione generica: Integer[] invece di int[] */
+const arrJ = (t, key) => (GEN.boxed.has(key) ? BOX_J[t] : tJava(t));
+/* <T> o <T extends Comparable<T>> */
+const jTP = (list, key) => `<${list.map((t) => (GEN.bound.has(key(t)) ? `${t} extends Comparable<${t}>` : t)).join(', ')}>`;
+const jFunTP = (f) => ((f.tparams || []).length ? jTP(f.tparams, (t) => FKEY(f, t)) + ' ' : '');
+const jClassTitle = (c) => ((c.tparams || []).length ? c.name + jTP(c.tparams, (t) => CKEY(c, t)) : c.name);
+/* new T[n] non si può scrivere: (T[]) new Object[n] vuole @SuppressWarnings */
+const jUnchecked = (f) => { let u = false; if ((f.tparams || []).length) _CM.walk(f.body, (s) => { if (s.kind === 'declare' && s.array && tpKey(s.type, f, null)) u = true; }); return u; };
+const jParams = (f) => f.params.map((p) => `${p.array ? arrJ(p.type, f.id + ':' + p.name.toLowerCase()) : tJava(p.type)}${p.array ? '[]'.repeat(p.dims || 1) : ''} ${p.name}`).join(', ');
 let J_PFX = ''; // dalle altre classi lo Scanner e i file stanno nella classe principale
 const DEF_C = { Integer: '0', Real: '0.0', String: '""', Boolean: 'false' };
 LANGS.java = cFamily({
@@ -1044,6 +1184,12 @@ LANGS.java = cFamily({
   pi: 'Math.PI',
   strLit: (s) => escStr(s, '"'),
   toStr: (x, t, e) => (e.p <= P.add ? `(${e.s})` : e.s),
+  // valori di tipo T (oggetti): Objects.equals e compareTo
+  cmpT(op, l, r) {
+    if (op === '==') return { s: `Objects.equals(${l.s}, ${r.s})`, p: P.atom };
+    if (op === '!=') return { s: `!Objects.equals(${l.s}, ${r.s})`, p: P.un };
+    return { s: `${l.p < P.atom ? `(${l.s})` : l.s}.compareTo(${r.s}) ${op} 0`, p: P.rel };
+  },
   strCmp(op, l, r) {
     const ls = l.p < P.atom ? `(${l.s})` : l.s;
     if (op === '==') return { s: `${ls}.equals(${r.s})`, p: P.atom };
@@ -1074,7 +1220,11 @@ LANGS.java = cFamily({
     }
     return null;
   },
-  declare: (n, t, arr, D) => (arr ? `${tJava(t)}${'[]'.repeat(D.length)} ${n} = ${newArrJava(t, D)};` : `${tJava(t)} ${n} = ${DEF_C[t] || 'null'};`),
+  declare: (n, t, arr, D, used, sc) => {
+    if (!arr) return `${tJava(t)} ${n} = ${DEF_C[t] || 'null'};`;
+    const box = !!(sc && sc.func && GEN.boxed.has(sc.func.id + ':' + n.toLowerCase()));
+    return `${box ? BOX_J[t] : tJava(t)}${'[]'.repeat(D.length)} ${n} = ${newArrJava(t, D, box)};`;
+  },
   constDecl: (n, t, e) => `final ${tJava(t)} ${n} = ${e};`,
   declareInit: (n, t, e) => `${tJava(t)} ${n} = ${e};`,
   input: (o, v, t) => { const i = J_PFX + 'input'; o.line(`${v} = ${t === 'Integer' ? `Integer.parseInt(${i}.nextLine())` : t === 'Real' ? `Double.parseDouble(${i}.nextLine())` : t === 'Boolean' ? `Boolean.parseBoolean(${i}.nextLine())` : `${i}.nextLine()`};`); },
@@ -1103,12 +1253,15 @@ LANGS.java = cFamily({
     const main = new g.Out(); main.lvl = 2;
     const recName = (f) => 'Risultato' + f.name[0].toUpperCase() + f.name.slice(1);
     const records = prog.functions.slice(1).filter((f) => _CM.rets(f).length > 1);
+    GEN.cur = { f: prog.functions[0], c: null };
     g.block(main, prog.functions[0].body, g.buildScope(prog.functions[0]));
     for (const f of prog.functions.slice(1)) {
+      GEN.cur = { f, c: null };
       const sc = g.buildScope(f);
       const rl = _CM.rets(f);
       inner.line('');
-      inner.line(`public static ${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${f.params.map((p) => `${tJava(p.type)}${p.array ? '[]'.repeat(p.dims || 1) : ''} ${p.name}`).join(', ')})${g.used.has('files') ? ' throws Exception' : ''} {`);
+      if (jUnchecked(f)) inner.line('@SuppressWarnings("unchecked")');
+      inner.line(`public static ${jFunTP(f)}${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${jParams(f)})${g.used.has('files') ? ' throws Exception' : ''} {`);
       inner.in(); g.block(inner, f.body, sc);
       if (rl.length) { inner.line(rl.length > 1 ? `return new ${recName(f)}(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
       inner.out(); inner.line('}');
@@ -1131,7 +1284,7 @@ LANGS.java = cFamily({
     const main = _CM.mainClass(prog);
     const files = usesFiles(prog);
     const thr = files ? ' throws Exception' : '';
-    const params = (f) => f.params.map((p) => `${tJava(p.type)}${p.array ? '[]'.repeat(p.dims || 1) : ''} ${p.name}`).join(', ');
+    const params = jParams;
     const recName = (f) => 'Risultato' + cap(f.name);
     const V = (v) => (v || 'public') + ' ';
     const parts = [];
@@ -1145,33 +1298,37 @@ LANGS.java = cFamily({
       }
       for (const f of OO.methods(prog, c)) if (_CM.rets(f).length > 1) { records = true; o.line(`record ${recName(f)}(${_CM.rets(f).map((r) => `${tJava(r.type)} ${r.name}`).join(', ')}) {}`); }
       for (const a of c.attributes) {
+        GEN.cur = { f: null, c };
         const sc = OO.classScope(prog, c, a.static);
         const D = a.array ? _CE.splitTop(a.size).map((x) => g.E(x, sc)) : null;
-        const init = a.array ? ` = ${newArrJava(a.type, D)}` : (String(a.init || '').trim() ? ' = ' + g.E(a.init, sc) : (a.type === 'String' ? ' = ""' : ''));
-        o.line(`${V(a.visibility)}${a.static ? 'static ' : ''}${tJava(a.type)}${a.array ? '[]'.repeat(D.length) : ''} ${a.name}${init};`);
+        const box = a.array && GEN.boxed.has('attr:' + c.id + ':' + a.name.toLowerCase());
+        const init = a.array ? ` = ${newArrJava(a.type, D, box)}` : (String(a.init || '').trim() ? ' = ' + g.E(a.init, sc) : (a.type === 'String' ? ' = ""' : ''));
+        o.line(`${V(a.visibility)}${a.static ? 'static ' : ''}${box ? BOX_J[a.type] : tJava(a.type)}${a.array ? '[]'.repeat(D.length) : ''} ${a.name}${init};`);
       }
       for (const f of [...OO.ctors(prog, c), ...OO.methods(prog, c)]) {
+        GEN.cur = { f, c };
         const sc = g.buildScope(f);
         const rl = _CM.rets(f);
         if (o.lines.length) o.line('');
-        if (f.abstract) { o.line(`${V(f.visibility)}abstract ${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${params(f)});`); continue; }
+        if (f.abstract) { o.line(`${V(f.visibility)}abstract ${jFunTP(f)}${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${params(f)});`); continue; }
+        if (jUnchecked(f)) o.line('@SuppressWarnings("unchecked")');
         if (f.ctor) o.line(`${V(f.visibility)}${c.name}(${params(f)})${thr} {`);
         else if (OO.isMain(prog, f)) o.line(`public static void main(String[] args)${thr} {`);
-        else o.line(`${V(f.visibility)}${f.static ? 'static ' : ''}${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${params(f)})${thr} {`);
+        else o.line(`${V(f.visibility)}${f.static ? 'static ' : ''}${jFunTP(f)}${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${params(f)})${thr} {`);
         o.in(); g.block(o, f.body, sc);
         if (rl.length) { o.line(rl.length > 1 ? `return new ${recName(f)}(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
         o.out(); o.line('}');
       }
       parts.push({ c, lines: o.lines });
     }
-    J_PFX = '';
+    J_PFX = ''; GEN.cur = null;
     const o = new g.Out();
     if (records) o.line('// Richiede Java 16 o successivo: i metodi con più valori restituiscono un record');
     o.line('import java.util.*;');
     for (const { c, lines } of parts) {
       o.line('');
       if ((c.tparams || []).length) o.line('@SuppressWarnings("unchecked")');
-      o.line(`${c === main ? 'public ' : ''}${c.abstract ? 'abstract ' : ''}class ${_CM.classTitle(c)}${c.parent ? ' extends ' + c.parent : ''} {`);
+      o.line(`${c === main ? 'public ' : ''}${c.abstract ? 'abstract ' : ''}class ${jClassTitle(c)}${c.parent ? ' extends ' + c.parent : ''} {`);
       o.lines.push(...lines);
       o.line('}');
     }
@@ -1186,6 +1343,11 @@ const tCs = (t) => {
   return n && n.csharp ? n.csharp.type(a) : `${g.base}<${a.join(', ')}>`;
 };
 let CS_PFX = '';
+/* funzioni generiche: Nome<T>(...) where T : IComparable<T> */
+const csTP = (f) => ((f.tparams || []).length ? `<${f.tparams.join(', ')}>` : '');
+const csWhere = (list, key) => list.filter((t) => GEN.bound.has(key(t))).map((t) => ` where ${t} : IComparable<${t}>`).join('');
+const csWhereF = (f) => csWhere(f.tparams || [], (t) => FKEY(f, t));
+const csWhereC = (c) => csWhere(c.tparams || [], (t) => CKEY(c, t));
 LANGS.csharp = cFamily({
   lang: 'csharp', targ: (t) => tCs(t),
   label: 'C#', ext: 'cs', intDiv: true, powFn: 'Math.Pow', intCast: '(int) ',
@@ -1194,6 +1356,12 @@ LANGS.csharp = cFamily({
   strLit: (s) => escStr(s, '"'),
   concatPrefix: '""',
   toStr: (x, t, e) => (e.p <= P.add ? `(${e.s})` : e.s),
+  // valori di tipo T: Equals e CompareTo
+  cmpT(op, l, r) {
+    if (op === '==') return { s: `Equals(${l.s}, ${r.s})`, p: P.atom };
+    if (op === '!=') return { s: `!Equals(${l.s}, ${r.s})`, p: P.un };
+    return { s: `${l.p < P.atom ? `(${l.s})` : l.s}.CompareTo(${r.s}) ${op} 0`, p: P.rel };
+  },
   strCmp(op, l, r) {
     if (op === '==' || op === '!=') return null;
     return { s: `string.Compare(${l.s}, ${r.s}, StringComparison.Ordinal) ${op} 0`, p: P.rel };
@@ -1245,7 +1413,7 @@ LANGS.csharp = cFamily({
       inner.line('');
       const rl = _CM.rets(f);
       const rt = rl.length > 1 ? `(${rl.map((r) => tCs(r.type)).join(', ')})` : tCs(f.type);
-      inner.line(`static ${rt} ${f.name}(${f.params.map((p) => `${tCs(p.type)}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''} ${p.name}`).join(', ')}) {`);
+      inner.line(`static ${rt} ${f.name}${csTP(f)}(${f.params.map((p) => `${tCs(p.type)}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''} ${p.name}`).join(', ')})${csWhereF(f)} {`);
       inner.in(); g.block(inner, f.body, sc);
       if (rl.length) { inner.line(rl.length > 1 ? `return (${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
       inner.out(); inner.line('}');
@@ -1280,7 +1448,7 @@ LANGS.csharp = cFamily({
         const rl = _CM.rets(f);
         if (o.lines.length) o.line('');
         let body = f.body;
-        if (f.abstract) { o.line(`${V(f.visibility)}abstract ${rl.length > 1 ? `(${rl.map((r) => tCs(r.type)).join(', ')})` : tCs(f.type)} ${f.name}(${params(f)});`); continue; }
+        if (f.abstract) { o.line(`${V(f.visibility)}abstract ${rl.length > 1 ? `(${rl.map((r) => tCs(r.type)).join(', ')})` : tCs(f.type)} ${f.name}${csTP(f)}(${params(f)})${csWhereF(f)};`); continue; }
         if (f.ctor) {
           const sp = OO.splitSuper(f); body = sp.rest;
           o.line(`${V(f.visibility)}${c.name}(${params(f)})${sp.args ? ` : base(${sp.args.map((x) => g.pr(x, sc).s).join(', ')})` : ''} {`);
@@ -1289,7 +1457,7 @@ LANGS.csharp = cFamily({
           // polimorfismo: virtual nella classe madre, override nelle sottoclassi
           const vo = f.static ? 'static ' : OO.overrides(prog, f) ? 'override ' : OO.overridden(prog, f) ? 'virtual ' : '';
           const rt = rl.length > 1 ? `(${rl.map((r) => tCs(r.type)).join(', ')})` : tCs(f.type);
-          o.line(`${V(f.visibility)}${vo}${rt} ${f.name}(${params(f)}) {`);
+          o.line(`${V(f.visibility)}${vo}${rt} ${f.name}${csTP(f)}(${params(f)})${csWhereF(f)} {`);
         }
         o.in(); g.block(o, body, sc);
         if (rl.length) { o.line(rl.length > 1 ? `return (${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
@@ -1309,7 +1477,7 @@ LANGS.csharp = cFamily({
     }
     for (const { c, lines } of parts) {
       o.line('');
-      o.line(`${c.abstract ? 'abstract ' : ''}class ${_CM.classTitle(c)}${c.parent ? ' : ' + c.parent : ''} {`);
+      o.line(`${c.abstract ? 'abstract ' : ''}class ${_CM.classTitle(c)}${c.parent ? ' : ' + c.parent : ''}${csWhereC(c)} {`);
       if (c === main) {
         if (g.used.has('rnd')) o.line('    public static Random rnd = new Random();');
         if (g.used.has('files')) { o.line('    public static System.IO.StreamReader fileLettura;'); o.line('    public static System.IO.StreamWriter fileScrittura;'); }

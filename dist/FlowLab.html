@@ -1426,6 +1426,18 @@ function* evalCall(node, ctx) {
 }
 
 /* -------------------- Inferenza statica dei tipi ----------------------- */
+/* funzione generica: T ricavato dai tipi degli argomenti, es. massimo(v, n) con v array di Integer -> { t: 'Integer' } */
+function genericMap(f, args, scope) {
+  const low = (f.tparams || []).map((t) => t.toLowerCase()), map = {};
+  const unify = (pt, at) => {
+    if (!at || at === 'Unknown' || at === 'Null') return;
+    const gp = splitType(pt), ga = splitType(at), k = gp.base.toLowerCase();
+    if (!gp.args.length && low.includes(k)) { if (map[k] === undefined) map[k] = at; return; }
+    if (gp.args.length && ga.args.length === gp.args.length) gp.args.forEach((x, j) => unify(x, ga.args[j]));
+  };
+  f.params.forEach((p, i) => { if (args[i]) unify(p.type, inferType(args[i], scope)); });
+  return map;
+}
 /* scope: { vars: Map(name -> {type, array}), funcs: Map(name -> {type}) } */
 function inferType(node, scope) {
   switch (node.k) {
@@ -1450,7 +1462,7 @@ function inferType(node, scope) {
     }
     case 'call': {
       const f = scope.funcs.get(node.name.toLowerCase()) || (scope.oo && scope.oo(node, true));
-      if (f) return f.type;
+      if (f) return f.f && (f.f.tparams || []).length ? substType(f.type, genericMap(f.f, node.args, scope)) : f.type;
       const b = BUILTINS[node.name.toLowerCase()];
       if (!b) return 'Unknown';
       if (typeof b.ret === 'function') return node.args[0] ? inferType(node.args[0], scope) : 'Real';
@@ -1460,7 +1472,7 @@ function inferType(node, scope) {
   return 'Unknown';
 }
 
-const ExprLib = { FlowError, TYPES, TYPE_IT, typeName, splitType, splitTypeList, joinType, isGenericType, normTypeText, substType, sameType, isBaseType, tokenize, parseExpr, parseLValue, splitTop, parseLValueList, arrOffset, validIdent, RESERVED, V, isNum, fmtValue, fmtReal, literalOf, checkInt, coerce, parseInputText, BUILTINS, BUILTIN_NAMES, evalE, arrIndex, inferType };
+const ExprLib = { FlowError, TYPES, TYPE_IT, typeName, splitType, splitTypeList, joinType, isGenericType, normTypeText, substType, sameType, isBaseType, tokenize, parseExpr, parseLValue, splitTop, parseLValueList, arrOffset, validIdent, RESERVED, V, isNum, fmtValue, fmtReal, literalOf, checkInt, coerce, parseInputText, BUILTINS, BUILTIN_NAMES, evalE, arrIndex, inferType, genericMap };
 if (typeof module !== 'undefined') module.exports = ExprLib;
 
 /* ==========================================================================
@@ -1693,6 +1705,10 @@ function parseFprg(text) {
       // funzione importata da un modulo di sole funzioni
       const fm = (el.getAttribute('flowlab-module') || '').trim();
       if (fm) f.module = { name: fm, src: el.getAttribute('flowlab-module-src') || '' };
+      // funzione generica: parametri di tipo, validi nei suoi parametri e nel suo corpo
+      const ftp = (el.getAttribute('flowlab-tparams') || '').split(',').map((x) => x.trim()).filter((x) => /^[A-Za-z_]\w*$/.test(x));
+      const savedTP = _typeParams;
+      if (ftp.length) { f.tparams = ftp;  _typeParams = new Set([..._typeParams, ...ftp.map((t) => t.toLowerCase())]); f.type = normType(el.getAttribute('type'), true); }
       if (prog.classes) {
         const owner = classByName(prog, el.getAttribute('flowlab-class'));
         if (owner) f.cls = owner.id;
@@ -1719,6 +1735,7 @@ function parseFprg(text) {
           f.body = parseBlock(c);
         }
       }
+      _typeParams = savedTP;
       prog.functions.push(f);
     }
   }
@@ -1881,6 +1898,7 @@ function serializeFprg(prog) {
   for (const f of prog.functions) {
     const rs = rets(f);
     let extra = rs.length > 1 ? ` flowlab-returns="${xmlEsc(rs.map((r) => r.name + ':' + r.type).join(';'))}"` : '';
+    if ((f.tparams || []).length) extra += ` flowlab-tparams="${xmlEsc(f.tparams.join(','))}"`;
     if (f.module) extra += ` flowlab-module="${xmlEsc(f.module.name)}" flowlab-module-src="${xmlEsc(f.module.src || '')}"`;
     if (oo) { const c = classOf(prog, f); extra += ` flowlab-class="${xmlEsc(c ? c.name : '')}" flowlab-visibility="${f.visibility || 'public'}" flowlab-static="${TF(!!f.static)}"${f.ctor ? ' flowlab-ctor="True"' : ''}${f.abstract ? ' flowlab-abstract="True"' : ''}`; }
     // per le procedure si conserva il nome eventualmente lasciato in "variable" da altri editor
@@ -1955,6 +1973,7 @@ function extendedFeatures(prog) {
   const out = new Set();
   if (!isPlainOO(prog)) out.add('classi e oggetti');
   if ((prog.classes || []).some((c) => (c.tparams || []).length)) out.add('classi generiche');
+  if (prog.functions.some((f) => (f.tparams || []).length)) out.add('funzioni generiche');
   if ((prog.classes || []).some((c) => c.module) || prog.functions.some((f) => f.module)) out.add('moduli importati');
   for (const f of prog.functions) {
     if (rets(f).length > 1) out.add('funzioni con più valori restituiti');
@@ -2021,12 +2040,13 @@ class Interpreter {
     this.superFirst = new Map();
     if (this.oo) {
       for (const c of prog.classes) { this.byName.set(c.name.toLowerCase(), c); this.methods.set(c.id, []); this.ctors.set(c.id, []); }
-      this.tparamNames = new Set(prog.classes.flatMap((c) => (c.tparams || []).map((t) => t.toLowerCase())));
       for (const f of prog.functions) {
         if (!this.methods.has(f.cls)) continue;
         (f.ctor ? this.ctors : this.methods).get(f.cls).push(f);
       }
     }
+    // parametri di tipo delle classi e delle funzioni generiche
+    this.tparamNames = new Set([...(prog.classes || []).flatMap((c) => c.tparams || []), ...prog.functions.flatMap((f) => f.tparams || [])].map((t) => t.toLowerCase()));
     const self = this;
     this.ctx = {
       getVar: (name, node) => self.getVar(name, node),
@@ -2056,7 +2076,7 @@ class Interpreter {
   unresolved(t) { return !!this.tparamNames && this.tparamNames.has(_E.splitType(t).base.toLowerCase()); }
   /* conversione per assegnamenti e parametri; ctx = oggetto che dà il significato a T (di solito this) */
   coerceTo(val, type, what, ctx) {
-    const t = this.resolve(type, ctx === undefined ? (this.frame ? this.frame.self : null) : ctx);
+    const t = this.resolve(type, ctx === undefined ? (this.frame ? this.frame.tctx : null) : ctx);
     if (this.unresolved(t)) return val;
     const isA = (oc, tn) => { const k = this.byName.get(String(tn).toLowerCase()); return !!k && this.isA(oc, k); };
     const g = _E.splitType(t);
@@ -2118,11 +2138,12 @@ class Interpreter {
     }
     return _E.V.obj(null);
   }
-  /* il tipo esiste? cls = classe in cui si usa (per i parametri di tipo come T) */
-  checkType(t, cls) {
+  /* il tipo esiste? cls = classe in cui si usa, fn = funzione (per i parametri di tipo come T) */
+  checkType(t, cls, fn) {
     if (!this.oo) return;
     const g = _E.splitType(t);
-    if (!g.args.length && (_E.isBaseType(g.base) || _M.isTypeParam(cls, g.base))) return;
+    if (fn === undefined) fn = this.frame && this.frame.func;
+    if (!g.args.length && (_E.isBaseType(g.base) || _M.isTypeParam(cls, g.base) || _M.isTypeParam(fn, g.base))) return;
     const c = this.byName.get(g.base.toLowerCase());
     if (!c) throw new _E.FlowError(`Il tipo "${_E.typeName(t)}" non esiste: crea la classe ${g.base} nel diagramma delle classi`);
     const np = (c.tparams || []).length;
@@ -2131,11 +2152,11 @@ class Interpreter {
       if (!np) throw new _E.FlowError(`${c.name} non è una classe generica: si usa senza < >`);
       throw new _E.FlowError(`${_M.classTitle(c)} vuole ${np} tipi tra < >`);
     }
-    for (const a of g.args) this.checkType(a, cls);
+    for (const a of g.args) this.checkType(a, cls, fn);
   }
   /* esegue fn in una chiamata "di servizio" per inizializzare gli attributi di una classe */
   *withInit(c, obj, fn) {
-    const frame = { func: { id: 'init:' + c.id, name: c.name + ' (attributi)', params: [], body: [] }, vars: new Map(), depth: this.stack.length, cls: c, self: obj, executed: 0, init: true };
+    const frame = { func: { id: 'init:' + c.id, name: c.name + ' (attributi)', params: [], body: [] }, vars: new Map(), depth: this.stack.length, cls: c, self: obj, tctx: obj, executed: 0, init: true };
     this.stack.push(frame);
     try { return yield* fn(); } finally { this.stack.pop(); }
   }
@@ -2376,7 +2397,46 @@ class Interpreter {
         self = opts.self;
       }
     }
-    return yield* this.invoke(f, this.bindArgs(f, pre, node, self), node, { self });
+    // funzione generica: T si ricava dagli argomenti
+    const tctx = (f.tparams || []).length ? this.inferTargs(f, pre, node, self) : self;
+    return yield* this.invoke(f, this.bindArgs(f, pre, node, tctx), node, { self, tctx });
+  }
+  /* tipo di un valore, per dedurre T: Intero, Reale, Persona, ArrayList<Integer>… (null se non si sa) */
+  valType(v) {
+    if (!v) return null;
+    if (v.t !== 'Object') return v.t;
+    if (!v.v) return null;
+    return v.v.targs ? _E.joinType(v.v.cls.name, v.v.targs) : (v.v.cls.tparams || []).length ? null : v.v.cls.name;
+  }
+  /* funzioni generiche: confronta i tipi dei parametri con quelli degli argomenti e trova T.
+     Restituisce il contesto dei tipi della chiamata (come un oggetto con i suoi argomenti di tipo) */
+  inferTargs(f, pre, node, self) {
+    const tp = f.tparams, low = tp.map((t) => t.toLowerCase()), map = {};
+    const unify = (pt, at, p) => {
+      if (!at || this.unresolved(at)) return;
+      const gp = _E.splitType(pt), ga = _E.splitType(at), k = gp.base.toLowerCase();
+      const i = gp.args.length ? -1 : low.indexOf(k);
+      if (i >= 0) {
+        const prev = map[k];
+        if (prev === undefined || _E.sameType(prev, at)) { map[k] = at; return; }
+        // oggetti di classi parenti: vale la classe madre
+        const a = this.byName.get(String(prev).toLowerCase()), b = this.byName.get(String(at).toLowerCase());
+        if (a && b && this.isA(b, a)) return;
+        if (a && b && this.isA(a, b)) { map[k] = at; return; }
+        throw new _E.FlowError(`${f.name}: il tipo ${tp[i]} non può essere sia ${_E.typeName(prev)} sia ${_E.typeName(at)} (argomento "${p.name}"). Usa argomenti dello stesso tipo, es. converti con ToReal(...) o ToInteger(...)`, { node });
+      }
+      if (gp.args.length && ga.args.length === gp.args.length) gp.args.forEach((x, j) => unify(x, ga.args[j], p));
+    };
+    f.params.forEach((p, i) => {
+      const a = pre[i];
+      if (!a) return;
+      if (p.array) { if (a.cell) unify(p.type, this.cellType(a.cell), p); } else if (!a.cell) unify(p.type, this.valType(a.val), p);
+    });
+    const names = [], args = [];
+    // un metodo generico di un oggetto generico vede anche i T della classe
+    if (self && self.targs && (self.cls.tparams || []).length) { names.push(...self.cls.tparams); args.push(...self.targs); }
+    tp.forEach((t, i) => { names.push(t); args.push(map[low[i]] !== undefined ? map[low[i]] : t); });
+    return { cls: { tparams: names }, targs: args, generic: f };
   }
   *mcall(node, opts) {
     const low = node.name.toLowerCase();
@@ -2414,7 +2474,7 @@ class Interpreter {
     if (node.targs && node.targs.length) {
       if (!np) throw new _E.FlowError(`${cls.name} non è una classe generica: si crea senza < >, es. new ${cls.name}(...)`, { node });
       if (node.targs.length !== np) throw new _E.FlowError(`${_M.classTitle(cls)} vuole ${np} tipi tra < >`, { node });
-      targs = node.targs.map((t) => this.resolve(t, this.frame.self));
+      targs = node.targs.map((t) => this.resolve(t, this.frame.tctx));
       for (const t of targs) this.checkType(t, this.frame.cls);
       if (targs.some((t) => this.unresolved(t))) targs = null;
     }
@@ -2516,10 +2576,11 @@ class Interpreter {
   *invoke(func, args, node, opts) {
     if (this.stack.length >= this.maxDepth) throw new _E.FlowError(`Stack overflow: più di ${this.maxDepth} chiamate annidate (ricorsione infinita?)`, { node });
     const cls = this.oo ? this.classById(func.cls) : null;
-    const frame = { func, vars: new Map(), depth: this.stack.length, cls, self: (opts && opts.self) || null, executed: 0 };
+    const self = (opts && opts.self) || null;
+    const frame = { func, vars: new Map(), depth: this.stack.length, cls, self, tctx: (opts && opts.tctx) || self, executed: 0 };
     func.params.forEach((p, i) => {
-      if (p.array) frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: true, dims: args[i].dims || [args[i].items.length], items: args[i].items, param: true, ctx: frame.self });
-      else frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: false, value: args[i], param: true, ctx: frame.self });
+      if (p.array) frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: true, dims: args[i].dims || [args[i].items.length], items: args[i].items, param: true, ctx: frame.tctx });
+      else frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: false, value: args[i], param: true, ctx: frame.tctx });
     });
     this.stack.push(frame);
     yield { type: 'stmt', stmt: { id: 'start:' + func.id, kind: 'start' }, frame };
@@ -2619,15 +2680,15 @@ class Interpreter {
           size = dims.reduce((a, b) => a * b, 1);
           if (size > 1e7) throw new _E.FlowError('Array troppo grande (massimo 10 milioni di elementi)');
         }
-        this.checkType(s.type, frame.cls);
+        this.checkType(s.type, frame.cls, frame.func);
         for (const n of names) {
           if (!_E.validIdent(n)) throw new _E.FlowError(`"${n}" non è un nome di variabile valido`);
           if (_E.RESERVED.has(n.toLowerCase())) throw new _E.FlowError(`"${n}" è una parola riservata`);
           const key = n.toLowerCase();
           if (frame.vars.has(key) && frame.vars.get(key).constant) throw new _E.FlowError(`Il nome "${n}" è già usato dalla costante "${frame.vars.get(key).name}"`);
           if (frame.vars.has(key)) throw new _E.FlowError(frame.vars.get(key).name === n ? `La variabile "${n}" è già stata dichiarata` : `La variabile "${n}" è già stata dichiarata come "${frame.vars.get(key).name}" (maiuscole e minuscole non contano)`);
-          if (s.array) frame.vars.set(key, { name: n, type: s.type, array: true, dims: dims.slice(), items: new Array(size).fill(undefined), ctx: frame.self });
-          else frame.vars.set(key, { name: n, type: s.type, array: false, value: undefined, ctx: frame.self });
+          if (s.array) frame.vars.set(key, { name: n, type: s.type, array: true, dims: dims.slice(), items: new Array(size).fill(undefined), ctx: frame.tctx });
+          else frame.vars.set(key, { name: n, type: s.type, array: false, value: undefined, ctx: frame.tctx });
         }
         // valore iniziale: vale per tutte le variabili del blocco
         if (!s.array && String(s.init || '').trim()) for (const n of names) yield* this.store({ k: 'var', name: n }, yield* ev(s.init));
@@ -2641,7 +2702,7 @@ class Interpreter {
         const key = n.toLowerCase();
         if (frame.vars.has(key)) throw new _E.FlowError(`Il nome "${n}" è già usato da ${frame.vars.get(key).constant ? 'un\'altra costante' : 'una variabile'}`);
         const v = yield* ev(s.expression);
-        frame.vars.set(key, { name: n, type: s.type, array: false, value: this.coerceTo(v, s.type, `il valore della costante "${n}"`), constant: true, ctx: frame.self });
+        frame.vars.set(key, { name: n, type: s.type, array: false, value: this.coerceTo(v, s.type, `il valore della costante "${n}"`), constant: true, ctx: frame.tctx });
         return;
       }
       case 'assign': {
@@ -2930,8 +2991,122 @@ function setupGen(prog, lang) {
     skip.add(c.id);
     if (c.name === spec.cls) native.set(c.name.toLowerCase(), spec);
   }
-  GEN = { native, skip, tparams: new Set(cs.flatMap((c) => (c.tparams || []).map((t) => t.toLowerCase()))), helpers: new Set() };
+  const tps = [...cs.flatMap((c) => c.tparams || []), ...prog.functions.flatMap((f) => f.tparams || [])].map((t) => t.toLowerCase());
+  GEN = { native, skip, tparams: new Set(tps), helpers: new Set(), bound: new Set(), boxed: new Set(), cur: null };
+  if (tps.length) analyzeGenerics(prog, lang);
 }
+/* ---- generici: chi possiede un parametro di tipo (la funzione o la classe) ---- */
+const FKEY = (f, t) => 'f:' + f.id + ':' + String(t).toLowerCase();
+const CKEY = (c, t) => 'c:' + c.id + ':' + String(t).toLowerCase();
+function tpKey(t, f, c) {
+  if (!isTP(t)) return null;
+  const low = String(t).toLowerCase(), has = (x) => (x.tparams || []).some((y) => y.toLowerCase() === low);
+  if (f && has(f)) return FKEY(f, t);
+  if (c && has(c)) return CKEY(c, t);
+  return null;
+}
+/* T deve essere confrontabile (< > su T): Comparable in Java, IComparable in C# */
+const isBound = (t, f, c) => { const k = tpKey(t, f, c); return !!k && GEN.bound.has(k); };
+const boundHere = (t) => !!GEN.cur && isBound(t, GEN.cur.f, GEN.cur.c);
+/* testi delle espressioni di un blocco */
+function exprSources(s) {
+  switch (s.kind) {
+    case 'declare': return [..._CE.splitTop(s.array ? s.size || '' : ''), s.init || ''];
+    case 'const': case 'output': case 'write': case 'if': case 'while': case 'do': case 'call': case 'open': return [s.expression];
+    case 'breakpoint': return s.always ? [] : [s.expression];
+    case 'assign': return [..._CE.splitTop(s.variable), s.expression];
+    case 'input': case 'read': return [s.variable];
+    case 'for': return [s.variable, s.start, s.end, s.step];
+  }
+  return [];
+}
+function walkNodes(n, fn) {
+  if (!n || typeof n !== 'object') return;
+  if (Array.isArray(n)) { n.forEach((x) => walkNodes(x, fn)); return; }
+  if (n.k) fn(n);
+  for (const v of Object.values(n)) if (v && typeof v === 'object') walkNodes(v, fn);
+}
+/* funzione o metodo chiamato da un nodo (call, mcall, new) */
+function calleeNode(n, sc, prog) {
+  const low = String(n.name || '').toLowerCase();
+  if (n.k === 'call') { const e = sc.funcs.get(low); return e ? e.f : null; }
+  if (n.k === 'mcall' && sc.methodHit && strip(n.obj).k !== 'super') { const c = sc.classRef(n.obj) || sc.objClass(n.obj); const h = c && sc.methodHit(c, low); return h ? h.f : null; }
+  if (n.k === 'new' && sc.classNamed) { const c = sc.classNamed(n.cls); return c ? OO.ctors(prog, c).find((f) => f.params.length === n.args.length) || null : null; }
+  return null;
+}
+/* analisi del programma: quali T devono essere confrontabili e (Java) quali array di tipi base passano a parametri T[] */
+function analyzeGenerics(prog, lang) {
+  const oo = _CM.hasClasses(prog), cs = oo ? prog.classes.filter((c) => !GEN.skip.has(c.id)) : [];
+  const info = prog.functions.filter((f) => !(oo && GEN.skip.has(f.cls))).map((f) => {
+    const it = { f, c: oo ? _CM.classOf(prog, f) : null, sc: buildScope(prog, f), nodes: [], decls: [], assigns: [] };
+    _CM.walk(f.body, (st) => {
+      if (st.kind === 'declare') it.decls.push(st);
+      if (st.kind === 'assign') it.assigns.push(st);
+      for (const src of exprSources(st)) { const t = String(src || '').trim() && tryParse(src); if (t) walkNodes(t, (n) => it.nodes.push(n)); }
+    });
+    return it;
+  });
+  const bound = GEN.bound;
+  // confronti < <= > >= tra valori di tipo T
+  for (const it of info) for (const n of it.nodes) {
+    if (n.k !== 'bin' || !['<', '<=', '>', '>='].includes(n.op)) continue;
+    for (const x of [n.l, n.r]) { const k = tpKey(_CE.inferType(x, it.sc), it.f, it.c); if (k) bound.add(k); }
+  }
+  // il vincolo si propaga: Coppia<T> con T confrontabile, chiamate a funzioni generiche con T confrontabile
+  for (let changed = true, guard = 0; changed && guard < 20; guard++) {
+    changed = false;
+    const add = (k) => { if (k && !bound.has(k)) { bound.add(k); changed = true; } };
+    const typeUse = (t, f, c) => {
+      const g = _CE.splitType(t); if (!g.args.length) return;
+      const k = _CM.classByName(prog, g.base);
+      g.args.forEach((a, i) => { if (k && (k.tparams || [])[i] && bound.has(CKEY(k, k.tparams[i]))) add(tpKey(a, f, c)); typeUse(a, f, c); });
+    };
+    for (const it of info) [...it.f.params.map((p) => p.type), ..._CM.rets(it.f).map((r) => r.type), ...it.decls.map((d) => d.type)].forEach((t) => typeUse(t, it.f, it.c));
+    for (const c of cs) for (const a of c.attributes) typeUse(a.type, null, c);
+    for (const it of info) for (const n of it.nodes) {
+      const g = calleeNode(n, it.sc, prog);
+      if (!g || !(g.tparams || []).length) continue;
+      g.params.forEach((p, i) => { if (n.args[i] && isBound(p.type, g, null)) add(tpKey(_CE.inferType(n.args[i], it.sc), it.f, it.c)); });
+    }
+  }
+  if (lang === 'java') analyzeBoxing(prog, info, cs);
+}
+/* Java: un array di int non si può passare a un parametro T[]; quegli array diventano Integer[] (e quelli collegati a loro) */
+function analyzeBoxing(prog, info, cs) {
+  const parent = new Map();
+  const find = (k) => { while (parent.has(k)) k = parent.get(k); return k; };
+  const union = (a, b) => { if (!a || !b) return; const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
+  const elem = new Map(), sinks = [];
+  const akey = (c, a) => 'attr:' + c.id + ':' + a.name.toLowerCase();
+  for (const c of cs) for (const a of c.attributes) if (a.array) elem.set(akey(c, a), a.type);
+  for (const it of info) {
+    for (const p of it.f.params) if (p.array) { const k = it.f.id + ':' + p.name.toLowerCase(); elem.set(k, p.type); if (isTP(p.type)) sinks.push(k); }
+    for (const d of it.decls) if (d.array) for (const n of d.name.split(',').map((x) => x.trim()).filter(Boolean)) elem.set(it.f.id + ':' + n.toLowerCase(), d.type);
+  }
+  const slot = (node, it) => {
+    const x = strip(node); if (!x || x.indices) return null;
+    if (x.k === 'var') {
+      const v = it.sc.vars.get(x.name.toLowerCase());
+      if (v) return v.array ? it.f.id + ':' + x.name.toLowerCase() : null;
+      const h = it.sc.implicitField && it.sc.implicitField(x.name);
+      return h && h.attr.array ? akey(h.owner, h.attr) : null;
+    }
+    if (x.k === 'member' && it.sc.objClass) { const c = it.sc.objClass(x.obj); const h = c && it.sc.fieldHit(c, x.name.toLowerCase()); return h && h.attr.array ? akey(h.owner, h.attr) : null; }
+    return null;
+  };
+  for (const it of info) {
+    for (const n of it.nodes) {
+      const g = calleeNode(n, it.sc, prog);
+      if (g) g.params.forEach((p, i) => { if (p.array && n.args[i]) union(slot(n.args[i], it), g.id + ':' + p.name.toLowerCase()); });
+    }
+    // a ← b tra array: lo stesso array
+    for (const st of it.assigns) { const l = tryParse(st.variable), r = tryParse(st.expression); if (l && r) { const a = slot(l, it), b = slot(r, it); if (a && b) union(a, b); } }
+  }
+  const roots = new Set(sinks.map(find));
+  for (const [k, t] of elem) if (BOX_J[t] && t !== 'String' && roots.has(find(k))) GEN.boxed.add(k);
+}
+/* Java: elemento di un array Integer[] (per == si usa Objects.equals) */
+const boxedElem = (n, sc) => { const x = strip(n); return !!x && x.k === 'var' && !!x.indices && !!sc.func && GEN.boxed.has(sc.func.id + ':' + x.name.toLowerCase()); };
 /* durante l'assegnazione il tipo atteso permette di scrivere new ArrayList<Integer>() anche se nel diagramma c'è new ArrayList() */
 function withExpect(sc, t, fn) { const old = sc.expect; sc.expect = t; try { return fn(); } finally { sc.expect = old; } }
 
@@ -2976,7 +3151,12 @@ function ooScope(prog, sc) {
         case 'this': return sc.cls ? sc.cls.name : 'Unknown';
         case 'new': { const c = classNamed(node.cls); return c ? (node.targs && node.targs.length ? _CE.joinType(c.name, node.targs) : c.name) : node.cls; }
         case 'member': { const c = objClass(node.obj); const h = c && fieldHit(c, node.name.toLowerCase()); return h ? subst(h.attr.type, node.obj, c) : 'Unknown'; }
-        case 'mcall': { const c = objClass(node.obj); const h = c && methodHit(c, node.name.toLowerCase()); return h ? subst(h.f.type, node.obj, c) : 'Unknown'; }
+        case 'mcall': {
+          const c = objClass(node.obj); const h = c && methodHit(c, node.name.toLowerCase());
+          if (!h) return 'Unknown';
+          const t = subst(h.f.type, node.obj, c);
+          return (h.f.tparams || []).length ? _CE.substType(t, _CE.genericMap(h.f, node.args, sc)) : t;
+        }
       }
       return undefined;
     },
@@ -3111,7 +3291,7 @@ function exprPrinter(L) {
         return { s, p: P.atom };
       }
       case 'mcall': {
-        const a = n.args.map((x) => pr(x, sc).s).join(', ');
+        let a = n.args.map((x) => pr(x, sc).s).join(', ');
         const o = strip(n.obj);
         if (o.k === 'super') {
           const par = sc.classNamed && sc.classNamed(sc.cls && sc.cls.parent); const h = par && sc.methodHit(par, n.name.toLowerCase());
@@ -3126,6 +3306,7 @@ function exprPrinter(L) {
         if (nm0 && nat[L.lang].m[nm0.name]) { const r = nat[L.lang].m[nm0.name](ref.s, n.args.map((x) => pr(x, sc))); return typeof r === 'string' ? { s: r, p: P.atom } : r; }
         const h = c && sc.methodHit(c, n.name.toLowerCase());
         const nm = h ? h.f.name : n.name;
+        if (L.garg && h && (h.f.tparams || []).length) a = n.args.map((x) => L.garg(x, pr(x, sc).s)).join(', ');
         return { s: ref.cls ? `${L.staticSep ? L.staticSep(ref.cls.name, nm) : ref.cls.name + '.' + nm}(${a})` : `${ref.s}${L.arrow || '.'}${nm}(${a})`, p: P.atom };
       }
       case 'un':
@@ -3290,8 +3471,9 @@ LANGS.pseudo = {
           const rl = _CM.rets(f);
           o.line('');
           const kw = f.ctor ? 'COSTRUTTORE' : (f.static ? 'METODO STATICO' : f.abstract ? 'METODO ASTRATTO' : 'METODO');
-          if (f.abstract) { o.line(`${kw} ${V(f.visibility)} ${f.name}(${psig(f)})${rl.length ? ' : ' + rl.map((r) => T(r.type)).join(', ') : ''}   // senza corpo: lo definiscono le sottoclassi`); continue; }
-          o.line(`${kw} ${V(f.visibility)} ${f.name}(${psig(f)})${rl.length ? ' : ' + rl.map((r) => T(r.type)).join(', ') : ''}`);
+          const fnm = f.name + ((f.tparams || []).length ? `<${f.tparams.join(', ')}>` : '');
+          if (f.abstract) { o.line(`${kw} ${V(f.visibility)} ${fnm}(${psig(f)})${rl.length ? ' : ' + rl.map((r) => T(r.type)).join(', ') : ''}   // senza corpo: lo definiscono le sottoclassi`); continue; }
+          o.line(`${kw} ${V(f.visibility)} ${fnm}(${psig(f)})${rl.length ? ' : ' + rl.map((r) => T(r.type)).join(', ') : ''}`);
           o.in(); block(f.body, sc);
           if (rl.length) o.line(`RESTITUISCI ${rl.map((r) => r.name).join(', ')}`);
           o.out(); o.line(f.ctor ? 'FINE COSTRUTTORE' : 'FINE METODO');
@@ -3305,9 +3487,10 @@ LANGS.pseudo = {
       if (i > 0) o.line('');
       if (i === 0) o.line(`ALGORITMO ${prog.attrs.name ? prog.attrs.name.replace(/\s+/g, '_') : 'Main'}`);
       else {
-        const ps = f.params.map((p) => `${p.name} : ${p.array ? ((p.dims || 1) > 1 ? `array a ${p.dims} dimensioni di ` : 'array di ') : ''}${TIPO[p.type]}`).join(', ');
+        const ps = f.params.map((p) => `${p.name} : ${p.array ? ((p.dims || 1) > 1 ? `array a ${p.dims} dimensioni di ` : 'array di ') : ''}${TP(p.type)}`).join(', ');
         const rl = _CM.rets(f);
-        o.line(!rl.length ? `PROCEDURA ${f.name}(${ps})` : `FUNZIONE ${f.name}(${ps}) : ${rl.map((r) => TIPO[r.type]).join(', ')}`);
+        const nm = f.name + ((f.tparams || []).length ? `<${f.tparams.join(', ')}>` : '');
+        o.line(!rl.length ? `PROCEDURA ${nm}(${ps})` : `FUNZIONE ${nm}(${ps}) : ${rl.map((r) => TP(r.type)).join(', ')}`);
       }
       o.in(); block(f.body, sc);
       if (i > 0 && _CM.rets(f).length) o.line(`RESTITUISCI ${_CM.rets(f).map((r) => r.name).join(', ')}`);
@@ -3572,7 +3755,7 @@ function cFamily(cfg) {
         idx: cfg.idx, str: (s) => cfg.strLit(s), T: 'true', F: 'false', pi: cfg.pi, use: () => used.add('pi'),
         not: '!', notPrec: P.un, or: '||', and: '&&', pow: '**',
         rel: { '==': cfg.eq || '==', '!=': cfg.neq || '!=', '<': '<', '<=': '<=', '>': '>', '>=': '>=' },
-        lang: cfg.lang, targ: cfg.targ, diamond: cfg.diamond,
+        lang: cfg.lang, targ: cfg.targ, diamond: cfg.diamond, garg: cfg.garg,
         nul: cfg.nul, self: cfg.self, arrow: cfg.arrow, staticSep: cfg.staticSep, newObj: cfg.newObj, superCtor: cfg.superCtor, superMethod: cfg.superMethod, field: cfg.field,
         bin(n, sc, pr) {
           const lt = _CE.inferType(n.l, sc), rt = _CE.inferType(n.r, sc);
@@ -3594,11 +3777,15 @@ function cFamily(cfg) {
             const l = pr(n.l, sc), r = pr(n.r, sc);
             return { s: `${l.p <= P.pow ? '(' + l.s + ')' : l.s} ** ${r.p < P.pow ? '(' + r.s + ')' : r.s}`, p: P.pow };
           }
+          // confronti tra valori di tipo T: equals / compareTo
+          if (REL.includes(n.op) && cfg.cmpT && (isTP(lt) || isTP(rt) || (['==', '!='].includes(n.op) && boxedElem(n.l, sc) && boxedElem(n.r, sc)))) return cfg.cmpT(n.op, pr(n.l, sc), pr(n.r, sc));
           if (REL.includes(n.op) && lt === 'String' && rt === 'String' && cfg.strCmp) return cfg.strCmp(n.op, pr(n.l, sc), pr(n.r, sc));
           return null;
         },
         call(n, sc, pr) {
           const a = n.args.map((x) => pr(x, sc));
+          const uf = sc.funcs.get(n.name.toLowerCase());
+          if (uf && cfg.garg && (uf.f.tparams || []).length) a.forEach((x, i) => { x.s = cfg.garg(n.args[i], x.s); });
           if (sc.funcs.has(n.name.toLowerCase())) return { s: `${cfg.qualifyCalls ? ucall(sc.funcs.get(n.name.toLowerCase()), sc, 'this') : ''}${fname(n.name, sc)}(${a.map((x) => x.s).join(', ')})`, p: P.atom };
           const low = n.name.toLowerCase();
           const r = cfg.builtin(low, a, n, sc, used);
@@ -3620,7 +3807,7 @@ function cFamily(cfg) {
               if (!s.array && String(s.init || '').trim() && cfg.declareInit) { for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declareInit(nm, s.type, withExpect(sc, s.type, () => asReal(s.init, s.type, E, sc)))); break; }
               const init = initOf(s, stmts[si + 1]);
               if (init != null && cfg.declareInit) { o.line(cfg.declareInit(s.name.trim(), s.type, withExpect(sc, s.type, () => asReal(init, s.type, E, sc)))); si++; break; }
-              for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declare(nm, s.type, s.array, s.array ? dimsOf(s, E, sc) : null, used));
+              for (const nm of s.name.split(',').map((x) => x.trim()).filter(Boolean)) o.line(cfg.declare(nm, s.type, s.array, s.array ? dimsOf(s, E, sc) : null, used, sc));
               break;
             }
             case 'assign': {
@@ -3680,6 +3867,8 @@ const tCpp = (t) => {
   return n && n.cpp ? n.cpp.type(a) : `${g.base}<${a.join(', ')}>*`;
 };
 const tplOf = (c) => ((c.tparams || []).length ? `template <${c.tparams.map((t) => 'typename ' + t).join(', ')}>` : '');
+/* funzione generica: template <typename T> davanti alla firma */
+const tplF = (f) => ((f.tparams || []).length ? `template <${f.tparams.map((t) => 'typename ' + t).join(', ')}> ` : '');
 const qualOf = (c) => ((c.tparams || []).length ? `${c.name}<${c.tparams.join(', ')}>` : c.name);
 const CPP_HELPERS = {
   rimuoviIn: ['// toglie l\'elemento in posizione i e lo restituisce', 'template <typename T> T rimuoviIn(vector<T>* v, int i) { T x = (*v)[i]; v->erase(v->begin() + i); return x; }'],
@@ -3709,6 +3898,8 @@ function cppParts(t, arr, D) {
 }
 LANGS.cpp = cFamily({
   lang: 'cpp', targ: (t) => tCpp(t),
+  // funzioni generiche: "testo" è un const char*, con string("testo") T diventa string
+  garg: (node, s) => (strip(node) && strip(node).k === 'str' ? `string(${s})` : s),
   label: 'C++', ext: 'cpp', intDiv: true, fmod: true, powFn: 'pow', intCast: '(int) ', wrapOut: true,
   keywords: ['int', 'double', 'string', 'bool', 'void', 'return', 'if', 'else', 'while', 'for', 'do', 'true', 'false', 'using', 'namespace', 'std', 'include', 'cout', 'cin', 'endl', 'vector', 'const', 'main', 'class', 'public', 'private', 'protected', 'static', 'virtual', 'new', 'this', 'nullptr'],
   pi: 'PI',
@@ -3763,7 +3954,7 @@ LANGS.cpp = cFamily({
   program(prog, g) {
     const o = new g.Out();
     const retT = (f) => { const rl = _CM.rets(f); if (rl.length > 1) { g.used.add('tuple'); return `tuple<${rl.map((r) => tCpp(r.type)).join(', ')}>`; } return f.type === 'None' ? 'void' : tCpp(f.type); };
-    const sig = (f) => `${retT(f)} ${f.name}(${f.params.map((p) => (p.array ? `${'vector<'.repeat(p.dims || 1)}${tCpp(p.type)}${'>'.repeat(p.dims || 1)}& ${p.name}` : `${tCpp(p.type)} ${p.name}`)).join(', ')})`;
+    const sig = (f) => `${tplF(f)}${retT(f)} ${f.name}(${f.params.map((p) => (p.array ? `${'vector<'.repeat(p.dims || 1)}${tCpp(p.type)}${'>'.repeat(p.dims || 1)}& ${p.name}` : `${tCpp(p.type)} ${p.name}`)).join(', ')})`;
     const fns = prog.functions.slice(1);
     const bodyOut = new g.Out();
     for (const f of fns) {
@@ -3816,7 +4007,7 @@ LANGS.cpp = cFamily({
       for (const f of OO.methods(prog, c)) {
         const nm = OO.isMain(prog, f) ? 'Main' : f.name;
         // metodo astratto: virtuale puro, senza definizione
-        vis(f.visibility).push(`${f.static ? 'static ' : (poly || f.abstract ? 'virtual ' : '')}${retT(f)} ${nm}(${params(f)})${f.abstract ? ' = 0' : ''};`);
+        vis(f.visibility).push(`${tplF(f)}${f.static ? 'static ' : (poly || f.abstract ? 'virtual ' : '')}${retT(f)} ${nm}(${params(f)})${f.abstract ? ' = 0' : ''};`);
       }
       decls.line('');
       if (tplOf(c)) decls.line(tplOf(c));
@@ -3835,7 +4026,7 @@ LANGS.cpp = cFamily({
           defs.in(); g.block(defs, sp.rest, sc); defs.out(); defs.line('}');
           continue;
         }
-        defs.line(`${retT(f)} ${qualOf(c)}::${OO.isMain(prog, f) ? 'Main' : f.name}(${params(f)}) {`);
+        defs.line(`${tplF(f)}${retT(f)} ${qualOf(c)}::${OO.isMain(prog, f) ? 'Main' : f.name}(${params(f)}) {`);
         defs.in(); g.block(defs, f.body, sc);
         const rl = _CM.rets(f);
         if (rl.length) { defs.line(rl.length > 1 ? `return make_tuple(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
@@ -3879,7 +4070,17 @@ const tJava = (t) => {
   return n && n.java ? n.java.type(a) : `${g.base}<${a.join(', ')}>`;
 };
 /* array di T in Java: non si può scrivere new T[n] */
-const newArrJava = (t, D) => (isTP(t) ? `(${t}${'[]'.repeat(D.length)}) new Object${D.map((d) => `[${d}]`).join('')}` : `new ${tJava(t)}${D.map((d) => `[${d}]`).join('')}`);
+/* (se T deve essere confrontabile l'array è di Comparable) */
+const newArrJava = (t, D, box) => (isTP(t) ? `(${t}${'[]'.repeat(D.length)}) new ${boundHere(t) ? 'Comparable' : 'Object'}${D.map((d) => `[${d}]`).join('')}` : `new ${box ? BOX_J[t] : tJava(t)}${D.map((d) => `[${d}]`).join('')}`);
+/* array passato a una funzione generica: Integer[] invece di int[] */
+const arrJ = (t, key) => (GEN.boxed.has(key) ? BOX_J[t] : tJava(t));
+/* <T> o <T extends Comparable<T>> */
+const jTP = (list, key) => `<${list.map((t) => (GEN.bound.has(key(t)) ? `${t} extends Comparable<${t}>` : t)).join(', ')}>`;
+const jFunTP = (f) => ((f.tparams || []).length ? jTP(f.tparams, (t) => FKEY(f, t)) + ' ' : '');
+const jClassTitle = (c) => ((c.tparams || []).length ? c.name + jTP(c.tparams, (t) => CKEY(c, t)) : c.name);
+/* new T[n] non si può scrivere: (T[]) new Object[n] vuole @SuppressWarnings */
+const jUnchecked = (f) => { let u = false; if ((f.tparams || []).length) _CM.walk(f.body, (s) => { if (s.kind === 'declare' && s.array && tpKey(s.type, f, null)) u = true; }); return u; };
+const jParams = (f) => f.params.map((p) => `${p.array ? arrJ(p.type, f.id + ':' + p.name.toLowerCase()) : tJava(p.type)}${p.array ? '[]'.repeat(p.dims || 1) : ''} ${p.name}`).join(', ');
 let J_PFX = ''; // dalle altre classi lo Scanner e i file stanno nella classe principale
 const DEF_C = { Integer: '0', Real: '0.0', String: '""', Boolean: 'false' };
 LANGS.java = cFamily({
@@ -3889,6 +4090,12 @@ LANGS.java = cFamily({
   pi: 'Math.PI',
   strLit: (s) => escStr(s, '"'),
   toStr: (x, t, e) => (e.p <= P.add ? `(${e.s})` : e.s),
+  // valori di tipo T (oggetti): Objects.equals e compareTo
+  cmpT(op, l, r) {
+    if (op === '==') return { s: `Objects.equals(${l.s}, ${r.s})`, p: P.atom };
+    if (op === '!=') return { s: `!Objects.equals(${l.s}, ${r.s})`, p: P.un };
+    return { s: `${l.p < P.atom ? `(${l.s})` : l.s}.compareTo(${r.s}) ${op} 0`, p: P.rel };
+  },
   strCmp(op, l, r) {
     const ls = l.p < P.atom ? `(${l.s})` : l.s;
     if (op === '==') return { s: `${ls}.equals(${r.s})`, p: P.atom };
@@ -3919,7 +4126,11 @@ LANGS.java = cFamily({
     }
     return null;
   },
-  declare: (n, t, arr, D) => (arr ? `${tJava(t)}${'[]'.repeat(D.length)} ${n} = ${newArrJava(t, D)};` : `${tJava(t)} ${n} = ${DEF_C[t] || 'null'};`),
+  declare: (n, t, arr, D, used, sc) => {
+    if (!arr) return `${tJava(t)} ${n} = ${DEF_C[t] || 'null'};`;
+    const box = !!(sc && sc.func && GEN.boxed.has(sc.func.id + ':' + n.toLowerCase()));
+    return `${box ? BOX_J[t] : tJava(t)}${'[]'.repeat(D.length)} ${n} = ${newArrJava(t, D, box)};`;
+  },
   constDecl: (n, t, e) => `final ${tJava(t)} ${n} = ${e};`,
   declareInit: (n, t, e) => `${tJava(t)} ${n} = ${e};`,
   input: (o, v, t) => { const i = J_PFX + 'input'; o.line(`${v} = ${t === 'Integer' ? `Integer.parseInt(${i}.nextLine())` : t === 'Real' ? `Double.parseDouble(${i}.nextLine())` : t === 'Boolean' ? `Boolean.parseBoolean(${i}.nextLine())` : `${i}.nextLine()`};`); },
@@ -3948,12 +4159,15 @@ LANGS.java = cFamily({
     const main = new g.Out(); main.lvl = 2;
     const recName = (f) => 'Risultato' + f.name[0].toUpperCase() + f.name.slice(1);
     const records = prog.functions.slice(1).filter((f) => _CM.rets(f).length > 1);
+    GEN.cur = { f: prog.functions[0], c: null };
     g.block(main, prog.functions[0].body, g.buildScope(prog.functions[0]));
     for (const f of prog.functions.slice(1)) {
+      GEN.cur = { f, c: null };
       const sc = g.buildScope(f);
       const rl = _CM.rets(f);
       inner.line('');
-      inner.line(`public static ${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${f.params.map((p) => `${tJava(p.type)}${p.array ? '[]'.repeat(p.dims || 1) : ''} ${p.name}`).join(', ')})${g.used.has('files') ? ' throws Exception' : ''} {`);
+      if (jUnchecked(f)) inner.line('@SuppressWarnings("unchecked")');
+      inner.line(`public static ${jFunTP(f)}${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${jParams(f)})${g.used.has('files') ? ' throws Exception' : ''} {`);
       inner.in(); g.block(inner, f.body, sc);
       if (rl.length) { inner.line(rl.length > 1 ? `return new ${recName(f)}(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
       inner.out(); inner.line('}');
@@ -3976,7 +4190,7 @@ LANGS.java = cFamily({
     const main = _CM.mainClass(prog);
     const files = usesFiles(prog);
     const thr = files ? ' throws Exception' : '';
-    const params = (f) => f.params.map((p) => `${tJava(p.type)}${p.array ? '[]'.repeat(p.dims || 1) : ''} ${p.name}`).join(', ');
+    const params = jParams;
     const recName = (f) => 'Risultato' + cap(f.name);
     const V = (v) => (v || 'public') + ' ';
     const parts = [];
@@ -3990,33 +4204,37 @@ LANGS.java = cFamily({
       }
       for (const f of OO.methods(prog, c)) if (_CM.rets(f).length > 1) { records = true; o.line(`record ${recName(f)}(${_CM.rets(f).map((r) => `${tJava(r.type)} ${r.name}`).join(', ')}) {}`); }
       for (const a of c.attributes) {
+        GEN.cur = { f: null, c };
         const sc = OO.classScope(prog, c, a.static);
         const D = a.array ? _CE.splitTop(a.size).map((x) => g.E(x, sc)) : null;
-        const init = a.array ? ` = ${newArrJava(a.type, D)}` : (String(a.init || '').trim() ? ' = ' + g.E(a.init, sc) : (a.type === 'String' ? ' = ""' : ''));
-        o.line(`${V(a.visibility)}${a.static ? 'static ' : ''}${tJava(a.type)}${a.array ? '[]'.repeat(D.length) : ''} ${a.name}${init};`);
+        const box = a.array && GEN.boxed.has('attr:' + c.id + ':' + a.name.toLowerCase());
+        const init = a.array ? ` = ${newArrJava(a.type, D, box)}` : (String(a.init || '').trim() ? ' = ' + g.E(a.init, sc) : (a.type === 'String' ? ' = ""' : ''));
+        o.line(`${V(a.visibility)}${a.static ? 'static ' : ''}${box ? BOX_J[a.type] : tJava(a.type)}${a.array ? '[]'.repeat(D.length) : ''} ${a.name}${init};`);
       }
       for (const f of [...OO.ctors(prog, c), ...OO.methods(prog, c)]) {
+        GEN.cur = { f, c };
         const sc = g.buildScope(f);
         const rl = _CM.rets(f);
         if (o.lines.length) o.line('');
-        if (f.abstract) { o.line(`${V(f.visibility)}abstract ${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${params(f)});`); continue; }
+        if (f.abstract) { o.line(`${V(f.visibility)}abstract ${jFunTP(f)}${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${params(f)});`); continue; }
+        if (jUnchecked(f)) o.line('@SuppressWarnings("unchecked")');
         if (f.ctor) o.line(`${V(f.visibility)}${c.name}(${params(f)})${thr} {`);
         else if (OO.isMain(prog, f)) o.line(`public static void main(String[] args)${thr} {`);
-        else o.line(`${V(f.visibility)}${f.static ? 'static ' : ''}${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${params(f)})${thr} {`);
+        else o.line(`${V(f.visibility)}${f.static ? 'static ' : ''}${jFunTP(f)}${rl.length > 1 ? recName(f) : tJava(f.type)} ${f.name}(${params(f)})${thr} {`);
         o.in(); g.block(o, f.body, sc);
         if (rl.length) { o.line(rl.length > 1 ? `return new ${recName(f)}(${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
         o.out(); o.line('}');
       }
       parts.push({ c, lines: o.lines });
     }
-    J_PFX = '';
+    J_PFX = ''; GEN.cur = null;
     const o = new g.Out();
     if (records) o.line('// Richiede Java 16 o successivo: i metodi con più valori restituiscono un record');
     o.line('import java.util.*;');
     for (const { c, lines } of parts) {
       o.line('');
       if ((c.tparams || []).length) o.line('@SuppressWarnings("unchecked")');
-      o.line(`${c === main ? 'public ' : ''}${c.abstract ? 'abstract ' : ''}class ${_CM.classTitle(c)}${c.parent ? ' extends ' + c.parent : ''} {`);
+      o.line(`${c === main ? 'public ' : ''}${c.abstract ? 'abstract ' : ''}class ${jClassTitle(c)}${c.parent ? ' extends ' + c.parent : ''} {`);
       o.lines.push(...lines);
       o.line('}');
     }
@@ -4031,6 +4249,11 @@ const tCs = (t) => {
   return n && n.csharp ? n.csharp.type(a) : `${g.base}<${a.join(', ')}>`;
 };
 let CS_PFX = '';
+/* funzioni generiche: Nome<T>(...) where T : IComparable<T> */
+const csTP = (f) => ((f.tparams || []).length ? `<${f.tparams.join(', ')}>` : '');
+const csWhere = (list, key) => list.filter((t) => GEN.bound.has(key(t))).map((t) => ` where ${t} : IComparable<${t}>`).join('');
+const csWhereF = (f) => csWhere(f.tparams || [], (t) => FKEY(f, t));
+const csWhereC = (c) => csWhere(c.tparams || [], (t) => CKEY(c, t));
 LANGS.csharp = cFamily({
   lang: 'csharp', targ: (t) => tCs(t),
   label: 'C#', ext: 'cs', intDiv: true, powFn: 'Math.Pow', intCast: '(int) ',
@@ -4039,6 +4262,12 @@ LANGS.csharp = cFamily({
   strLit: (s) => escStr(s, '"'),
   concatPrefix: '""',
   toStr: (x, t, e) => (e.p <= P.add ? `(${e.s})` : e.s),
+  // valori di tipo T: Equals e CompareTo
+  cmpT(op, l, r) {
+    if (op === '==') return { s: `Equals(${l.s}, ${r.s})`, p: P.atom };
+    if (op === '!=') return { s: `!Equals(${l.s}, ${r.s})`, p: P.un };
+    return { s: `${l.p < P.atom ? `(${l.s})` : l.s}.CompareTo(${r.s}) ${op} 0`, p: P.rel };
+  },
   strCmp(op, l, r) {
     if (op === '==' || op === '!=') return null;
     return { s: `string.Compare(${l.s}, ${r.s}, StringComparison.Ordinal) ${op} 0`, p: P.rel };
@@ -4090,7 +4319,7 @@ LANGS.csharp = cFamily({
       inner.line('');
       const rl = _CM.rets(f);
       const rt = rl.length > 1 ? `(${rl.map((r) => tCs(r.type)).join(', ')})` : tCs(f.type);
-      inner.line(`static ${rt} ${f.name}(${f.params.map((p) => `${tCs(p.type)}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''} ${p.name}`).join(', ')}) {`);
+      inner.line(`static ${rt} ${f.name}${csTP(f)}(${f.params.map((p) => `${tCs(p.type)}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''} ${p.name}`).join(', ')})${csWhereF(f)} {`);
       inner.in(); g.block(inner, f.body, sc);
       if (rl.length) { inner.line(rl.length > 1 ? `return (${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
       inner.out(); inner.line('}');
@@ -4125,7 +4354,7 @@ LANGS.csharp = cFamily({
         const rl = _CM.rets(f);
         if (o.lines.length) o.line('');
         let body = f.body;
-        if (f.abstract) { o.line(`${V(f.visibility)}abstract ${rl.length > 1 ? `(${rl.map((r) => tCs(r.type)).join(', ')})` : tCs(f.type)} ${f.name}(${params(f)});`); continue; }
+        if (f.abstract) { o.line(`${V(f.visibility)}abstract ${rl.length > 1 ? `(${rl.map((r) => tCs(r.type)).join(', ')})` : tCs(f.type)} ${f.name}${csTP(f)}(${params(f)})${csWhereF(f)};`); continue; }
         if (f.ctor) {
           const sp = OO.splitSuper(f); body = sp.rest;
           o.line(`${V(f.visibility)}${c.name}(${params(f)})${sp.args ? ` : base(${sp.args.map((x) => g.pr(x, sc).s).join(', ')})` : ''} {`);
@@ -4134,7 +4363,7 @@ LANGS.csharp = cFamily({
           // polimorfismo: virtual nella classe madre, override nelle sottoclassi
           const vo = f.static ? 'static ' : OO.overrides(prog, f) ? 'override ' : OO.overridden(prog, f) ? 'virtual ' : '';
           const rt = rl.length > 1 ? `(${rl.map((r) => tCs(r.type)).join(', ')})` : tCs(f.type);
-          o.line(`${V(f.visibility)}${vo}${rt} ${f.name}(${params(f)}) {`);
+          o.line(`${V(f.visibility)}${vo}${rt} ${f.name}${csTP(f)}(${params(f)})${csWhereF(f)} {`);
         }
         o.in(); g.block(o, body, sc);
         if (rl.length) { o.line(rl.length > 1 ? `return (${rl.map((r) => r.name).join(', ')});` : `return ${rl[0].name};`); }
@@ -4154,7 +4383,7 @@ LANGS.csharp = cFamily({
     }
     for (const { c, lines } of parts) {
       o.line('');
-      o.line(`${c.abstract ? 'abstract ' : ''}class ${_CM.classTitle(c)}${c.parent ? ' : ' + c.parent : ''} {`);
+      o.line(`${c.abstract ? 'abstract ' : ''}class ${_CM.classTitle(c)}${c.parent ? ' : ' + c.parent : ''}${csWhereC(c)} {`);
       if (c === main) {
         if (g.used.has('rnd')) o.line('    public static Random rnd = new Random();');
         if (g.used.has('files')) { o.line('    public static System.IO.StreamReader fileLettura;'); o.line('    public static System.IO.StreamWriter fileScrittura;'); }
@@ -4707,7 +4936,7 @@ class Renderer {
     const o = opts || {};
     const isMain = o.isMain != null ? o.isMain : f.name.toLowerCase() === 'main';
     const ps = f.params.map((p) => `${p.name}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''}: ${ExprLib.typeName(p.type)}`).join(', ');
-    const sig = isMain ? 'Inizio' : f.ctor ? `new ${f.name}(${ps})` : `${o.owner ? o.owner + '.' : ''}${f.name}(${ps})`;
+    const sig = isMain ? 'Inizio' : f.ctor ? `new ${f.name}(${ps})` : `${o.owner ? o.owner + '.' : ''}${f.name}${(f.tparams || []).length ? `<${f.tparams.join(', ')}>` : ''}(${ps})`;
     const rsl = ModelLib.rets(f);
     const endText = rsl.length ? `Restituisci ${rsl.map((x) => x.name || '?').join(', ')}` : 'Fine';
     const sw = this.boxW(sig, 'rect') + 10, ew = this.boxW(endText, 'rect') + 10;
@@ -4754,7 +4983,7 @@ const UmlLib = (() => {
   function methodText(prog, f) {
     const ps = f.params.map((p) => `${p.name}: ${T(p.type)}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''}`).join(', ');
     const rl = ModelLib.rets(f);
-    return `${V(f.visibility)} ${f.name}(${ps})${rl.length ? ': ' + rl.map((r) => T(r.type)).join(', ') : ''}`;
+    return `${V(f.visibility)} ${f.name}${(f.tparams || []).length ? `<${f.tparams.join(', ')}>` : ''}(${ps})${rl.length ? ': ' + rl.map((r) => T(r.type)).join(', ') : ''}`;
   }
 
   /* misure di ogni riquadro */
@@ -5923,6 +6152,7 @@ const ArrayView = (() => {
     if (!c) return f.name;
     return f.ctor ? 'new ' + c.name : c.name + '.' + f.name;
   };
+  const tplTxt = (f) => ((f.tparams || []).length ? `<${f.tparams.join(', ')}>` : '');
   const isRunning = () => ['running', 'paused', 'input'].includes(run.state);
 
   function snapshot() { return JSON.stringify({ prog: st.prog, fi: st.fi }); }
@@ -5965,8 +6195,8 @@ const ArrayView = (() => {
     const sel = h('select', { 'aria-label': aria || 'Tipo' });
     const sub = h('span', { class: 'tpargs' });
     const cs = M.hasClasses(st.prog) ? st.prog.classes : [];
-    const tps = ctx ? ctx.tparams || [] : [];
-    const opts = [...E.TYPES.map((t) => [t, TYPE_IT[t]]), ...tps.map((t) => [t, `${t} (tipo generico di ${ctx.name})`]), ...cs.map((c) => [c.name, `${M.classTitle(c)} (${c.module ? 'modulo' : 'classe'})`])];
+    const tps = ctx ? ctx.tlist || (ctx.tparams || []).map((t) => [t, ctx.name]) : [];
+    const opts = [...E.TYPES.map((t) => [t, TYPE_IT[t]]), ...tps.map(([t, o]) => [t, `${t} (tipo generico di ${o})`]), ...cs.map((c) => [c.name, `${M.classTitle(c)} (${c.module ? 'modulo' : 'classe'})`])];
     const genOf = (b) => { const c = M.classByName(st.prog, b); return c && (c.tparams || []).length ? c : null; };
     let kids = [];
     const get = () => { const c = genOf(sel.value); return c ? E.joinType(c.name, kids.map((k) => k.get())) : sel.value; };
@@ -5991,6 +6221,13 @@ const ArrayView = (() => {
     el.append(sel, sub);
     set(value);
     return { el, sel, get, set, setDisabled(d) { el.querySelectorAll('select').forEach((x) => { x.disabled = d; }); } };
+  }
+  /* tipi generici visibili in una funzione: quelli della sua classe e quelli suoi (funzione generica) */
+  function typeCtx(f, ftp) {
+    const c = f && M.hasClasses(st.prog) ? M.classOf(st.prog, f) : null;
+    const own = ftp || (f && f.tparams) || [];
+    const tlist = [...(c ? (c.tparams || []).map((t) => [t, c.name]) : []), ...own.map((t) => [t, (f && f.name) || 'questa funzione'])];
+    return tlist.length ? { name: c ? c.name : '', tlist } : c;
   }
   /* ---- moduli: le loro classi sono in sola lettura ---- */
   function roGuard(c) {
@@ -6161,7 +6398,7 @@ const ArrayView = (() => {
         const ms = M.membersOf(st.prog, c);
         for (const f of [...ms.filter((x) => x.ctor), ...ms.filter((x) => !x.ctor)]) {
           const i = st.prog.functions.indexOf(f);
-          og.append(h('option', { value: i, selected: !st.uml && i === st.fi }, i === 0 ? 'Inizio (principale)' : f.ctor ? `new ${c.name}(${f.params.map((p) => p.name).join(', ')}) · costruttore` : `${f.name}(${f.params.map((p) => p.name).join(', ')})${f.abstract ? ' · astratto' : ''}${f.module ? ' · modulo ' + f.module.name : ''}`));
+          og.append(h('option', { value: i, selected: !st.uml && i === st.fi }, i === 0 ? 'Inizio (principale)' : f.ctor ? `new ${c.name}(${f.params.map((p) => p.name).join(', ')}) · costruttore` : `${f.name}${tplTxt(f)}(${f.params.map((p) => p.name).join(', ')})${f.abstract ? ' · astratto' : ''}${f.module ? ' · modulo ' + f.module.name : ''}`));
         }
         sel.append(og);
       }
@@ -6176,7 +6413,7 @@ const ArrayView = (() => {
     $('#funcLbl').textContent = 'Funzione';
     add.title = 'Nuova funzione (N)'; edit.title = 'Modifica funzione o proprietà del programma (F2)'; del.title = 'Elimina funzione (Maiusc+Canc)';
     edit.disabled = false;
-    st.prog.functions.forEach((f, i) => sel.append(h('option', { value: i, selected: i === st.fi }, i === 0 ? 'Inizio (principale)' : `${f.name}(${f.params.map((p) => p.name).join(', ')})${f.module ? ' · modulo ' + f.module.name : ''}`)));
+    st.prog.functions.forEach((f, i) => sel.append(h('option', { value: i, selected: i === st.fi }, i === 0 ? 'Inizio (principale)' : `${f.name}${tplTxt(f)}(${f.params.map((p) => p.name).join(', ')})${f.module ? ' · modulo ' + f.module.name : ''}`)));
     del.disabled = st.fi === 0;
   }
   function showFunc(i) { if (i === st.fi && !st.uml) return; st.fi = i; st.uml = false; st.sel = null; render(); $('#canvasWrap').scrollTo(0, 0); }
@@ -6634,7 +6871,7 @@ const ArrayView = (() => {
   function stmtDialog(s, isNew, done) {
     let form = STMT_FORMS[s.kind];
     // nella vista Oggetti si possono dichiarare variabili di tipo classe
-    if (s.kind === 'declare' && M.hasClasses(st.prog)) form = { ...form, fields: form.fields.map((f) => (f.key === 'type' ? { ...f, type: 'typepick', ctx: M.classOf(st.prog, func()) } : f)) };
+    if (s.kind === 'declare' && (M.hasClasses(st.prog) || (func().tparams || []).length)) form = { ...form, fields: form.fields.map((f) => (f.key === 'type' ? { ...f, type: 'typepick', ctx: typeCtx(func()) } : f)) };
     const vars = declaredNames(func());
     const body = h('div', { class: 'fields' });
     if (form.help) body.append(h('p', { class: 'help' }, form.help));
@@ -6702,13 +6939,29 @@ const ArrayView = (() => {
         absW._input.addEventListener('change', syncAbs); syncAbs();
       }
     }
+    // funzione generica: parametri di tipo (solo funzioni e metodi statici)
+    let ftp = (f.tparams || []).slice();
+    const parseTP = (txt) => txt.split(',').map((x) => x.trim()).filter(Boolean);
+    let tpfW = null;
+    if (!ctor && index !== 0) {
+      tpfW = field({ key: 'ftp', label: `Parametri di tipo (${oo ? 'metodo' : 'funzione'} generica, facoltativo)`, type: 'plain', placeholder: 'es. T', hint: `Una funzione generica lavora con un tipo qualsiasi, indicato con T: massimo(v: T[], n: Intero) trova il massimo in un array di Interi, di Reali o di Stringhe. Alla chiamata T si ricava dagli argomenti; i valori di tipo T si confrontano con = < >.${oo ? ' Solo per i metodi statici.' : ''}` }, ftp.join(', '));
+      body.append(tpfW);
+      const syncTP = () => { const nu = parseTP(tpfW._get()).filter((t) => E.validIdent(t)); if (nu.join(',') !== ftp.join(',')) { ftp = nu; drawParams(); drawRets(); } };
+      tpfW._input.addEventListener('input', syncTP);
+      if (statW) {
+        const syncSt = () => { const on = statW._get(); tpfW._input.disabled = !on; tpfW.title = on ? '' : 'Solo i metodi statici possono essere generici'; };
+        statW._input.addEventListener('change', syncSt); syncSt();
+        if (absW) absW._input.addEventListener('change', syncSt);
+      }
+    }
+    const tctx = () => typeCtx(isNew ? { cls: cls ? cls.id : undefined, name: nameW._get().trim() } : f, ftp);
     const plist = h('div', { class: 'params' });
     const drawParams = () => {
       plist.innerHTML = '';
       if (!params.length) plist.append(h('p', { class: 'muted small' }, 'Nessun parametro.'));
       params.forEach((p, i) => {
         const nm = h('input', { type: 'text', class: 'mono', value: p.name, 'aria-label': 'Nome parametro ' + (i + 1), placeholder: 'nome', oninput: (e) => { p.name = e.target.value.trim(); } });
-        const tp = typePicker(p.type, cls, (t) => { p.type = t; }, 'Tipo parametro ' + (i + 1)).el;
+        const tp = typePicker(p.type, tctx(), (t) => { p.type = t; }, 'Tipo parametro ' + (i + 1)).el;
         const shape = p.array ? (p.dims || 1) : 0;
         const arr = h('select', { 'aria-label': 'Forma del parametro ' + (i + 1), title: 'Valore singolo o array', onchange: (e) => { const d = +e.target.value; p.array = d > 0; p.dims = Math.max(1, d); } }, [[0, 'valore'], [1, 'array [ ]'], [2, 'matrice [ , ]'], [3, '3 dimensioni'], [4, '4 dimensioni'], [5, '5 dimensioni']].map(([v, l]) => h('option', { value: v, selected: v === shape }, l)));
         plist.append(h('div', { class: 'prow' }, nm, tp, arr,
@@ -6729,7 +6982,7 @@ const ArrayView = (() => {
       rlist.innerHTML = '';
       if (!rets.length) rlist.append(h('p', { class: 'muted small' }, 'Nessun valore: è una procedura.'));
       rets.forEach((r, i) => {
-        const tpk = typePicker(r.type, cls, (t) => { r.type = t; }, 'Tipo del valore restituito ' + (i + 1)), tp = tpk.el;
+        const tpk = typePicker(r.type, tctx(), (t) => { r.type = t; }, 'Tipo del valore restituito ' + (i + 1)), tp = tpk.el;
         const tag = h('span', { class: 'rtag', title: 'È un attributo della classe: il metodo lo restituisce direttamente, senza dichiarare una variabile' }, 'attributo');
         // scegliendo un attributo il tipo è il suo e non si cambia
         const syncAttr = () => {
@@ -6793,6 +7046,19 @@ const ArrayView = (() => {
             if (a && isStatic && !a.attr.static) return `${a.attr.name} è un attributo d'istanza: un metodo statico non lo può restituire`;
           }
         }
+        // parametri di tipo della funzione generica
+        const tps = tpfW && !tpfW._input.disabled ? parseTP(tpfW._get()) : [];
+        for (const t of tps) {
+          if (!E.validIdent(t)) return `"${t}" non è un nome valido per un parametro di tipo (di solito una lettera maiuscola: T)`;
+          if (E.TYPES.some((x) => x.toLowerCase() === t.toLowerCase()) || Object.values(TYPE_IT).some((x) => x.toLowerCase() === t.toLowerCase()) || M.classByName(st.prog, t)) return `${t} è già il nome di un tipo: scegli un altro nome, per esempio T`;
+          if (cls && M.isTypeParam(cls, t)) return `${t} è già un parametro di tipo della classe ${cls.name}: scegli un altro nome, per esempio E`;
+        }
+        if (new Set(tps.map((t) => t.toLowerCase())).size !== tps.length) return 'I parametri di tipo devono avere nomi diversi';
+        // i tipi usati devono esistere: tipi base, classi, T della classe o della funzione
+        const known = (t) => { const g = E.splitType(t); return (E.TYPES.includes(g.base) || M.classByName(st.prog, g.base) || tps.some((x) => x.toLowerCase() === g.base.toLowerCase()) || (cls && M.isTypeParam(cls, g.base))) && g.args.every(known); };
+        for (const x of [...params, ...rets]) if (!known(x.type)) return `Il tipo ${E.typeName(x.type)} di "${x.name || '?'}" non esiste${E.splitType(x.type).args.length ? '' : ': è un parametro di tipo che hai tolto?'}`;
+        const usesTP = (t) => { const g = E.splitType(t); return tps.some((x) => x.toLowerCase() === g.base.toLowerCase()) || g.args.some(usesTP); };
+        if (tps.length && !params.some((p) => usesTP(p.type))) return `Nessun parametro usa ${tps.join(', ')}: T si ricava dagli argomenti, quindi almeno un parametro deve essere di tipo ${tps[0]} (o ${tps[0]}[], Classe<${tps[0]}>…)`;
         const seen = new Set();
         for (const p of params) {
           if (!E.validIdent(p.name)) return `Parametro "${p.name || '(vuoto)'}": nome non valido`;
@@ -6802,6 +7068,7 @@ const ArrayView = (() => {
         mutate(() => {
           const target = isNew ? M.makeFunction(name, { params }) : f;
           Object.assign(target, { name, params });
+          if (tps.length) target.tparams = tps; else delete target.tparams;
           if (oo) Object.assign(target, { cls: cls.id, visibility: visW ? visW._get() : 'public', static: isStatic || target === st.prog.functions[0], ctor, abstract: isAbs });
           // un attributo restituito si scrive come è dichiarato (i linguaggi distinguono le maiuscole)
           for (const r of rets) { const a = attrOf(r.name); if (a) { r.name = a.attr.name; r.type = a.attr.type; } }
@@ -8611,6 +8878,7 @@ const ArrayView = (() => {
       ['+  -  *  /', 'Aritmetica. La divisione / dà sempre un numero reale'], ['mod  %', 'Resto della divisione'], ['^', 'Potenza (2 ^ 3 = 8)'],
       ['&', 'Unisce testi e numeri: "Totale: " & t'], ['=  ==   !=  <>', 'Uguale, diverso'], ['<  <=  >  >=', 'Confronti'],
       ['and  &&   or  ||   not  !', 'Operatori logici'], ['true  false  Pi', 'Costanti'], ['v[i]', 'Elemento i di un array (da 0)'],
+      ['massimo<T>(v: T[], n)', 'Funzione generica: T è un tipo qualsiasi, ricavato dagli argomenti (parametri di tipo nel dialogo della funzione)'],
     ].map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
     const oo = [
       ['p ← new Punto(1, 2)', 'Crea un oggetto: esegue il costruttore con quei parametri'], ['p.x   p.sposta(3, 4)', 'Attributo e metodo di un oggetto'],

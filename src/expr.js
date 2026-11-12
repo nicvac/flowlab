@@ -615,6 +615,18 @@ function* evalCall(node, ctx) {
 }
 
 /* -------------------- Inferenza statica dei tipi ----------------------- */
+/* funzione generica: T ricavato dai tipi degli argomenti, es. massimo(v, n) con v array di Integer -> { t: 'Integer' } */
+function genericMap(f, args, scope) {
+  const low = (f.tparams || []).map((t) => t.toLowerCase()), map = {};
+  const unify = (pt, at) => {
+    if (!at || at === 'Unknown' || at === 'Null') return;
+    const gp = splitType(pt), ga = splitType(at), k = gp.base.toLowerCase();
+    if (!gp.args.length && low.includes(k)) { if (map[k] === undefined) map[k] = at; return; }
+    if (gp.args.length && ga.args.length === gp.args.length) gp.args.forEach((x, j) => unify(x, ga.args[j]));
+  };
+  f.params.forEach((p, i) => { if (args[i]) unify(p.type, inferType(args[i], scope)); });
+  return map;
+}
 /* scope: { vars: Map(name -> {type, array}), funcs: Map(name -> {type}) } */
 function inferType(node, scope) {
   switch (node.k) {
@@ -639,7 +651,7 @@ function inferType(node, scope) {
     }
     case 'call': {
       const f = scope.funcs.get(node.name.toLowerCase()) || (scope.oo && scope.oo(node, true));
-      if (f) return f.type;
+      if (f) return f.f && (f.f.tparams || []).length ? substType(f.type, genericMap(f.f, node.args, scope)) : f.type;
       const b = BUILTINS[node.name.toLowerCase()];
       if (!b) return 'Unknown';
       if (typeof b.ret === 'function') return node.args[0] ? inferType(node.args[0], scope) : 'Real';
@@ -649,5 +661,5 @@ function inferType(node, scope) {
   return 'Unknown';
 }
 
-const ExprLib = { FlowError, TYPES, TYPE_IT, typeName, splitType, splitTypeList, joinType, isGenericType, normTypeText, substType, sameType, isBaseType, tokenize, parseExpr, parseLValue, splitTop, parseLValueList, arrOffset, validIdent, RESERVED, V, isNum, fmtValue, fmtReal, literalOf, checkInt, coerce, parseInputText, BUILTINS, BUILTIN_NAMES, evalE, arrIndex, inferType };
+const ExprLib = { FlowError, TYPES, TYPE_IT, typeName, splitType, splitTypeList, joinType, isGenericType, normTypeText, substType, sameType, isBaseType, tokenize, parseExpr, parseLValue, splitTop, parseLValueList, arrOffset, validIdent, RESERVED, V, isNum, fmtValue, fmtReal, literalOf, checkInt, coerce, parseInputText, BUILTINS, BUILTIN_NAMES, evalE, arrIndex, inferType, genericMap };
 if (typeof module !== 'undefined') module.exports = ExprLib;

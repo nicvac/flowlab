@@ -23,7 +23,7 @@ const UmlLib = (() => {
   function methodText(prog, f) {
     const ps = f.params.map((p) => `${p.name}: ${T(p.type)}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''}`).join(', ');
     const rl = ModelLib.rets(f);
-    return `${V(f.visibility)} ${f.name}(${ps})${rl.length ? ': ' + rl.map((r) => T(r.type)).join(', ') : ''}`;
+    return `${V(f.visibility)} ${f.name}${(f.tparams || []).length ? `<${f.tparams.join(', ')}>` : ''}(${ps})${rl.length ? ': ' + rl.map((r) => T(r.type)).join(', ') : ''}`;
   }
 
   /* misure di ogni riquadro */

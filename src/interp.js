@@ -29,12 +29,13 @@ class Interpreter {
     this.superFirst = new Map();
     if (this.oo) {
       for (const c of prog.classes) { this.byName.set(c.name.toLowerCase(), c); this.methods.set(c.id, []); this.ctors.set(c.id, []); }
-      this.tparamNames = new Set(prog.classes.flatMap((c) => (c.tparams || []).map((t) => t.toLowerCase())));
       for (const f of prog.functions) {
         if (!this.methods.has(f.cls)) continue;
         (f.ctor ? this.ctors : this.methods).get(f.cls).push(f);
       }
     }
+    // parametri di tipo delle classi e delle funzioni generiche
+    this.tparamNames = new Set([...(prog.classes || []).flatMap((c) => c.tparams || []), ...prog.functions.flatMap((f) => f.tparams || [])].map((t) => t.toLowerCase()));
     const self = this;
     this.ctx = {
       getVar: (name, node) => self.getVar(name, node),
@@ -64,7 +65,7 @@ class Interpreter {
   unresolved(t) { return !!this.tparamNames && this.tparamNames.has(_E.splitType(t).base.toLowerCase()); }
   /* conversione per assegnamenti e parametri; ctx = oggetto che dà il significato a T (di solito this) */
   coerceTo(val, type, what, ctx) {
-    const t = this.resolve(type, ctx === undefined ? (this.frame ? this.frame.self : null) : ctx);
+    const t = this.resolve(type, ctx === undefined ? (this.frame ? this.frame.tctx : null) : ctx);
     if (this.unresolved(t)) return val;
     const isA = (oc, tn) => { const k = this.byName.get(String(tn).toLowerCase()); return !!k && this.isA(oc, k); };
     const g = _E.splitType(t);
@@ -126,11 +127,12 @@ class Interpreter {
     }
     return _E.V.obj(null);
   }
-  /* il tipo esiste? cls = classe in cui si usa (per i parametri di tipo come T) */
-  checkType(t, cls) {
+  /* il tipo esiste? cls = classe in cui si usa, fn = funzione (per i parametri di tipo come T) */
+  checkType(t, cls, fn) {
     if (!this.oo) return;
     const g = _E.splitType(t);
-    if (!g.args.length && (_E.isBaseType(g.base) || _M.isTypeParam(cls, g.base))) return;
+    if (fn === undefined) fn = this.frame && this.frame.func;
+    if (!g.args.length && (_E.isBaseType(g.base) || _M.isTypeParam(cls, g.base) || _M.isTypeParam(fn, g.base))) return;
     const c = this.byName.get(g.base.toLowerCase());
     if (!c) throw new _E.FlowError(`Il tipo "${_E.typeName(t)}" non esiste: crea la classe ${g.base} nel diagramma delle classi`);
     const np = (c.tparams || []).length;
@@ -139,11 +141,11 @@ class Interpreter {
       if (!np) throw new _E.FlowError(`${c.name} non è una classe generica: si usa senza < >`);
       throw new _E.FlowError(`${_M.classTitle(c)} vuole ${np} tipi tra < >`);
     }
-    for (const a of g.args) this.checkType(a, cls);
+    for (const a of g.args) this.checkType(a, cls, fn);
   }
   /* esegue fn in una chiamata "di servizio" per inizializzare gli attributi di una classe */
   *withInit(c, obj, fn) {
-    const frame = { func: { id: 'init:' + c.id, name: c.name + ' (attributi)', params: [], body: [] }, vars: new Map(), depth: this.stack.length, cls: c, self: obj, executed: 0, init: true };
+    const frame = { func: { id: 'init:' + c.id, name: c.name + ' (attributi)', params: [], body: [] }, vars: new Map(), depth: this.stack.length, cls: c, self: obj, tctx: obj, executed: 0, init: true };
     this.stack.push(frame);
     try { return yield* fn(); } finally { this.stack.pop(); }
   }
@@ -384,7 +386,46 @@ class Interpreter {
         self = opts.self;
       }
     }
-    return yield* this.invoke(f, this.bindArgs(f, pre, node, self), node, { self });
+    // funzione generica: T si ricava dagli argomenti
+    const tctx = (f.tparams || []).length ? this.inferTargs(f, pre, node, self) : self;
+    return yield* this.invoke(f, this.bindArgs(f, pre, node, tctx), node, { self, tctx });
+  }
+  /* tipo di un valore, per dedurre T: Intero, Reale, Persona, ArrayList<Integer>… (null se non si sa) */
+  valType(v) {
+    if (!v) return null;
+    if (v.t !== 'Object') return v.t;
+    if (!v.v) return null;
+    return v.v.targs ? _E.joinType(v.v.cls.name, v.v.targs) : (v.v.cls.tparams || []).length ? null : v.v.cls.name;
+  }
+  /* funzioni generiche: confronta i tipi dei parametri con quelli degli argomenti e trova T.
+     Restituisce il contesto dei tipi della chiamata (come un oggetto con i suoi argomenti di tipo) */
+  inferTargs(f, pre, node, self) {
+    const tp = f.tparams, low = tp.map((t) => t.toLowerCase()), map = {};
+    const unify = (pt, at, p) => {
+      if (!at || this.unresolved(at)) return;
+      const gp = _E.splitType(pt), ga = _E.splitType(at), k = gp.base.toLowerCase();
+      const i = gp.args.length ? -1 : low.indexOf(k);
+      if (i >= 0) {
+        const prev = map[k];
+        if (prev === undefined || _E.sameType(prev, at)) { map[k] = at; return; }
+        // oggetti di classi parenti: vale la classe madre
+        const a = this.byName.get(String(prev).toLowerCase()), b = this.byName.get(String(at).toLowerCase());
+        if (a && b && this.isA(b, a)) return;
+        if (a && b && this.isA(a, b)) { map[k] = at; return; }
+        throw new _E.FlowError(`${f.name}: il tipo ${tp[i]} non può essere sia ${_E.typeName(prev)} sia ${_E.typeName(at)} (argomento "${p.name}"). Usa argomenti dello stesso tipo, es. converti con ToReal(...) o ToInteger(...)`, { node });
+      }
+      if (gp.args.length && ga.args.length === gp.args.length) gp.args.forEach((x, j) => unify(x, ga.args[j], p));
+    };
+    f.params.forEach((p, i) => {
+      const a = pre[i];
+      if (!a) return;
+      if (p.array) { if (a.cell) unify(p.type, this.cellType(a.cell), p); } else if (!a.cell) unify(p.type, this.valType(a.val), p);
+    });
+    const names = [], args = [];
+    // un metodo generico di un oggetto generico vede anche i T della classe
+    if (self && self.targs && (self.cls.tparams || []).length) { names.push(...self.cls.tparams); args.push(...self.targs); }
+    tp.forEach((t, i) => { names.push(t); args.push(map[low[i]] !== undefined ? map[low[i]] : t); });
+    return { cls: { tparams: names }, targs: args, generic: f };
   }
   *mcall(node, opts) {
     const low = node.name.toLowerCase();
@@ -422,7 +463,7 @@ class Interpreter {
     if (node.targs && node.targs.length) {
       if (!np) throw new _E.FlowError(`${cls.name} non è una classe generica: si crea senza < >, es. new ${cls.name}(...)`, { node });
       if (node.targs.length !== np) throw new _E.FlowError(`${_M.classTitle(cls)} vuole ${np} tipi tra < >`, { node });
-      targs = node.targs.map((t) => this.resolve(t, this.frame.self));
+      targs = node.targs.map((t) => this.resolve(t, this.frame.tctx));
       for (const t of targs) this.checkType(t, this.frame.cls);
       if (targs.some((t) => this.unresolved(t))) targs = null;
     }
@@ -524,10 +565,11 @@ class Interpreter {
   *invoke(func, args, node, opts) {
     if (this.stack.length >= this.maxDepth) throw new _E.FlowError(`Stack overflow: più di ${this.maxDepth} chiamate annidate (ricorsione infinita?)`, { node });
     const cls = this.oo ? this.classById(func.cls) : null;
-    const frame = { func, vars: new Map(), depth: this.stack.length, cls, self: (opts && opts.self) || null, executed: 0 };
+    const self = (opts && opts.self) || null;
+    const frame = { func, vars: new Map(), depth: this.stack.length, cls, self, tctx: (opts && opts.tctx) || self, executed: 0 };
     func.params.forEach((p, i) => {
-      if (p.array) frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: true, dims: args[i].dims || [args[i].items.length], items: args[i].items, param: true, ctx: frame.self });
-      else frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: false, value: args[i], param: true, ctx: frame.self });
+      if (p.array) frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: true, dims: args[i].dims || [args[i].items.length], items: args[i].items, param: true, ctx: frame.tctx });
+      else frame.vars.set(p.name.toLowerCase(), { name: p.name, type: p.type, array: false, value: args[i], param: true, ctx: frame.tctx });
     });
     this.stack.push(frame);
     yield { type: 'stmt', stmt: { id: 'start:' + func.id, kind: 'start' }, frame };
@@ -627,15 +669,15 @@ class Interpreter {
           size = dims.reduce((a, b) => a * b, 1);
           if (size > 1e7) throw new _E.FlowError('Array troppo grande (massimo 10 milioni di elementi)');
         }
-        this.checkType(s.type, frame.cls);
+        this.checkType(s.type, frame.cls, frame.func);
         for (const n of names) {
           if (!_E.validIdent(n)) throw new _E.FlowError(`"${n}" non è un nome di variabile valido`);
           if (_E.RESERVED.has(n.toLowerCase())) throw new _E.FlowError(`"${n}" è una parola riservata`);
           const key = n.toLowerCase();
           if (frame.vars.has(key) && frame.vars.get(key).constant) throw new _E.FlowError(`Il nome "${n}" è già usato dalla costante "${frame.vars.get(key).name}"`);
           if (frame.vars.has(key)) throw new _E.FlowError(frame.vars.get(key).name === n ? `La variabile "${n}" è già stata dichiarata` : `La variabile "${n}" è già stata dichiarata come "${frame.vars.get(key).name}" (maiuscole e minuscole non contano)`);
-          if (s.array) frame.vars.set(key, { name: n, type: s.type, array: true, dims: dims.slice(), items: new Array(size).fill(undefined), ctx: frame.self });
-          else frame.vars.set(key, { name: n, type: s.type, array: false, value: undefined, ctx: frame.self });
+          if (s.array) frame.vars.set(key, { name: n, type: s.type, array: true, dims: dims.slice(), items: new Array(size).fill(undefined), ctx: frame.tctx });
+          else frame.vars.set(key, { name: n, type: s.type, array: false, value: undefined, ctx: frame.tctx });
         }
         // valore iniziale: vale per tutte le variabili del blocco
         if (!s.array && String(s.init || '').trim()) for (const n of names) yield* this.store({ k: 'var', name: n }, yield* ev(s.init));
@@ -649,7 +691,7 @@ class Interpreter {
         const key = n.toLowerCase();
         if (frame.vars.has(key)) throw new _E.FlowError(`Il nome "${n}" è già usato da ${frame.vars.get(key).constant ? 'un\'altra costante' : 'una variabile'}`);
         const v = yield* ev(s.expression);
-        frame.vars.set(key, { name: n, type: s.type, array: false, value: this.coerceTo(v, s.type, `il valore della costante "${n}"`), constant: true, ctx: frame.self });
+        frame.vars.set(key, { name: n, type: s.type, array: false, value: this.coerceTo(v, s.type, `il valore della costante "${n}"`), constant: true, ctx: frame.tctx });
         return;
       }
       case 'assign': {
