@@ -137,8 +137,8 @@ class Interpreter {
     if (!c) throw new _E.FlowError(`Il tipo "${_E.typeName(t)}" non esiste: crea la classe ${g.base} nel diagramma delle classi`);
     const np = (c.tparams || []).length;
     if (np !== g.args.length) {
-      if (np && !g.args.length) throw new _E.FlowError(`${c.name} è una classe generica: indica il tipo, es. ${c.name}<${c.tparams.map(() => 'Intero').join(', ')}>`);
-      if (!np) throw new _E.FlowError(`${c.name} non è una classe generica: si usa senza < >`);
+      if (np && !g.args.length) throw new _E.FlowError(`${c.name} ha dei Tipi Generici: indica i tipi, es. ${c.name}<${c.tparams.map(() => 'Intero').join(', ')}>`);
+      if (!np) throw new _E.FlowError(`${c.name} non ha Tipi Generici: si usa senza < >`);
       throw new _E.FlowError(`${_M.classTitle(c)} vuole ${np} tipi tra < >`);
     }
     for (const a of g.args) this.checkType(a, cls, fn);
@@ -412,7 +412,7 @@ class Interpreter {
         const a = this.byName.get(String(prev).toLowerCase()), b = this.byName.get(String(at).toLowerCase());
         if (a && b && this.isA(b, a)) return;
         if (a && b && this.isA(a, b)) { map[k] = at; return; }
-        throw new _E.FlowError(`${f.name}: il tipo ${tp[i]} non può essere sia ${_E.typeName(prev)} sia ${_E.typeName(at)} (argomento "${p.name}"). Usa argomenti dello stesso tipo, es. converti con ToReal(...) o ToInteger(...)`, { node });
+        throw new _E.FlowError(`${f.name}: il Tipo Generico ${tp[i]} non può essere sia ${_E.typeName(prev)} sia ${_E.typeName(at)} (argomento "${p.name}"). Usa argomenti dello stesso tipo, es. converti con ToReal(...) o ToInteger(...)`, { node });
       }
       if (gp.args.length && ga.args.length === gp.args.length) gp.args.forEach((x, j) => unify(x, ga.args[j], p));
     };
@@ -461,7 +461,7 @@ class Interpreter {
     let targs = null;
     const np = (cls.tparams || []).length;
     if (node.targs && node.targs.length) {
-      if (!np) throw new _E.FlowError(`${cls.name} non è una classe generica: si crea senza < >, es. new ${cls.name}(...)`, { node });
+      if (!np) throw new _E.FlowError(`${cls.name} non ha Tipi Generici: si crea senza < >, es. new ${cls.name}(...)`, { node });
       if (node.targs.length !== np) throw new _E.FlowError(`${_M.classTitle(cls)} vuole ${np} tipi tra < >`, { node });
       targs = node.targs.map((t) => this.resolve(t, this.frame.tctx));
       for (const t of targs) this.checkType(t, this.frame.cls);

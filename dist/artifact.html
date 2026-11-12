@@ -1965,8 +1965,8 @@ function writeBlock(stmts, L, depth) {
 function extendedFeatures(prog) {
   const out = new Set();
   if (!isPlainOO(prog)) out.add('classi e oggetti');
-  if ((prog.classes || []).some((c) => (c.tparams || []).length)) out.add('classi generiche');
-  if (prog.functions.some((f) => (f.tparams || []).length)) out.add('funzioni generiche');
+  if ((prog.classes || []).some((c) => (c.tparams || []).length)) out.add('classi con Tipi Generici');
+  if (prog.functions.some((f) => (f.tparams || []).length)) out.add('funzioni con Tipi Generici');
   if ((prog.classes || []).some((c) => c.module) || prog.functions.some((f) => f.module)) out.add('moduli importati');
   for (const f of prog.functions) {
     if (rets(f).length > 1) out.add('funzioni con più valori restituiti');
@@ -2141,8 +2141,8 @@ class Interpreter {
     if (!c) throw new _E.FlowError(`Il tipo "${_E.typeName(t)}" non esiste: crea la classe ${g.base} nel diagramma delle classi`);
     const np = (c.tparams || []).length;
     if (np !== g.args.length) {
-      if (np && !g.args.length) throw new _E.FlowError(`${c.name} è una classe generica: indica il tipo, es. ${c.name}<${c.tparams.map(() => 'Intero').join(', ')}>`);
-      if (!np) throw new _E.FlowError(`${c.name} non è una classe generica: si usa senza < >`);
+      if (np && !g.args.length) throw new _E.FlowError(`${c.name} ha dei Tipi Generici: indica i tipi, es. ${c.name}<${c.tparams.map(() => 'Intero').join(', ')}>`);
+      if (!np) throw new _E.FlowError(`${c.name} non ha Tipi Generici: si usa senza < >`);
       throw new _E.FlowError(`${_M.classTitle(c)} vuole ${np} tipi tra < >`);
     }
     for (const a of g.args) this.checkType(a, cls, fn);
@@ -2416,7 +2416,7 @@ class Interpreter {
         const a = this.byName.get(String(prev).toLowerCase()), b = this.byName.get(String(at).toLowerCase());
         if (a && b && this.isA(b, a)) return;
         if (a && b && this.isA(a, b)) { map[k] = at; return; }
-        throw new _E.FlowError(`${f.name}: il tipo ${tp[i]} non può essere sia ${_E.typeName(prev)} sia ${_E.typeName(at)} (argomento "${p.name}"). Usa argomenti dello stesso tipo, es. converti con ToReal(...) o ToInteger(...)`, { node });
+        throw new _E.FlowError(`${f.name}: il Tipo Generico ${tp[i]} non può essere sia ${_E.typeName(prev)} sia ${_E.typeName(at)} (argomento "${p.name}"). Usa argomenti dello stesso tipo, es. converti con ToReal(...) o ToInteger(...)`, { node });
       }
       if (gp.args.length && ga.args.length === gp.args.length) gp.args.forEach((x, j) => unify(x, ga.args[j], p));
     };
@@ -2465,7 +2465,7 @@ class Interpreter {
     let targs = null;
     const np = (cls.tparams || []).length;
     if (node.targs && node.targs.length) {
-      if (!np) throw new _E.FlowError(`${cls.name} non è una classe generica: si crea senza < >, es. new ${cls.name}(...)`, { node });
+      if (!np) throw new _E.FlowError(`${cls.name} non ha Tipi Generici: si crea senza < >, es. new ${cls.name}(...)`, { node });
       if (node.targs.length !== np) throw new _E.FlowError(`${_M.classTitle(cls)} vuole ${np} tipi tra < >`, { node });
       targs = node.targs.map((t) => this.resolve(t, this.frame.tctx));
       for (const t of targs) this.checkType(t, this.frame.cls);
@@ -6180,16 +6180,22 @@ const ArrayView = (() => {
     }
     return [...new Set(out)];
   }
-  /* scelta di un tipo: un menu con i tipi base, i parametri di tipo (T) e le classi; per una
-     classe generica (Nodo<S, T>) accanto compaiono i menu dei suoi parametri, anche annidati.
-     ctx: classe in cui si usa il tipo; onChange(tipo) a ogni cambiamento */
+  /* scelta di un tipo: un menu con i tipi base, i Tipi Generici (T) e le classi; per una
+     classe con Tipi Generici (Nodo<S, T>) accanto compaiono i menu dei suoi tipi, anche annidati.
+     ctx: { gens: [T, S…], allowNew, taken() } oppure la classe in cui si usa il tipo;
+     con allowNew c'è la voce «Nuovo Tipo Generico», che assegna un nome libero (T, S, V…).
+     onChange(tipo) a ogni cambiamento */
+  const NEW_GEN = '\u0000nuovo';
   function typePicker(value, ctx, onChange, aria) {
     const el = h('span', { class: 'tpick' });
     const sel = h('select', { 'aria-label': aria || 'Tipo' });
     const sub = h('span', { class: 'tpargs' });
     const cs = M.hasClasses(st.prog) ? st.prog.classes : [];
-    const tps = ctx ? ctx.tlist || (ctx.tparams || []).map((t) => [t, ctx.name]) : [];
-    const opts = [...E.TYPES.map((t) => [t, TYPE_IT[t]]), ...tps.map(([t, o]) => [t, `${t} (tipo generico di ${o})`]), ...cs.map((c) => [c.name, `${M.classTitle(c)} (${c.module ? 'modulo' : 'classe'})`])];
+    const tps = ctx ? ctx.gens || ctx.tparams || [] : [];
+    const genOpt = (t) => h('option', { value: t, class: 'genopt' }, `${t} (Tipo Generico)`);
+    const opts = [...E.TYPES.map((t) => [t, TYPE_IT[t]]), ...tps.map((t) => [t, `${t} (Tipo Generico)`]), ...(ctx && ctx.allowNew ? [[NEW_GEN, 'Nuovo Tipo Generico']] : []), ...cs.map((c) => [c.name, `${M.classTitle(c)} (${c.module ? 'modulo' : 'classe'})`])];
+    // i menu dello stesso dialogo vedono subito i Tipi Generici appena creati
+    if (ctx && typeof ctx === 'object' && !ctx.id) (ctx._sels = ctx._sels || new Set()).add(sel);
     const genOf = (b) => { const c = M.classByName(st.prog, b); return c && (c.tparams || []).length ? c : null; };
     let kids = [];
     const get = () => { const c = genOf(sel.value); return c ? E.joinType(c.name, kids.map((k) => k.get())) : sel.value; };
@@ -6205,22 +6211,75 @@ const ArrayView = (() => {
     };
     const set = (v) => {
       const g = E.splitType(v || 'Integer');
-      if (![...sel.options].some((o) => o.value.toLowerCase() === g.base.toLowerCase())) sel.append(h('option', { value: g.base }, E.typeName(g.base)));
+      if (![...sel.options].some((o) => o.value.toLowerCase() === g.base.toLowerCase())) sel.append(/^[A-Z][0-9]*$/.test(g.base) ? genOpt(g.base) : h('option', { value: g.base }, E.typeName(g.base)));
       sel.value = [...sel.options].find((o) => o.value.toLowerCase() === g.base.toLowerCase()).value;
       drawArgs(g.args);
     };
-    sel.append(...opts.map(([v, l]) => h('option', { value: v }, l)));
-    sel.addEventListener('change', () => { drawArgs([]); fire(); });
+    sel.append(...opts.map(([v, l]) => h('option', { value: v, class: v === NEW_GEN ? 'newgen' : null }, l)));
+    sel.addEventListener('change', () => {
+      if (sel.value === NEW_GEN) {
+        const taken = new Set([...(ctx.taken ? ctx.taken() : []), ...tps].map((x) => x.toLowerCase()));
+        const nm = nextGenName(taken);
+        for (const x of ctx._sels || [sel]) {
+          if (![...x.options].some((o) => o.value === nm)) { const nw = [...x.options].find((o) => o.value === NEW_GEN); const o = genOpt(nm); if (nw) x.insertBefore(o, nw); else { const firstCls = [...x.options].find((o2) => /\((classe|modulo)\)$/.test(o2.textContent)); x.insertBefore(o, firstCls || null); } }
+        }
+        sel.value = nm;
+        toast(`Nuovo Tipo Generico: ${nm}`);
+      }
+      drawArgs([]); fire();
+    });
     el.append(sel, sub);
     set(value);
     return { el, sel, get, set, setDisabled(d) { el.querySelectorAll('select').forEach((x) => { x.disabled = d; }); } };
   }
-  /* tipi generici visibili in una funzione: quelli della sua classe e quelli suoi (funzione generica) */
-  function typeCtx(f, ftp) {
+  /* ---- Tipi Generici: FlowLab dà i nomi (T, S, V…) e li ricava da dove si usano ----
+     in un attributo, in un costruttore o in un metodo non statico appartengono alla classe (Coppia<T>);
+     in una funzione o in un metodo statico alla funzione (massimo<T>) */
+  const GEN_NAMES = ['T', 'S', 'V', 'U', 'W', 'K', 'E', 'R'];
+  function nextGenName(taken) {
+    const free = (n) => !taken.has(n.toLowerCase()) && !M.classByName(st.prog, n);
+    for (const n of GEN_NAMES) if (free(n)) return n;
+    let i = 1; while (!free('T' + i)) i++; return 'T' + i;
+  }
+  /* nomi dei Tipi Generici che compaiono nei tipi (known: quelli già noti, anche con nomi lunghi) */
+  function genNamesIn(types, known) {
+    const kn = new Set((known || []).map((x) => x.toLowerCase()));
+    const out = [];
+    const add = (t) => {
+      const g = E.splitType(t);
+      const b = g.base;
+      if (!g.args.length && b && !E.TYPES.includes(b) && !M.classByName(st.prog, b) && (kn.has(b.toLowerCase()) || /^[A-Z][0-9]*$/.test(b)) && !out.some((x) => x.toLowerCase() === b.toLowerCase())) out.push(b);
+      g.args.forEach(add);
+    };
+    types.forEach(add);
+    return out;
+  }
+  /* l'ordine dei Tipi Generici già presenti resta (Coppia<K, V>): i nuovi vanno in fondo */
+  const orderGen = (old, used) => [...(old || []).filter((t) => used.some((u) => u.toLowerCase() === t.toLowerCase())), ...used.filter((u) => !(old || []).some((t) => t.toLowerCase() === u.toLowerCase()))];
+  /* tipi che rendono generica una classe: attributi d'istanza, costruttori, metodi non statici (tranne skip) */
+  function classTypes(c, skip) {
+    const out = [];
+    for (const a of c.attributes) if (a !== skip && !a.static) out.push(a.type);
+    for (const f of M.membersOf(st.prog, c)) if (f !== skip && (f.ctor || !f.static)) out.push(...f.params.map((p) => p.type), ...M.rets(f).map((r) => r.type));
+    return out;
+  }
+  /* Tipi Generici della classe se si aggiungono quei tipi (null se non cambiano); errore se il cambio non si può fare */
+  function classGenChange(c, skip, extra) {
+    const nu = orderGen(c.tparams, genNamesIn([...classTypes(c, skip), ...extra], c.tparams));
+    if (nu.join(',') === (c.tparams || []).join(',')) return { nu: null };
+    const added = nu.filter((t) => !(c.tparams || []).includes(t)), gone = (c.tparams || []).filter((t) => !nu.includes(t));
+    const what = [added.length ? `si aggiungerebbe il Tipo Generico ${added.join(', ')}` : '', gone.length ? `si toglierebbe il Tipo Generico ${gone.join(', ')}` : ''].filter(Boolean).join(' e ') || 'cambierebbe l\'ordine dei Tipi Generici';
+    if (nu.length && c === M.mainClass(st.prog)) return { err: `${c.name} è la classe principale: non può avere Tipi Generici. Usa un metodo statico (il Tipo Generico è suo) oppure un'altra classe` };
+    if (nu.length && c.parent) return { err: `${c.name} eredita da ${c.parent}: in FlowLab una classe con Tipi Generici non può ereditare da un'altra classe` };
+    if (nu.length && st.prog.classes.some((k) => (k.parent || '').toLowerCase() === c.name.toLowerCase())) return { err: `${c.name} ha delle sottoclassi: in FlowLab una classe con Tipi Generici non può essere una classe madre` };
+    if (classUsed(c)) return { err: `${c.name} è già usata nel programma: ${what} (${M.classTitle(c)} → ${nu.length ? `${c.name}<${nu.join(', ')}>` : c.name}). Togli prima le variabili e gli attributi di tipo ${c.name}` };
+    return { nu };
+  }
+  /* Tipi Generici che si possono usare in una funzione: quelli della classe (metodi non statici, costruttori) o quelli suoi */
+  function typeCtx(f) {
     const c = f && M.hasClasses(st.prog) ? M.classOf(st.prog, f) : null;
-    const own = ftp || (f && f.tparams) || [];
-    const tlist = [...(c ? (c.tparams || []).map((t) => [t, c.name]) : []), ...own.map((t) => [t, (f && f.name) || 'questa funzione'])];
-    return tlist.length ? { name: c ? c.name : '', tlist } : c;
+    const gens = c && (f.ctor || !f.static) ? c.tparams || [] : (f && f.tparams) || [];
+    return gens.length ? { gens } : c;
   }
   /* ---- moduli: le loro classi sono in sola lettura ---- */
   function roGuard(c) {
@@ -6932,29 +6991,23 @@ const ArrayView = (() => {
         absW._input.addEventListener('change', syncAbs); syncAbs();
       }
     }
-    // funzione generica: parametri di tipo (solo funzioni e metodi statici)
-    let ftp = (f.tparams || []).slice();
-    const parseTP = (txt) => txt.split(',').map((x) => x.trim()).filter(Boolean);
-    let tpfW = null;
-    if (!ctor && index !== 0) {
-      tpfW = field({ key: 'ftp', label: `Parametri di tipo (${oo ? 'metodo' : 'funzione'} generica, facoltativo)`, type: 'plain', placeholder: 'es. T', hint: `Una funzione generica lavora con un tipo qualsiasi, indicato con T: massimo(v: T[], n: Intero) trova il massimo in un array di Interi, di Reali o di Stringhe. Alla chiamata T si ricava dagli argomenti; i valori di tipo T si confrontano con = < >.${oo ? ' Solo per i metodi statici.' : ''}` }, ftp.join(', '));
-      body.append(tpfW);
-      const syncTP = () => { const nu = parseTP(tpfW._get()).filter((t) => E.validIdent(t)); if (nu.join(',') !== ftp.join(',')) { ftp = nu; drawParams(); drawRets(); } };
-      tpfW._input.addEventListener('input', syncTP);
-      if (statW) {
-        const syncSt = () => { const on = statW._get(); tpfW._input.disabled = !on; tpfW.title = on ? '' : 'Solo i metodi statici possono essere generici'; };
-        statW._input.addEventListener('change', syncSt); syncSt();
-        if (absW) absW._input.addEventListener('change', syncSt);
-      }
-    }
-    const tctx = () => typeCtx(isNew ? { cls: cls ? cls.id : undefined, name: nameW._get().trim() } : f, ftp);
+    // Tipi Generici: nei parametri si può crearne uno nuovo; nei valori restituiti si usano quelli già presenti
+    const mainCls = oo && cls === M.mainClass(st.prog);
+    const isInstance = () => oo && (ctor || !(statW && statW._get()) || !!(absW && absW._get()));
+    const dialogGens = (withRets) => genNamesIn([...params.map((p) => p.type), ...(withRets ? rets.map((r) => r.type) : [])], [...(f.tparams || []), ...(cls ? cls.tparams || [] : [])]);
+    const gensNow = () => (isInstance() ? orderGen(cls.tparams, genNamesIn([...classTypes(cls, f), ...params.map((p) => p.type)], cls.tparams)) : orderGen(f.tparams, dialogGens(false)));
+    const genCtx = (forParam) => ({ gens: gensNow(), allowNew: forParam && !(isInstance() && mainCls), taken: () => [...gensNow(), ...dialogGens(true), ...(cls ? cls.tparams || [] : [])] });
+    let genKey = '';
+    const regen = () => { const k = gensNow().join(',') + '|' + isInstance(); if (k !== genKey) { genKey = k; drawParams(); drawRets(); } };
+    if (statW) statW._input.addEventListener('change', regen);
+    if (absW) absW._input.addEventListener('change', regen);
     const plist = h('div', { class: 'params' });
     const drawParams = () => {
       plist.innerHTML = '';
       if (!params.length) plist.append(h('p', { class: 'muted small' }, 'Nessun parametro.'));
       params.forEach((p, i) => {
         const nm = h('input', { type: 'text', class: 'mono', value: p.name, 'aria-label': 'Nome parametro ' + (i + 1), placeholder: 'nome', oninput: (e) => { p.name = e.target.value.trim(); } });
-        const tp = typePicker(p.type, tctx(), (t) => { p.type = t; }, 'Tipo parametro ' + (i + 1)).el;
+        const tp = typePicker(p.type, genCtx(true), (t) => { p.type = t; regen(); }, 'Tipo parametro ' + (i + 1)).el;
         const shape = p.array ? (p.dims || 1) : 0;
         const arr = h('select', { 'aria-label': 'Forma del parametro ' + (i + 1), title: 'Valore singolo o array', onchange: (e) => { const d = +e.target.value; p.array = d > 0; p.dims = Math.max(1, d); } }, [[0, 'valore'], [1, 'array [ ]'], [2, 'matrice [ , ]'], [3, '3 dimensioni'], [4, '4 dimensioni'], [5, '5 dimensioni']].map(([v, l]) => h('option', { value: v, selected: v === shape }, l)));
         plist.append(h('div', { class: 'prow' }, nm, tp, arr,
@@ -6975,7 +7028,7 @@ const ArrayView = (() => {
       rlist.innerHTML = '';
       if (!rets.length) rlist.append(h('p', { class: 'muted small' }, 'Nessun valore: è una procedura.'));
       rets.forEach((r, i) => {
-        const tpk = typePicker(r.type, tctx(), (t) => { r.type = t; }, 'Tipo del valore restituito ' + (i + 1)), tp = tpk.el;
+        const tpk = typePicker(r.type, genCtx(false), (t) => { r.type = t; }, 'Tipo del valore restituito ' + (i + 1)), tp = tpk.el;
         const tag = h('span', { class: 'rtag', title: 'È un attributo della classe: il metodo lo restituisce direttamente, senza dichiarare una variabile' }, 'attributo');
         // scegliendo un attributo il tipo è il suo e non si cambia
         const syncAttr = () => {
@@ -6991,6 +7044,7 @@ const ArrayView = (() => {
       });
     };
     drawRets();
+    genKey = gensNow().join(',') + '|' + isInstance();
     if (retAttrs.length) body.append(h('datalist', { id: dlId }, retAttrs.map((x) => h('option', { value: x.attr.name }, `attributo ${x.owner === cls ? '' : 'di ' + x.owner.name + ' '}· ${E.typeName(x.attr.type)}`))));
     if (!ctor) body.append(h('div', { class: 'flabel' }, 'Valori restituiti'), h('p', { class: 'muted small', style: 'margin:0' }, `Le variabili vanno dichiarate nel corpo ${oo ? 'del metodo' : 'della funzione'}: quelle nuove vengono dichiarate in automatico.${retAttrs.length ? ' Si può scegliere anche un attributo della classe: in quel caso non serve dichiararlo.' : ''} Con più valori la chiamata si scrive a, b ← ${oo ? 'obj.metodo' : 'Funzione'}(...)`), rlist,
       h('button', { class: 'btn small', type: 'button', onclick: () => { rets.push({ name: '', type: 'Integer' }); drawRets(); rlist.querySelector('.prow:last-child input').focus(); } }, '+ Aggiungi valore restituito'));
@@ -7039,19 +7093,20 @@ const ArrayView = (() => {
             if (a && isStatic && !a.attr.static) return `${a.attr.name} è un attributo d'istanza: un metodo statico non lo può restituire`;
           }
         }
-        // parametri di tipo della funzione generica
-        const tps = tpfW && !tpfW._input.disabled ? parseTP(tpfW._get()) : [];
-        for (const t of tps) {
-          if (!E.validIdent(t)) return `"${t}" non è un nome valido per un parametro di tipo (di solito una lettera maiuscola: T)`;
-          if (E.TYPES.some((x) => x.toLowerCase() === t.toLowerCase()) || Object.values(TYPE_IT).some((x) => x.toLowerCase() === t.toLowerCase()) || M.classByName(st.prog, t)) return `${t} è già il nome di un tipo: scegli un altro nome, per esempio T`;
-          if (cls && M.isTypeParam(cls, t)) return `${t} è già un parametro di tipo della classe ${cls.name}: scegli un altro nome, per esempio E`;
+        // Tipi Generici: della classe (metodi non statici, costruttori) o della funzione
+        const inst = isInstance();
+        let tps = [], clsGen = null;
+        if (inst) {
+          const ch = classGenChange(cls, f, [...params.map((p) => p.type), ...rets.map((r) => r.type)]);
+          if (ch.err) return ch.err; clsGen = ch.nu;
+        } else {
+          tps = orderGen(f.tparams, dialogGens(false));
+          const missing = dialogGens(true).filter((t) => !tps.includes(t) && !(cls && M.isTypeParam(cls, t)));
+          if (missing.length) return `Il Tipo Generico ${missing.join(', ')} di un valore restituito deve comparire anche in un parametro: alla chiamata si ricava dagli argomenti`;
+          if (cls && dialogGens(true).some((t) => M.isTypeParam(cls, t))) return `${oo && !ctor ? 'Un metodo statico' : 'Questa funzione'} non può usare i Tipi Generici della classe ${M.classTitle(cls)}: valgono solo per i suoi oggetti`;
+          // il metodo diventa statico: la classe può perdere dei Tipi Generici
+          if (oo && cls) { const ch = classGenChange(cls, f, []); if (ch.err) return ch.err; clsGen = ch.nu; }
         }
-        if (new Set(tps.map((t) => t.toLowerCase())).size !== tps.length) return 'I parametri di tipo devono avere nomi diversi';
-        // i tipi usati devono esistere: tipi base, classi, T della classe o della funzione
-        const known = (t) => { const g = E.splitType(t); return (E.TYPES.includes(g.base) || M.classByName(st.prog, g.base) || tps.some((x) => x.toLowerCase() === g.base.toLowerCase()) || (cls && M.isTypeParam(cls, g.base))) && g.args.every(known); };
-        for (const x of [...params, ...rets]) if (!known(x.type)) return `Il tipo ${E.typeName(x.type)} di "${x.name || '?'}" non esiste${E.splitType(x.type).args.length ? '' : ': è un parametro di tipo che hai tolto?'}`;
-        const usesTP = (t) => { const g = E.splitType(t); return tps.some((x) => x.toLowerCase() === g.base.toLowerCase()) || g.args.some(usesTP); };
-        if (tps.length && !params.some((p) => usesTP(p.type))) return `Nessun parametro usa ${tps.join(', ')}: T si ricava dagli argomenti, quindi almeno un parametro deve essere di tipo ${tps[0]} (o ${tps[0]}[], Classe<${tps[0]}>…)`;
         const seen = new Set();
         for (const p of params) {
           if (!E.validIdent(p.name)) return `Parametro "${p.name || '(vuoto)'}": nome non valido`;
@@ -7062,6 +7117,7 @@ const ArrayView = (() => {
           const target = isNew ? M.makeFunction(name, { params }) : f;
           Object.assign(target, { name, params });
           if (tps.length) target.tparams = tps; else delete target.tparams;
+          if (clsGen) cls.tparams = clsGen;
           if (oo) Object.assign(target, { cls: cls.id, visibility: visW ? visW._get() : 'public', static: isStatic || target === st.prog.functions[0], ctor, abstract: isAbs });
           // un attributo restituito si scrive come è dichiarato (i linguaggi distinguono le maiuscole)
           for (const r of rets) { const a = attrOf(r.name); if (a) { r.name = a.attr.name; r.type = a.attr.type; } }
@@ -7096,8 +7152,13 @@ const ArrayView = (() => {
     const i = st.prog.functions.indexOf(f);
     if (i <= 0 || roFunc(f) || roGuard(M.hasClasses(st.prog) ? M.classOf(st.prog, f) : null)) return;
     const what = f.ctor ? `Il costruttore ${f.name}(…)` : isOO() ? `Il metodo ${fname(f)}` : `La funzione ${f.name}`;
+    // la classe può perdere un Tipo Generico usato solo da questo metodo
+    const owner = M.hasClasses(st.prog) ? M.classOf(st.prog, f) : null;
+    const ch = owner ? classGenChange(owner, f, []) : {};
+    if (ch.err) { infoBox('Metodo con Tipo Generico', ch.err); return; }
     confirmBox(f.ctor ? 'Eliminare il costruttore?' : isOO() ? 'Eliminare il metodo?' : 'Eliminare la funzione?', `${what} e tutti i suoi blocchi verranno eliminati.`, 'Elimina', () => mutate(() => {
       st.prog.functions.splice(i, 1);
+      if (ch.nu) owner.tparams = ch.nu;
       if (st.fi === i) { st.fi = 0; if (isOO()) st.uml = true; } else if (st.fi > i) st.fi--;
       if (st.usel && st.usel.fid === f.id) st.usel = { cls: st.usel.cls, kind: 'class' };
     }));
@@ -7153,10 +7214,9 @@ const ArrayView = (() => {
     const nameW = field({ key: 'cname', label: 'Nome della classe', type: 'ident', required: true, placeholder: 'es. Punto', hint: 'Per convenzione inizia con la lettera maiuscola' }, c ? c.name : '');
     const banned = c ? [c, ...descendants(c)] : [];
     const parW = field({ key: 'cpar', label: 'Eredita da (classe madre)', type: 'select', options: [['', '— nessuna —'], ...st.prog.classes.filter((k) => !banned.includes(k) && !(k.tparams || []).length).map((k) => [k.name, k.name])] }, c ? (c.parent || '') : '');
-    const tpW = isMainClsOf(c) ? null : field({ key: 'ctp', label: 'Parametri di tipo (classe generica, facoltativo)', type: 'plain', placeholder: 'es. T   oppure   K, V', hint: 'Una classe generica lavora con un tipo scelto da chi la usa: ArrayList<T> diventa ArrayList<Intero>, ArrayList<Stringa>… Dentro la classe T si usa come un tipo.' }, c ? (c.tparams || []).join(', ') : '');
     const isMainCls = c && c === M.mainClass(st.prog);
     const absW = isMainCls ? null : field({ key: 'cabs', label: 'Astratta: non si creano oggetti di questa classe, solo delle sue sottoclassi', type: 'check' }, c ? !!c.abstract : false);
-    const body = h('div', { class: 'fields' }, h('p', { class: 'help' }, 'Una classe descrive un tipo di oggetti: i loro attributi (i dati) e i metodi (le operazioni). Con l\'ereditarietà la classe riceve attributi e metodi della classe madre e può ridefinire i metodi.'), nameW, parW, absW, tpW);
+    const body = h('div', { class: 'fields' }, h('p', { class: 'help' }, 'Una classe descrive un tipo di oggetti: i loro attributi (i dati) e i metodi (le operazioni). Con l\'ereditarietà la classe riceve attributi e metodi della classe madre e può ridefinire i metodi.'), nameW, parW, absW);
     openModal({
       title: isNew ? 'Nuova classe' : 'Modifica classe ' + c.name, body, okText: isNew ? 'Crea' : 'Salva',
       onOk: () => {
@@ -7166,15 +7226,10 @@ const ArrayView = (() => {
         if (st.prog.classes.some((k) => k !== c && k.name.toLowerCase() === name.toLowerCase())) return `Esiste già una classe chiamata ${name}`;
         const parent = parW._get();
         const abs = !!(absW && absW._get());
-        // parametri di tipo: nomi brevi, diversi dai tipi e dalle classi
-        const tps = tpW ? tpW._get().split(',').map((x) => x.trim()).filter(Boolean) : (c ? c.tparams || [] : []);
-        for (const t of tps) {
-          if (!E.validIdent(t)) return `"${t}" non è un nome valido per un parametro di tipo (di solito una lettera maiuscola: T)`;
-          if (E.TYPES.some((x) => x.toLowerCase() === t.toLowerCase()) || Object.values(TYPE_IT).some((x) => x.toLowerCase() === t.toLowerCase()) || M.classByName(st.prog, t)) return `${t} è già il nome di un tipo: scegli un altro nome, per esempio T`;
-        }
-        if (new Set(tps.map((t) => t.toLowerCase())).size !== tps.length) return 'I parametri di tipo devono avere nomi diversi';
-        if (tps.length && parent) return 'Una classe generica non può ereditare da un\'altra classe in FlowLab';
-        if (c && (c.tparams || []).join(',') !== tps.join(',') && classUsed(c)) return `${c.name} è già usata nel programma: per cambiarne i parametri di tipo togli prima le variabili e gli attributi di tipo ${c.name}`;
+        // i Tipi Generici della classe vengono dagli attributi e dai metodi
+        const tps = c ? c.tparams || [] : [];
+        if (tps.length && parent) return `${c.name} ha dei Tipi Generici (${M.classTitle(c)}): in FlowLab una classe con Tipi Generici non può ereditare da un'altra classe`;
+        if ((!c || c.name !== name) && /^[A-Z][0-9]*$/.test(name)) return `${name} è un nome riservato ai Tipi Generici (T, S, V…): usa un nome più lungo`;
         if (c && !abs) { const am = M.membersOf(st.prog, c).filter((f) => f.abstract); if (am.length) return `${c.name} ha metodi astratti (${am.map((f) => f.name + '()').join(', ')}): per renderla concreta togli prima «astratto» da quei metodi`; }
         // gli attributi non possono avere lo stesso nome di quelli della nuova classe madre
         if (parent) {
@@ -7183,10 +7238,10 @@ const ArrayView = (() => {
         }
         mutate(() => {
           if (isNew) {
-            const nc = M.makeClass(name, Object.assign({ parent, abstract: abs, tparams: tps }, UmlLib.freeSpot(st.prog, pos)));
+            const nc = M.makeClass(name, Object.assign({ parent, abstract: abs }, UmlLib.freeSpot(st.prog, pos)));
             st.prog.classes.push(nc);
             st.usel = { cls: nc.id, kind: 'class' };
-          } else { renameClass(c, name); c.parent = parent; c.abstract = abs; c.tparams = tps; }
+          } else { renameClass(c, name); c.parent = parent; c.abstract = abs; }
         });
         return true;
       },
@@ -7197,7 +7252,9 @@ const ArrayView = (() => {
     if (roGuard(c)) return;
     const a = isNew ? M.makeAttribute() : c.attributes[index];
     const nameW = field({ key: 'aname', label: 'Nome dell\'attributo', type: 'ident', required: true, placeholder: 'es. raggio' }, a.name);
-    const typeW = field({ key: 'atype', label: 'Tipo', type: 'typepick', ctx: c }, a.type);
+    // un attributo d'istanza può avere un Tipo Generico: la classe diventa Classe<T>
+    const actx = { gens: c.tparams || [], allowNew: !isMainClsOf(c), taken: () => [...(c.tparams || []), ...genNamesIn([typeW._get()], c.tparams)] };
+    const typeW = field({ key: 'atype', label: 'Tipo', type: 'typepick', ctx: actx }, a.type);
     const arrW = field({ key: 'aarr', label: 'Array', type: 'check' }, a.array);
     const sizeW = field({ key: 'asize', label: 'Numero di elementi', type: 'exprlist', placeholder: 'es. 10   oppure   3, 4' }, a.size);
     const visW = field({ key: 'avis', label: 'Accesso', type: 'seg', options: VIS_OPTS }, a.visibility);
@@ -7214,8 +7271,13 @@ const ArrayView = (() => {
         const arr = arrW._get();
         if (arr) { const e = sizeW._check(); if (e) return e; if (!String(sizeW._get()).trim()) return 'Indica il numero di elementi dell\'array'; }
         for (const k of [...M.chainOf(st.prog, c), ...descendants(c)]) for (const x of k.attributes) if (x !== a && x.name.toLowerCase() === lo) return k === c ? `La classe ha già un attributo ${x.name}` : `${k.name} ha già un attributo ${x.name}: nella stessa gerarchia di classi i nomi devono essere diversi`;
+        const ty = typeW._get();
+        if (statW._get() && genNamesIn([ty], c.tparams).length) return 'Un attributo statico non può avere un Tipo Generico: è uno solo per tutti gli oggetti, che possono avere tipi diversi';
+        const ch = classGenChange(c, a, statW._get() ? [] : [ty]);
+        if (ch.err) return ch.err;
         mutate(() => {
-          Object.assign(a, { name, type: typeW._get(), array: arr, size: arr ? sizeW._get().trim() : '', visibility: visW._get(), static: statW._get(), init: arr ? '' : initW._get().trim() });
+          if (ch.nu) c.tparams = ch.nu;
+          Object.assign(a, { name, type: ty, array: arr, size: arr ? sizeW._get().trim() : '', visibility: visW._get(), static: statW._get(), init: arr ? '' : initW._get().trim() });
           if (isNew) c.attributes.push(a);
           st.usel = { cls: c.id, kind: 'attr', i: c.attributes.indexOf(a) };
         });
@@ -7238,7 +7300,9 @@ const ArrayView = (() => {
   }
   function deleteAttr(c, i) {
     const a = c.attributes[i]; if (!a || roGuard(c)) return;
-    mutate(() => { c.attributes.splice(i, 1); st.usel = { cls: c.id, kind: 'class' }; });
+    const ch = classGenChange(c, a, []);
+    if (ch.err) { infoBox('Attributo con Tipo Generico', ch.err); return; }
+    mutate(() => { c.attributes.splice(i, 1); if (ch.nu) c.tparams = ch.nu; st.usel = { cls: c.id, kind: 'class' }; });
     toast(`Attributo ${a.name} eliminato (Ctrl+Z per annullare)`);
   }
   const uselClass = () => st.usel && M.classById(st.prog, st.usel.cls);
@@ -8871,14 +8935,14 @@ const ArrayView = (() => {
       ['+  -  *  /', 'Aritmetica. La divisione / dà sempre un numero reale'], ['mod  %', 'Resto della divisione'], ['^', 'Potenza (2 ^ 3 = 8)'],
       ['&', 'Unisce testi e numeri: "Totale: " & t'], ['=  ==   !=  <>', 'Uguale, diverso'], ['<  <=  >  >=', 'Confronti'],
       ['and  &&   or  ||   not  !', 'Operatori logici'], ['true  false  Pi', 'Costanti'], ['v[i]', 'Elemento i di un array (da 0)'],
-      ['massimo<T>(v: T[], n)', 'Funzione generica: T è un tipo qualsiasi, ricavato dagli argomenti (parametri di tipo nel dialogo della funzione)'],
+      ['massimo<T>(v: T[], n)', 'Tipo Generico T: un tipo qualsiasi, ricavato dagli argomenti della chiamata. Si sceglie «Nuovo Tipo Generico» nel menu del tipo di un parametro'],
     ].map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
     const oo = [
       ['p ← new Punto(1, 2)', 'Crea un oggetto: esegue il costruttore con quei parametri'], ['p.x   p.sposta(3, 4)', 'Attributo e metodo di un oggetto'],
       ['this.x', 'Attributo dell\'oggetto su cui si sta lavorando (in un metodo basta x)'], ['Punto.contatore   Punto.crea()', 'Attributo o metodo statico: si usa con il nome della classe'],
       ['super(nome)', 'Blocco Chiamata, primo blocco del costruttore: esegue il costruttore della classe madre'], ['super.descrivi()', 'Esegue la versione del metodo della classe madre'],
       ['null   p = null', 'Nessun oggetto: si può assegnare e confrontare'], ['«abstract»', 'Classe astratta: non si creano oggetti. Un metodo astratto non ha corpo e lo definiscono le sottoclassi'], ['+  -  #', 'Accesso pubblico, privato, protetto (controllato durante l\'esecuzione)'],
-      ['ArrayList<T>', 'Classe generica: T è un tipo scelto da chi la usa (parametri di tipo nel dialogo della classe)'], ['l ← new ArrayList<Intero>()', 'Oggetto di una classe generica; con new ArrayList<>() il tipo si ricava dalla variabile'],
+      ['ArrayList<T>', 'Classe con Tipo Generico T, scelto da chi la usa: nasce scegliendo «Nuovo Tipo Generico» per un attributo o un parametro di un metodo'], ['l ← new ArrayList<Intero>()', 'Oggetto di una classe con Tipo Generico; con new ArrayList<>() il tipo si ricava dalla variabile'],
       ['a ← b', 'Con due array: a diventa lo stesso array di b (come in Java)'], ['Ctrl+I', 'Importa un modulo: classi già pronte (ArrayList, Stack, Queue, ordinamento…) da riusare in sola lettura'], ['p.   Punto.', 'Scrivendo il punto dopo un oggetto o una classe compare l\'elenco dei metodi e degli attributi utilizzabili'],
     ].map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
     const keys = SHORTCUTS.flatMap(([g, rows]) => [h('tr', { class: 'kgroup' }, h('td', { colspan: 2 }, g)), ...rows.map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)))]);

@@ -495,8 +495,8 @@ function writeBlock(stmts, L, depth) {
 function extendedFeatures(prog) {
   const out = new Set();
   if (!isPlainOO(prog)) out.add('classi e oggetti');
-  if ((prog.classes || []).some((c) => (c.tparams || []).length)) out.add('classi generiche');
-  if (prog.functions.some((f) => (f.tparams || []).length)) out.add('funzioni generiche');
+  if ((prog.classes || []).some((c) => (c.tparams || []).length)) out.add('classi con Tipi Generici');
+  if (prog.functions.some((f) => (f.tparams || []).length)) out.add('funzioni con Tipi Generici');
   if ((prog.classes || []).some((c) => c.module) || prog.functions.some((f) => f.module)) out.add('moduli importati');
   for (const f of prog.functions) {
     if (rets(f).length > 1) out.add('funzioni con più valori restituiti');

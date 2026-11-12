@@ -12,20 +12,22 @@ const out = async () => (await page.innerText('#conOut')).split('\n').filter((l)
 await page.evaluate(() => FlowLab.loadExample('tabellina')); await wait(200);
 await page.click('#funcAdd'); await wait(200);
 await page.fill('#f_fname', 'massimo');
-ok('campo parametri di tipo', (await page.locator('#f_ftp').count()) === 1);
-await page.fill('#f_ftp', 'T'); await wait(50);
+ok('nessun campo per i tipi', (await page.locator('#f_ftp').count()) === 0);
 await page.click('.modal button:has-text("+ Aggiungi parametro")'); await wait(80);
 const row1 = page.locator('.modal .params').first().locator('.prow').nth(0);
 await row1.locator('input').fill('v');
 const opts = await row1.locator('.tpick select').first().locator('option').allTextContents();
-ok('T nel menu del parametro: ' + opts.filter((o) => /generico/.test(o)).join(', '), opts.includes('T (tipo generico di massimo)'));
-await row1.locator('.tpick select').first().selectOption('T');
-await row1.locator('select[aria-label^="Forma"]').selectOption('1');
+ok('Nuovo Tipo Generico nel menu del parametro', opts.includes('Nuovo Tipo Generico'));
+await row1.locator('.tpick select').first().selectOption({ label: 'Nuovo Tipo Generico' }); await wait(80);
+ok('nome assegnato: ' + await page.locator('.modal .params').first().locator('.prow').nth(0).locator('.tpick select').first().inputValue(), (await page.locator('.modal .params').first().locator('.prow').nth(0).locator('.tpick select').first().inputValue()) === 'T');
+await page.locator('.modal .params').first().locator('.prow').nth(0).locator('select[aria-label^="Forma"]').selectOption('1');
 await page.click('.modal button:has-text("+ Aggiungi parametro")'); await wait(80);
 await page.locator('.modal .params').first().locator('.prow').nth(1).locator('input').fill('n');
 await page.click('.modal button:has-text("+ Aggiungi valore restituito")'); await wait(80);
 const rrow = page.locator('.modal .params').nth(1).locator('.prow').first();
 await rrow.locator('input').fill('m');
+const ropts = await rrow.locator('.tpick select').first().locator('option').allTextContents();
+ok('valore restituito: T sì, nuovo no', ropts.includes('T (Tipo Generico)') && !ropts.includes('Nuovo Tipo Generico'));
 await rrow.locator('.tpick select').first().selectOption('T');
 await page.screenshot({ path: 'test/genfun1_dialog.png' });
 await page.click('.modal footer .btn.primary'); await wait(200);
@@ -37,7 +39,7 @@ ok('nel menu delle funzioni', (await page.locator('#funcSel option').allTextCont
 // T nella dichiarazione dentro la funzione
 await page.locator('#chart .shape[data-kind=declare]').first().dblclick(); await wait(150);
 const dopts = await page.locator('#f_type option').allTextContents();
-ok('T nella dichiarazione: ' + dopts.filter((o) => /generico/.test(o)).join(', '), dopts.includes('T (tipo generico di massimo)'));
+ok('T nella dichiarazione: ' + dopts.filter((o) => /Generico/.test(o)).join(', '), dopts.includes('T (Tipo Generico)'));
 await page.keyboard.press('Escape'); await wait(80);
 
 // corpo e Main
@@ -62,12 +64,13 @@ ok('nel file: flowlab-tparams', /flowlab-tparams="T"/.test(xml) && /<parameter n
 await page.evaluate((x) => FlowLab.loadText(x, 'gen.fprg'), xml); await wait(250);
 await page.click('#runBtn'); await wait(500);
 ok('dopo la riapertura: ' + await out(), (await out()).includes('9 uva'));
-// togliendo T i parametri non hanno più un tipo valido
+// se nessun parametro usa più T, il valore restituito non può essere T
 const mi = await page.evaluate(() => FlowLab.state.prog.functions.findIndex((x) => x.name === 'massimo'));
 await page.evaluate((i) => FlowLab.showFunc(i), mi); await wait(150);
 await page.keyboard.press('F2'); await wait(200);
-await page.fill('#f_ftp', ''); await page.click('.modal footer .btn.primary'); await wait(150);
-ok('errore senza T: ' + await page.locator('.modal .err, .modal .error, .modal [role=alert]').first().textContent().catch(() => '?'), (await page.locator('.modal').count()) === 1);
+await page.locator('.modal .params').first().locator('.prow').nth(0).locator('.tpick select').first().selectOption('Integer'); await wait(80);
+await page.click('.modal footer .btn.primary'); await wait(150);
+ok('errore: ' + await page.locator('.modal .formerr').textContent(), /deve comparire anche in un parametro/.test(await page.locator('.modal .formerr').textContent()));
 await page.keyboard.press('Escape'); await wait(80);
 
 // vista Oggetti: solo i metodi statici possono essere generici
@@ -77,13 +80,30 @@ if (objs) {
   await page.evaluate(() => FlowLab.showUml()); await wait(150);
   await page.locator('.ubox .uhit.head').first().click(); await wait(80);
   await page.keyboard.press('m'); await wait(200);
-  if (await page.locator('#f_ftp').count()) {
-    const en1 = await page.locator('#f_ftp').isEnabled();
-    await page.locator('#f_fstatic').uncheck().catch(() => {}); await wait(50);
-    const en2 = await page.locator('#f_ftp').isEnabled();
-    ok(`metodo statico: abilitato ${en1}, non statico: ${en2}`, en1 && !en2);
-  } else ok('dialogo del metodo non trovato', false);
+  await page.click('.modal button:has-text("+ Aggiungi parametro")'); await wait(80);
+  const has = async () => (await page.locator('.modal .params').first().locator('.prow').nth(0).locator('.tpick select').first().locator('option').allTextContents()).includes('Nuovo Tipo Generico');
+  const en1 = await has();
+  await page.locator('#f_fstatic').uncheck(); await wait(80);
+  const en2 = await has();
+  ok(`classe principale: statico ${en1}, non statico ${en2}`, en1 && !en2);
   await page.keyboard.press('Escape');
 }
+// metodo non statico di un'altra classe: il Tipo Generico è della classe; eliminando il metodo la classe lo perde
+await page.evaluate(() => FlowLab.showUml()); await wait(150);
+await page.keyboard.press('n'); await wait(150);
+await page.fill('#f_cname', 'Coppia'); await page.click('.modal footer .btn.primary'); await wait(150);
+await page.locator('.ubox:has(.uname:text-is("Coppia")) .uhit.head').click(); await wait(60);
+await page.keyboard.press('m'); await wait(200);
+await page.fill('#f_fname', 'metti');
+await page.click('.modal button:has-text("+ Aggiungi parametro")'); await wait(80);
+await page.locator('.modal .params').first().locator('.prow input').first().fill('x');
+await page.locator('.modal .params').first().locator('.prow').nth(0).locator('.tpick select').first().selectOption({ label: 'Nuovo Tipo Generico' }); await wait(80);
+await page.click('.modal footer .btn.primary'); await wait(200);
+ok('classe dal metodo: ' + (await page.locator('.uname').allTextContents()).join(', '), (await page.locator('.uname').allTextContents()).includes('Coppia<T>'));
+ok('metodo nell\'UML: ' + (await page.locator('.ubox:has(.uname:text-is("Coppia<T>"))').textContent()).replace(/\n/g, ' '), /metti\(x: T\)/.test(await page.locator('.ubox:has(.uname:text-is("Coppia<T>"))').textContent()));
+await page.evaluate(() => { const p = FlowLab.state.prog; const f = p.functions.find((x) => x.name === 'metti'); const c = p.classes.find((k) => k.name === 'Coppia'); FlowLab.state.usel = { cls: c.id, kind: 'method', fid: f.id }; FlowLab.render(); }); await wait(100);
+await page.keyboard.press('Shift+Delete'); await wait(150);
+if (await page.locator('.modal footer .btn.primary').count()) { await page.click('.modal footer .btn.primary'); await wait(150); }
+ok('dopo l\'eliminazione: ' + (await page.locator('.uname').allTextContents()).join(', '), (await page.locator('.uname').allTextContents()).includes('Coppia'));
 console.log('ERR', errs);
 await browser.close();

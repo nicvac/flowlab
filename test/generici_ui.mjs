@@ -10,21 +10,27 @@ const wait = (ms = 150) => page.waitForTimeout(ms);
 const ok = (name, cond) => console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`);
 const out = async () => (await page.innerText('#conOut')).split('\n').filter((l) => l && !/^(▶|■)/.test(l)).join(' | ');
 
-// 1. classe generica Scatola<T> con i dialoghi
+// 1. classe Scatola<T> con i dialoghi: il Tipo Generico nasce dall'attributo
 await page.evaluate(() => FlowLab.loadExample('tabellina')); await wait(150);
 await page.click('#viewOo'); await wait(150);
 await page.keyboard.press('n'); await wait(120);
-await page.fill('#f_cname', 'Scatola'); await page.fill('#f_ctp', 'T'); await page.click('.modal footer .btn.primary'); await wait(150);
-ok('classe: ' + (await page.locator('.uname').allTextContents()).join(', '), (await page.locator('.uname').allTextContents()).includes('Scatola<T>'));
-await page.locator('.ubox:has(.uname:text-is("Scatola<T>")) .uhit.head').click(); await wait(60);
+ok('nessun campo per i tipi nel dialogo della classe', (await page.locator('#f_ctp').count()) === 0);
+await page.fill('#f_cname', 'Scatola'); await page.click('.modal footer .btn.primary'); await wait(150);
+await page.locator('.ubox:has(.uname:text-is("Scatola")) .uhit.head').click(); await wait(60);
 await page.keyboard.press('a'); await wait(120);
 const aopts = await page.locator('#f_atype option').allTextContents();
-ok('nel menu del tipo c\'è T', aopts.some((o) => /^T \(tipo generico/.test(o)));
-await page.fill('#f_aname', 'contenuto'); await page.selectOption('#f_atype', 'T'); await page.click('.modal footer .btn.primary'); await wait(150);
+ok('nel menu del tipo: Nuovo Tipo Generico', aopts.includes('Nuovo Tipo Generico'));
+await page.fill('#f_aname', 'contenuto'); await page.selectOption('#f_atype', { label: 'Nuovo Tipo Generico' }); await wait(60);
+ok('nome assegnato: ' + await page.$eval('#f_atype', (s) => s.value), (await page.$eval('#f_atype', (s) => s.value)) === 'T');
+await page.click('.modal footer .btn.primary'); await wait(150);
+ok('classe: ' + (await page.locator('.uname').allTextContents()).join(', '), (await page.locator('.uname').allTextContents()).includes('Scatola<T>'));
+await page.locator('.ubox:has(.uname:text-is("Scatola<T>")) .uhit.head').click(); await wait(60);
 // metodo metti(x: T) e prendi(): T
 await page.keyboard.press('m'); await wait(120);
 await page.fill('#f_fname', 'metti');
-await page.click('.modal button:has-text("Aggiungi parametro")'); await page.fill('.modal .prow input', 'x'); await page.selectOption('.modal .prow select', 'T');
+await page.click('.modal button:has-text("Aggiungi parametro")'); await page.fill('.modal .prow input', 'x');
+ok('T nel menu del parametro: ' + (await page.locator('.modal .prow select').first().locator('option').allTextContents()).filter((o) => /Generico/.test(o)).join(', '), (await page.locator('.modal .prow select').first().locator('option').allTextContents()).includes('T (Tipo Generico)'));
+await page.selectOption('.modal .prow select', 'T');
 await page.click('.modal footer .btn.primary'); await wait(150);
 await page.evaluate(() => { const p = FlowLab.state.prog; const f = p.functions.find((x) => x.name === 'metti'); f.body = [ModelLib.makeStmt('assign', { variable: 'contenuto', expression: 'x' })]; });
 await page.evaluate(() => FlowLab.showUml()); await wait(100);
@@ -52,11 +58,14 @@ ok('Java: ' + java.split('\n').filter((l) => /class Scatola|Scatola<String> s|ne
 await page.selectOption('#langSel', 'cpp'); await wait(200);
 const cpp = await page.locator('#codeOut').innerText();
 ok('C++: template', /template <typename T>\s*\n\s*class Scatola/.test(cpp) && /Scatola<string>\* s = new Scatola<string>\(\);/.test(cpp));
-// non si può più cambiare T di una classe usata
+// a una classe già usata non si aggiunge un altro Tipo Generico
 await page.evaluate(() => FlowLab.showUml()); await wait(100);
-await page.locator('.ubox:has(.uname:text-is("Scatola<T>")) .uhit.head').dblclick(); await wait(150);
-await page.fill('#f_ctp', 'K'); await page.click('.modal footer .btn.primary'); await wait(100);
-ok('parametri di una classe usata: ' + await page.locator('.modal .formerr').textContent(), /già usata/.test(await page.locator('.modal .formerr').textContent()));
+await page.locator('.ubox:has(.uname:text-is("Scatola<T>")) .uhit.head').click(); await wait(60);
+await page.keyboard.press('a'); await wait(120);
+await page.fill('#f_aname', 'altro'); await page.selectOption('#f_atype', { label: 'Nuovo Tipo Generico' }); await wait(60);
+ok('secondo Tipo Generico: ' + await page.$eval('#f_atype', (s) => s.value), (await page.$eval('#f_atype', (s) => s.value)) === 'S');
+await page.click('.modal footer .btn.primary'); await wait(100);
+ok('classe usata: ' + await page.locator('.modal .formerr').textContent(), /già usata/.test(await page.locator('.modal .formerr').textContent()));
 await page.keyboard.press('Escape'); await wait(80);
 
 // 2. modulo di uno studente: un programma a funzioni salvato come file
