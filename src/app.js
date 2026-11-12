@@ -2216,7 +2216,6 @@
     const a = h('a', { href: URL.createObjectURL(blob), download: name });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    if (window.self !== window.top) toast('Se il download non parte, usa «Copia XML» dal menu File', 'warn');
     return name;
   }
   async function saveFile() {
@@ -2226,15 +2225,6 @@
     const name = st.fileName || safeName(st.prog.attrs.name) + '.fprg';
     const saved = await download(name, xml, 'application/xml');
     if (saved) { st.fileName = saved; st.dirty = false; autosave(); }
-  }
-  async function copyXml() {
-    const xml = M.serializeFprg(st.prog);
-    try { await navigator.clipboard.writeText(xml); toast('XML del programma copiato negli appunti', 'ok'); }
-    catch (e) {
-      const ta = h('textarea', { class: 'mono', rows: 14, readonly: true, 'aria-label': 'XML del programma' }); ta.value = xml;
-      openModal({ title: 'XML del programma', wide: true, body: ta, okText: 'Chiudi', noCancel: true });
-      setTimeout(() => ta.select(), 50);
-    }
   }
   /* keepUndo: il programma di prima resta recuperabile con Annulla */
   function loadText(text, name, keepUndo) {
@@ -2849,7 +2839,6 @@
       { label: 'Apri file .fprg…', key: 'Ctrl+O', do: openFile },
       { label: 'Apri da indirizzo web…', key: 'Ctrl+Maiusc+O', do: openUrlDialog },
       { label: 'Salva come .fprg', key: 'Ctrl+S', do: saveFile },
-      { label: 'Copia XML negli appunti', key: 'Ctrl+Maiusc+X', do: copyXml },
       { label: 'Copia il link a questo programma', key: 'Ctrl+Maiusc+L', do: copyShareLink },
       '-',
       { label: 'Importa un modulo…', key: 'Ctrl+I', do: moduleDialog },
@@ -2902,7 +2891,7 @@
   const SHORTCUTS = [
     ['File', [
       ['Ctrl+Alt+N', 'Nuovo programma'], ['Ctrl+O', 'Apri file .fprg'], ['Ctrl+Maiusc+O', 'Apri da indirizzo web'], ['Ctrl+S', 'Salva come .fprg'],
-      ['Ctrl+Maiusc+X', 'Copia XML negli appunti'], ['Ctrl+Maiusc+L', 'Copia il link al programma'], ['Ctrl+I', 'Importa un modulo'],
+      ['Ctrl+Maiusc+L', 'Copia il link al programma'], ['Ctrl+I', 'Importa un modulo'],
       ['Ctrl+Maiusc+G  ·  Ctrl+Maiusc+E', 'Esporta il diagramma in SVG, in PNG'], ['Ctrl+P', 'Esporta tutto il progetto in PDF'], ['Ctrl+Maiusc+S', 'Scarica il codice sorgente'],
       ['Alt+Invio', 'Proprietà del programma'],
     ]],
@@ -2977,7 +2966,6 @@
         if (k === 'p' && !shift) return go(exportPdf);
         if (shift && k === 'e') return go(exportPng);
         if (shift && k === 'g') return go(exportSvgFile);
-        if (shift && k === 'x' && !typing) return go(copyXml);
         if (shift && k === 'l') return go(copyShareLink);
         if (!shift && k === 'i') return go(moduleDialog);
       }
