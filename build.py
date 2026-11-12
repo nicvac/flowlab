@@ -30,6 +30,9 @@ manifest = {
   'icons': [{'src': 'icona-192.png', 'sizes': '192x192', 'type': 'image/png', 'purpose': 'any'},
             {'src': 'icona-512.png', 'sizes': '512x512', 'type': 'image/png', 'purpose': 'any'},
             {'src': 'icona-512.png', 'sizes': '512x512', 'type': 'image/png', 'purpose': 'maskable'}],
+  # app installata: apre i file .fprg (doppio clic, «Apri con»), ognuno nella sua finestra
+  'file_handlers': [{'action': './FlowLab.html', 'accept': {'application/x-fprg': ['.fprg']},
+                     'icons': [{'src': 'icona-512.png', 'sizes': '512x512', 'type': 'image/png'}], 'launch_type': 'multiple-clients'}],
 }
 (out/'manifest.webmanifest').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
 (out/'sw.js').write_text((src/'pwa'/'sw.js').read_text().replace('__VERSIONE__', hashlib.sha1(full.encode()).hexdigest()[:12]))

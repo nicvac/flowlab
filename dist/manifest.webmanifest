@@ -28,5 +28,23 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "file_handlers": [
+    {
+      "action": "./FlowLab.html",
+      "accept": {
+        "application/x-fprg": [
+          ".fprg"
+        ]
+      },
+      "icons": [
+        {
+          "src": "icona-512.png",
+          "sizes": "512x512",
+          "type": "image/png"
+        }
+      ],
+      "launch_type": "multiple-clients"
+    }
   ]
 }

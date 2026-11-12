@@ -1,6 +1,6 @@
 /* FlowLab — service worker: funziona anche senza rete.
    La pagina si chiede prima alla rete (così c'è sempre l'ultima versione) e, se manca, alla copia salvata. */
-const CACHE = 'flowlab-d716f53bacf3';
+const CACHE = 'flowlab-2f2ce28f2811';
 const CORE = ['./FlowLab.html', './manifest.webmanifest', './icona-192.png', './icona-512.png'];
 const FONTS = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//;
 

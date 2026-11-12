@@ -28,6 +28,21 @@ try {
   await page.reload(); await page.waitForTimeout(800);
   ok('senza rete: ' + await page.title(), (await page.locator('#runBtn').count()) === 1);
   await ctx.setOffline(false);
+  // app installata: un file .fprg aperto dal sistema arriva con launchQueue e Ctrl+S lo salva lì
+  const p3 = await ctx.newPage();
+  const xml = await page.evaluate(() => { FlowLab.loadExample('fattoriale'); const x = FlowLab.serialize(); FlowLab.loadExample('media'); return x; });
+  await p3.addInitScript((x) => {
+    window.__written = null;
+    const fh = { name: 'Fattoriale.fprg', getFile: async () => new File([x], 'Fattoriale.fprg'), queryPermission: async () => 'granted', requestPermission: async () => 'granted',
+      createWritable: async () => { let buf = ''; return { write: async (t) => { buf += t; }, close: async () => { window.__written = buf; } }; } };
+    Object.defineProperty(window, 'launchQueue', { configurable: true, value: { setConsumer: (cb) => setTimeout(() => cb({ files: [fh] }), 50) } });
+  }, xml);
+  await p3.goto('http://localhost:8766/FlowLab.html'); await p3.waitForTimeout(800);
+  ok('file aperto dal sistema: ' + await p3.locator('#progName').textContent(), /Fattoriale/i.test(await p3.locator('#progName').textContent()));
+  await p3.click('#chart'); await p3.keyboard.press('Control+s'); await p3.waitForTimeout(400);
+  const wr = await p3.evaluate(() => window.__written || ''); ok('Ctrl+S lo salva nello stesso file: ' + wr.length + ' caratteri, toast ' + await p3.locator('.toast').last().textContent(), wr.includes('Fattoriale'));
+  const mf = await (await page.request.get('http://localhost:8766/manifest.webmanifest')).json();
+  ok('manifest: apre i .fprg', mf.file_handlers[0].accept['application/x-fprg'][0] === '.fprg');
   // copia scaricata (file://): la voce spiega dove installare
   const p2 = await ctx.newPage();
   await p2.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await p2.waitForTimeout(300);

@@ -8413,6 +8413,16 @@ const ArrayView = (() => {
     const ext = M.extendedFeatures(st.prog);
     if (ext.length) toast(`Salvato in formato .fprg esteso (${ext.join(', ')}). FlowLab lo riapre senza problemi; gli altri editor .fprg potrebbero non eseguirlo.`, 'warn');
     const name = st.fileName || safeName(st.prog.attrs.name) + '.fprg';
+    // file aperto con doppio clic nell'app installata: si salva direttamente lì
+    if (st.fileHandle) {
+      try {
+        const fh = st.fileHandle, mode = { mode: 'readwrite' };
+        if ((await fh.queryPermission(mode)) !== 'granted' && (await fh.requestPermission(mode)) !== 'granted') throw new Error('permesso negato');
+        const w = await fh.createWritable(); await w.write(xml); await w.close();
+        toast('Salvato: ' + fh.name, 'ok'); st.dirty = false; autosave();
+        return;
+      } catch (e) { st.fileHandle = null; }
+    }
     const saved = await download(name, xml, 'application/xml');
     if (saved) { st.fileName = saved; st.dirty = false; autosave(); }
   }
@@ -8422,7 +8432,7 @@ const ArrayView = (() => {
     try { prog = M.parseFprg(text); } catch (e) { toast(e.message, 'error'); return false; }
     if (isRunning()) stopRun();
     const before = keepUndo ? snapshot() : null;
-    st.undo = before ? [before] : []; st.redo = []; st.prog = prog; st.fi = 0; st.sel = null; st.fileName = name || null; st.dirty = false; st.sourceUrl = null;
+    st.undo = before ? [before] : []; st.redo = []; st.prog = prog; st.fi = 0; st.sel = null; st.fileName = name || null; st.dirty = false; st.sourceUrl = null; st.fileHandle = null;
     run.errId = null; run.mainFrame = null;
     startView();
     render(); renderVars();
@@ -9053,6 +9063,17 @@ const ArrayView = (() => {
     // Chrome propone l'installazione: si usa dal menu File
     addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
     addEventListener('appinstalled', () => { installEvt = null; toast('FlowLab è installato: lo trovi tra le app del computer', 'ok'); });
+    // app installata: i file .fprg aperti dal sistema (doppio clic, «Apri con») arrivano qui
+    if ('launchQueue' in window) {
+      window.launchQueue.setConsumer(async (params) => {
+        const fh = params.files && params.files[0];
+        if (!fh) return;
+        try {
+          const file = await fh.getFile();
+          if (loadText(await file.text(), file.name, true) !== false) st.fileHandle = fh;
+        } catch (e) { toast('Non riesco ad aprire il file: ' + e.message, 'error'); }
+      });
+    }
   }
   async function installApp() {
     if (installEvt) {
