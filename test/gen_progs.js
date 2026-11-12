@@ -79,3 +79,31 @@ function genoo() {
   return p;
 }
 module.exports = { genfun, genoo };
+
+/* funzioni che restituiscono array (anche a più dimensioni, insieme ad altri valori, con un Tipo Generico) */
+function arrret() {
+  const p = M.newProgram();
+  p.attrs.name = 'ArrayRestituiti';
+  const ret = (f, list) => { M.setRets(f, list); return f; };
+  p.functions[0].body = [
+    decl('v', 'Integer', 0), decl('m', 'Integer', '0, 0'), decl('w', 'Integer', 1), decl('n', 'Integer'), decl('s', 'String', 0),
+    set('v', 'quadrati(5)'),
+    out('"quadrati: " & v[0] & " " & v[2] & " " & v[4] & " (" & Size(v) & ")"'),
+    set('m', 'tabellina(3)'),
+    out('"tabellina: " & m[2, 2] & " " & m[1, 2] & " (" & Size(m, 0) & "x" & Size(m, 1) & ")"'),
+    set('w, n', 'pari(v, 5)'),
+    out('"pari: " & n & " -> " & w[0] & " " & w[1] & " " & w[2]'),
+    set('s', 'ripeti("ab", 3)'),
+    out('"ripeti: " & s[0] & s[1] & s[2]'),
+    decl('z', 'Integer', 0), set('z', 'ripeti(7, 2)'), out('"ripeti 7: " & (z[0] + z[1])'),
+  ];
+  p.functions.push(
+    ret(fn('quadrati', null, [['n', 'Integer']], null, [decl('q', 'Integer', 'n'), decl('i', 'Integer'), forI('i', '0', 'n - 1', [set('q[i]', 'i * i')])]), [{ name: 'q', type: 'Integer', array: true, dims: 1 }]),
+    ret(fn('tabellina', null, [['n', 'Integer']], null, [decl('t', 'Integer', 'n, n'), decl('i, j', 'Integer'), forI('i', '0', 'n - 1', [forI('j', '0', 'n - 1', [set('t[i, j]', '(i + 1) * (j + 1)')])])]), [{ name: 't', type: 'Integer', array: true, dims: 2 }]),
+    ret(fn('pari', null, [['a', 'Integer', true], ['n', 'Integer']], null, [decl('r', 'Integer', 'n'), decl('i', 'Integer'), decl('k', 'Integer'), set('k', '0'),
+      forI('i', '0', 'n - 1', [iff('a[i] mod 2 = 0', [set('r[k]', 'a[i]'), set('k', 'k + 1')])])]), [{ name: 'r', type: 'Integer', array: true, dims: 1 }, { name: 'k', type: 'Integer' }]),
+    ret(fn('ripeti', ['T'], [['x', 'T'], ['n', 'Integer']], null, [decl('r', 'T', 'n'), decl('i', 'Integer'), forI('i', '0', 'n - 1', [set('r[i]', 'x')])]), [{ name: 'r', type: 'T', array: true, dims: 1 }]),
+  );
+  return p;
+}
+module.exports.arrret = arrret;

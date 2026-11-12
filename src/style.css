@@ -427,7 +427,6 @@ table.vars .avlink:hover, table.vars .avlink:focus-visible { color: var(--ink); 
 .chip:hover { border-color: var(--accent); color: var(--ink); }
 .params { display: flex; flex-direction: column; gap: 6px; }
 .prow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(110px, max-content) auto 30px 30px; gap: 6px; align-items: center; }
-.prow.rrow { grid-template-columns: minmax(0, 1fr) minmax(110px, max-content) 30px 30px; }
 .prow input[type=text], .prow select { border: 1px solid var(--line); background: var(--paper); border-radius: 7px; padding: 6px 8px; min-width: 0; height: 34px; }
 .confirm { margin: 4px 0 8px; }
 .help-body { font-size: 13.5px; }
@@ -485,7 +484,6 @@ body.filedrag #canvasWrap { outline: 3px dashed var(--accent); outline-offset: -
   select.fsel { max-width: 130px; }
   .prow { grid-template-columns: minmax(0, 1fr) 96px auto 30px; }
   .prow .iconbtn[title="Sposta su"] { display: none; }
-  .prow.rrow { grid-template-columns: minmax(0, 1fr) 96px 30px; }
 }
 
 @media print {

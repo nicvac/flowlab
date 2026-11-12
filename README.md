@@ -33,6 +33,7 @@ https://nicvac.github.io/flowlab/dist/FlowLab.html?url=https://github.com/utente
 - **Visualizzatore di array per il debug**: dalla scheda Variabili ogni array si apre in una finestra mobile. Un array a una dimensione è una striscia, a due una scacchiera, a tre un cubo aperto a libro (si sfoglia la prima dimensione, ogni pagina è una scacchiera su carta a quadretti); oltre le tre dimensioni le prime si scelgono con dei selettori di indice. Si vedono solo le celle che entrano nella finestra, con una sfumatura verso la trasparenza dove ce ne sono altre, e durante l'esecuzione la vista si sposta sulla cella appena modificata.
 - **Costanti**: un blocco dedicato (`MAX: Intero = 100`) con un valore che non può essere modificato; nel codice diventano `const` (C++, C#, JavaScript), `final` (Java) o una variabile in maiuscolo (Python).
 - **Funzioni con più valori restituiti**, come in Python: `min, max, idxMin, idxMax ← calcolaMassimoEMinimo(V, N)`. Nel codice generato diventano tuple in Python e C#, `std::tie` in C++, un `record` in Java (16+), un array destrutturato in JavaScript. È un'estensione di FlowLab: gli altri programmi che usano il formato `.fprg` non possono eseguire questi programmi.
+- **Array come valori restituiti**, come i parametri: nel dialogo della funzione ogni valore restituito ha la sua forma (valore, array, matrice…). La chiamata si assegna a un array, `v ← quadrati(10)`, e `v` diventa l'array restituito (come in Java); con più valori `voti, n ← leggiVoti()`. Un metodo può restituire anche un attributo array della sua classe. Nel codice: `int[] quadrati(int n)` in Java, `int[,]` in C#, `vector<int>` in C++ (dove l'array restituito viene copiato).
 - **Classi e oggetti (vista Oggetti)**: il comando *Funzioni / Oggetti* nella barra cambia vista. Nella vista Oggetti il foglio mostra un **diagramma delle classi UML**: ogni classe ha attributi e metodi con i modificatori d'accesso (`+` pubblico, `-` privato, `#` protetto), i membri statici sono sottolineati, le frecce indicano l'ereditarietà e le associazioni (attributi che hanno come tipo un'altra classe, con la molteplicità). All'inizio il programma è un'unica classe con le funzioni come metodi statici; la vista Funzioni resta disponibile finché c'è una sola classe con soli metodi statici e pubblici.
   - Doppio clic su un metodo: si apre il suo diagramma di flusso, che si disegna come una funzione. Clic destro su una classe: nuovi attributi, metodi e costruttori. Le classi si spostano trascinandole.
   - **Autocompletamento:** scrivendo il punto dopo un oggetto (`p.`, `this.`, `lista.get(0).`) o dopo il nome di una classe (`Punto.`) compare l'elenco dei metodi e degli attributi che si possono usare in quel punto, con i tipi (per un `ArrayList<Intero>` si vede `add(x: Intero)`), gli ereditati e il rispetto di privato e protetto; si sceglie con le frecce e Invio o Tab.
@@ -67,6 +68,7 @@ Se il programma usa una delle funzionalità estese di FlowLab, il file viene sal
 - costanti
 - array a più dimensioni
 - funzioni con più valori restituiti
+- funzioni che restituiscono array
 - classi e oggetti
 - classi e funzioni con Tipi Generici
 - moduli importati

@@ -630,7 +630,7 @@
         if (seen.has(sig)) continue; // ridefinito in una sottoclasse
         seen.add(sig);
         const rl = M.rets(m);
-        items.push({ kind: 'm', name: m.name, label: `${m.name}(${m.params.map((p) => `${p.name}: ${T(p.type)}${p.array ? '[]' : ''}`).join(', ')})${rl.length ? ': ' + rl.map((r) => T(r.type)).join(', ') : ''}`, insert: m.name + (m.params.length ? '(' : '()'), owner: k });
+        items.push({ kind: 'm', name: m.name, label: `${m.name}(${m.params.map((p) => `${p.name}: ${T(p.type)}${p.array ? '[]' : ''}`).join(', ')})${rl.length ? ': ' + rl.map((r) => T(r.type) + (r.array ? '[]' : '')).join(', ') : ''}`, insert: m.name + (m.params.length ? '(' : '()'), owner: k });
       }
     }
     const lo = typed.toLowerCase();
@@ -871,6 +871,8 @@
   }
 
   /* Funzioni */
+  // forma di un parametro o di un valore restituito: valore singolo o array a 1…5 dimensioni
+  const SHAPES = [[0, 'valore'], [1, 'array [ ]'], [2, 'matrice [ , ]'], [3, '3 dimensioni'], [4, '4 dimensioni'], [5, '5 dimensioni']];
   /* opts (vista Oggetti, nuovo metodo): { cls, ctor } */
   function editFunction(index, opts) {
     const isNew = index == null;
@@ -918,7 +920,7 @@
         const nm = h('input', { type: 'text', class: 'mono', value: p.name, 'aria-label': 'Nome parametro ' + (i + 1), placeholder: 'nome', oninput: (e) => { p.name = e.target.value.trim(); } });
         const tp = typePicker(p.type, genCtx(true), (t) => { p.type = t; regen(); }, 'Tipo parametro ' + (i + 1)).el;
         const shape = p.array ? (p.dims || 1) : 0;
-        const arr = h('select', { 'aria-label': 'Forma del parametro ' + (i + 1), title: 'Valore singolo o array', onchange: (e) => { const d = +e.target.value; p.array = d > 0; p.dims = Math.max(1, d); } }, [[0, 'valore'], [1, 'array [ ]'], [2, 'matrice [ , ]'], [3, '3 dimensioni'], [4, '4 dimensioni'], [5, '5 dimensioni']].map(([v, l]) => h('option', { value: v, selected: v === shape }, l)));
+        const arr = h('select', { 'aria-label': 'Forma del parametro ' + (i + 1), title: 'Valore singolo o array', onchange: (e) => { const d = +e.target.value; p.array = d > 0; p.dims = Math.max(1, d); } }, SHAPES.map(([v, l]) => h('option', { value: v, selected: v === shape }, l)));
         plist.append(h('div', { class: 'prow' }, nm, tp, arr,
           h('button', { class: 'iconbtn', type: 'button', title: 'Sposta su', 'aria-label': 'Sposta su', disabled: i === 0, onclick: () => { params.splice(i - 1, 0, params.splice(i, 1)[0]); drawParams(); } }, '↑'),
           h('button', { class: 'iconbtn', type: 'button', title: 'Rimuovi', 'aria-label': 'Rimuovi parametro', onclick: () => { params.splice(i, 1); drawParams(); } }, '✕')));
@@ -938,24 +940,30 @@
       if (!rets.length) rlist.append(h('p', { class: 'muted small' }, 'Nessun valore: è una procedura.'));
       rets.forEach((r, i) => {
         const tpk = typePicker(r.type, genCtx(false), (t) => { r.type = t; }, 'Tipo del valore restituito ' + (i + 1)), tp = tpk.el;
+        // anche un valore restituito può essere un array, come i parametri
+        const arr = h('select', { 'aria-label': 'Forma del valore restituito ' + (i + 1), title: 'Valore singolo o array', onchange: (e) => { const d = +e.target.value; r.array = d > 0; r.dims = Math.max(1, d); if (!r.array) delete r.dims; } }, SHAPES.map(([v, l]) => h('option', { value: v, selected: v === (r.array ? r.dims || 1 : 0) }, l)));
         const tag = h('span', { class: 'rtag', title: 'È un attributo della classe: il metodo lo restituisce direttamente, senza dichiarare una variabile' }, 'attributo');
-        // scegliendo un attributo il tipo è il suo e non si cambia
+        // scegliendo un attributo il tipo e la forma sono i suoi e non si cambiano
         const syncAttr = () => {
           const a = attrOf(r.name);
-          if (a) { r.type = a.attr.type; tpk.set(a.attr.type); }
-          tpk.setDisabled(!!a); tag.hidden = !a;
+          if (a) {
+            r.type = a.attr.type; tpk.set(a.attr.type);
+            if (a.attr.array) { r.array = true; r.dims = E.splitTop(a.attr.size).length || 1; } else { r.array = false; delete r.dims; }
+            arr.value = String(r.array ? r.dims : 0);
+          }
+          tpk.setDisabled(!!a); arr.disabled = !!a; tag.hidden = !a;
         };
         const nm = h('input', { type: 'text', class: 'mono', value: r.name, list: retAttrs.length ? dlId : null, 'aria-label': 'Variabile restituita ' + (i + 1), placeholder: retAttrs.length ? 'variabile o attributo' : 'variabile', oninput: (e) => { r.name = e.target.value.trim(); syncAttr(); } });
         syncAttr();
-        rlist.append(h('div', { class: 'prow rrow' }, h('div', { class: 'rname' }, nm, tag), tp,
+        rlist.append(h('div', { class: 'prow rrow' }, h('div', { class: 'rname' }, nm, tag), tp, arr,
           h('button', { class: 'iconbtn', type: 'button', title: 'Sposta su', 'aria-label': 'Sposta su', disabled: i === 0, onclick: () => { rets.splice(i - 1, 0, rets.splice(i, 1)[0]); drawRets(); } }, '↑'),
           h('button', { class: 'iconbtn', type: 'button', title: 'Rimuovi', 'aria-label': 'Rimuovi valore restituito', onclick: () => { rets.splice(i, 1); drawRets(); } }, '✕')));
       });
     };
     drawRets();
     genKey = gensNow().join(',') + '|' + isInstance();
-    if (retAttrs.length) body.append(h('datalist', { id: dlId }, retAttrs.map((x) => h('option', { value: x.attr.name }, `attributo ${x.owner === cls ? '' : 'di ' + x.owner.name + ' '}· ${E.typeName(x.attr.type)}`))));
-    if (!ctor) body.append(h('div', { class: 'flabel' }, 'Valori restituiti'), h('p', { class: 'muted small', style: 'margin:0' }, `Le variabili vanno dichiarate nel corpo ${oo ? 'del metodo' : 'della funzione'}: quelle nuove vengono dichiarate in automatico.${retAttrs.length ? ' Si può scegliere anche un attributo della classe: in quel caso non serve dichiararlo.' : ''} Con più valori la chiamata si scrive a, b ← ${oo ? 'obj.metodo' : 'Funzione'}(...)`), rlist,
+    if (retAttrs.length) body.append(h('datalist', { id: dlId }, retAttrs.map((x) => h('option', { value: x.attr.name }, `attributo ${x.owner === cls ? '' : 'di ' + x.owner.name + ' '}· ${E.typeName(x.attr.type)}${x.attr.array ? `[${','.repeat(E.splitTop(x.attr.size).length - 1)}]` : ''}`))));
+    if (!ctor) body.append(h('div', { class: 'flabel' }, 'Valori restituiti'), h('p', { class: 'muted small', style: 'margin:0' }, `Le variabili vanno dichiarate nel corpo ${oo ? 'del metodo' : 'della funzione'}: quelle nuove vengono dichiarate in automatico.${retAttrs.length ? ' Si può scegliere anche un attributo della classe: in quel caso non serve dichiararlo.' : ''} Con più valori la chiamata si scrive a, b ← ${oo ? 'obj.metodo' : 'Funzione'}(...). Un array restituito si assegna a un array: v ← ${oo ? 'obj.metodo' : 'Funzione'}(...), e v diventa quell'array`), rlist,
       h('button', { class: 'btn small', type: 'button', onclick: () => { rets.push({ name: '', type: 'Integer' }); drawRets(); rlist.querySelector('.prow:last-child input').focus(); } }, '+ Aggiungi valore restituito'));
     openModal({
       title: isNew ? (ctor ? `Nuovo costruttore di ${cls.name}` : oo ? `Nuovo metodo in ${cls.name}` : 'Nuova funzione') : `Modifica ${what}`, body, okText: isNew ? 'Crea' : 'Salva', wide: true,
@@ -984,8 +992,8 @@
             const g = M.membersOf(st.prog, k).find((x) => !x.ctor && x.name.toLowerCase() === name.toLowerCase() && sigOf(x.params) === sigOf(params));
             if (!g) continue;
             if (!!g.static !== isStatic) return `${name} esiste già in ${k.name} come metodo ${g.static ? 'statico' : 'non statico'}: deve esserlo anche qui`;
-            const rt = (l) => l.map((r) => r.type).join(',');
-            if (rt(M.rets(g)) !== rt(rets)) return `${name} ridefinisce il metodo di ${k.name}: deve restituire gli stessi tipi (${M.rets(g).map((r) => E.typeName(r.type)).join(', ') || 'nessun valore'})`;
+            const rt = (l) => l.map((r) => r.type + (r.array ? `[${','.repeat((r.dims || 1) - 1)}]` : '')).join(',');
+            if (rt(M.rets(g)) !== rt(rets)) return `${name} ridefinisce il metodo di ${k.name}: deve restituire gli stessi tipi (${M.rets(g).map((r) => E.typeName(r.type) + (r.array ? `[${','.repeat((r.dims || 1) - 1)}]` : '')).join(', ') || 'nessun valore'})`;
             break;
           }
         } else if (st.prog.functions.some((g, i) => i !== index && g.name.toLowerCase() === name.toLowerCase())) return `Esiste già una funzione chiamata ${name}`;
@@ -997,7 +1005,6 @@
           rseen.add(r.name);
           if (oo && !ctor) {
             const a = M.chainOf(st.prog, cls).flatMap((k) => k.attributes.map((x) => ({ attr: x, owner: k }))).find((x) => x.attr.name.toLowerCase() === r.name.toLowerCase());
-            if (a && a.attr.array) return `${a.attr.name} è un array: un metodo non può restituire un array intero`;
             if (a && a.owner !== cls && a.attr.visibility === 'private') return `${a.attr.name} è un attributo privato di ${a.owner.name}: ${cls.name} non lo vede`;
             if (a && isStatic && !a.attr.static) return `${a.attr.name} è un attributo d'istanza: un metodo statico non lo può restituire`;
           }
@@ -1041,10 +1048,13 @@
           const decls = [];
           for (const r of missing) {
             const last = decls[decls.length - 1];
-            if (last && last.type === r.type) last.name += ', ' + r.name;
+            // un array restituito va dichiarato con la sua dimensione: il blocco resta da completare
+            if (r.array) decls.push(M.makeStmt('declare', { name: r.name, type: r.type, array: true, size: '' }));
+            else if (last && !last.array && last.type === r.type) last.name += ', ' + r.name;
             else decls.push(M.makeStmt('declare', { name: r.name, type: r.type }));
           }
           target.body.unshift(...decls);
+          if (decls.some((d) => d.array)) setTimeout(() => toast(`Indica il numero di elementi di ${decls.filter((d) => d.array).map((d) => d.name).join(', ')} nel blocco Dichiara (doppio clic)`), 0);
           if (isNew) {
             st.prog.functions.push(target);
             // dal diagramma delle classi il nuovo metodo resta selezionato; altrimenti si apre
@@ -1073,10 +1083,10 @@
     }));
   }
 
-  /* attributi che un metodo della classe può restituire: propri e ereditati non privati, non array */
+  /* attributi che un metodo della classe può restituire: propri e ereditati non privati, anche array */
   function retAttributes(cls) {
     const out = [];
-    M.chainOf(st.prog, cls).forEach((k, i) => k.attributes.forEach((a) => { if (!a.array && (i === 0 || a.visibility !== 'private')) out.push({ attr: a, owner: k }); }));
+    M.chainOf(st.prog, cls).forEach((k, i) => k.attributes.forEach((a) => { if (i === 0 || a.visibility !== 'private') out.push({ attr: a, owner: k }); }));
     return out;
   }
 
@@ -2844,6 +2854,7 @@
       ['+  -  *  /', 'Aritmetica. La divisione / dà sempre un numero reale'], ['mod  %', 'Resto della divisione'], ['^', 'Potenza (2 ^ 3 = 8)'],
       ['&', 'Unisce testi e numeri: "Totale: " & t'], ['=  ==   !=  <>', 'Uguale, diverso'], ['<  <=  >  >=', 'Confronti'],
       ['and  &&   or  ||   not  !', 'Operatori logici'], ['true  false  Pi', 'Costanti'], ['v[i]', 'Elemento i di un array (da 0)'],
+      ['v ← quadrati(10)', 'Funzione che restituisce un array: v diventa l\'array restituito (forma «array» nel valore restituito)'],
       ['massimo<T>(v: T[], n)', 'Tipo Generico T: un tipo qualsiasi, ricavato dagli argomenti della chiamata. Si sceglie «Nuovo Tipo Generico» nel menu del tipo di un parametro'],
     ].map(([a, b]) => h('tr', null, h('td', { class: 'mono' }, a), h('td', null, b)));
     const oo = [

@@ -5,7 +5,7 @@ const fs = require('fs'), cp = require('child_process'), path = require('path');
 const progs = { punto: P.punto(), forme: P.forme(), lista: P.lista(), vettore: P.vettore(), getter: P.getter(), tostring: P.tostring() };
 // funzioni generiche (programma a funzioni e a oggetti)
 const G = require('./gen_progs.js');
-Object.assign(progs, { gen_fun: G.genfun(), gen_oo: G.genoo() });
+Object.assign(progs, { gen_fun: G.genfun(), gen_oo: G.genoo(), arr_ret: G.arrret() });
 // anche gli esempi a oggetti dell'applicazione
 global.ExprLib = require('../src/expr.js'); global.ModelLib = M;
 const Examples = eval(fs.readFileSync(path.join(__dirname, '../src/examples.js'), 'utf8') + ';Examples');

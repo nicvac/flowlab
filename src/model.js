@@ -42,14 +42,14 @@ function makeFunction(name, props) {
   return Object.assign({ id: newId(), name, type: 'None', variable: '', params: [], body: [] }, props || {});
 }
 
-/* Valori restituiti da una funzione: [{name, type}] (vuoto = procedura).
+/* Valori restituiti da una funzione: [{name, type, array?, dims?}] (vuoto = procedura).
    type/variable restano allineati al primo valore, come nel formato .fprg. */
 function rets(f) {
   if (Array.isArray(f.returns) && f.returns.length) return f.returns;
   return f.type && f.type !== 'None' ? [{ name: f.variable || '', type: f.type }] : [];
 }
 function setRets(f, list) {
-  f.returns = list.map((r) => ({ name: r.name, type: r.type }));
+  f.returns = list.map((r) => (r.array ? { name: r.name, type: r.type, array: true, dims: r.dims || 1 } : { name: r.name, type: r.type }));
   f.type = list.length ? list[0].type : 'None';
   f.variable = list.length ? list[0].name : '';
 }
@@ -244,8 +244,13 @@ function parseFprg(text) {
       // estensione FlowLab: più valori restituiti, "nome:Tipo;nome:Tipo"
       const multi = el.getAttribute('flowlab-returns');
       if (multi) {
-        const list = multi.split(';').map((x) => x.trim()).filter(Boolean).map((x) => { const [n, t] = x.split(':'); return { name: (n || '').trim(), type: normType(t) }; }).filter((r) => r.name);
-        if (list.length > 1) setRets(f, list);
+        // un valore restituito può essere un array: "v:Integer[]", "m:Real[,]"
+        const list = multi.split(';').map((x) => x.trim()).filter(Boolean).map((x) => {
+          const k = x.indexOf(':'); const n = k < 0 ? x : x.slice(0, k); let t = k < 0 ? '' : x.slice(k + 1).trim();
+          const am = /\[(,*)\]$/.exec(t); if (am) t = t.slice(0, am.index);
+          return am ? { name: n.trim(), type: normType(t), array: true, dims: am[1].length + 1 } : { name: n.trim(), type: normType(t) };
+        }).filter((r) => r.name);
+        if (list.length > 1 || list.some((r) => r.array)) setRets(f, list);
       }
       for (const c of el.children) {
         const ct = c.nodeName.toLowerCase();
@@ -420,7 +425,7 @@ function serializeFprg(prog) {
   }
   for (const f of prog.functions) {
     const rs = rets(f);
-    let extra = rs.length > 1 ? ` flowlab-returns="${xmlEsc(rs.map((r) => r.name + ':' + r.type).join(';'))}"` : '';
+    let extra = rs.length > 1 || rs.some((r) => r.array) ? ` flowlab-returns="${xmlEsc(rs.map((r) => r.name + ':' + r.type + (r.array ? `[${','.repeat((r.dims || 1) - 1)}]` : '')).join(';'))}"` : '';
     if ((f.tparams || []).length) extra += ` flowlab-tparams="${xmlEsc(f.tparams.join(','))}"`;
     if (f.module) extra += ` flowlab-module="${xmlEsc(f.module.name)}" flowlab-module-src="${xmlEsc(f.module.src || '')}"`;
     if (oo) { const c = classOf(prog, f); extra += ` flowlab-class="${xmlEsc(c ? c.name : '')}" flowlab-visibility="${f.visibility || 'public'}" flowlab-static="${TF(!!f.static)}"${f.ctor ? ' flowlab-ctor="True"' : ''}${f.abstract ? ' flowlab-abstract="True"' : ''}`; }
@@ -500,6 +505,7 @@ function extendedFeatures(prog) {
   if ((prog.classes || []).some((c) => c.module) || prog.functions.some((f) => f.module)) out.add('moduli importati');
   for (const f of prog.functions) {
     if (rets(f).length > 1) out.add('funzioni con più valori restituiti');
+    if (rets(f).some((r) => r.array)) out.add('funzioni che restituiscono array');
     if (f.params.some((p) => p.array && (p.dims || 1) > 1)) out.add('array a più dimensioni');
     walk(f.body, (s) => {
       if (s.kind === 'const') out.add('costanti');

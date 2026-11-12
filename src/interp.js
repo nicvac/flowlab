@@ -361,6 +361,7 @@ class Interpreter {
       return;
     }
     if (opts.asStatement) return;
+    if (nr === 1 && _M.rets(func)[0].array && !opts.allowArray) throw new _E.FlowError(`${func.name} restituisce un array: si usa in un'assegnazione a un array, es. v ← ${func.name}(...)`, { node });
     if (nr === 0) throw new _E.FlowError(`${func.ctor ? 'Il costruttore' : 'La funzione'} ${func.name} non restituisce alcun valore: non si può usare in un'espressione`, { node });
     if (nr > 1) {
       const ph = _M.rets(func).map((r) => r.name).join(', ');
@@ -597,7 +598,19 @@ class Interpreter {
           this.stack.pop();
           throw new _E.FlowError(`La funzione ${func.name} deve restituire "${r.name}", ma questa variabile non è stata dichiarata`, { node, stmtId: 'end:' + func.id });
         }
-        if (cell.array || cell.value === undefined) {
+        // array restituito: chi chiama riceve lo stesso array (come in Java)
+        if (r.array || cell.array) {
+          const bad = (msg) => { this.stack.pop(); return new _E.FlowError(msg, { node, stmtId: 'end:' + func.id }); };
+          if (!cell.array) throw bad(`La funzione ${func.name} deve restituire un array, ma "${r.name}" non è un array`);
+          if (!r.array) throw bad(`"${r.name}" è un array: per restituirlo indica «array» nel valore restituito di ${func.name}`);
+          const nd = (cell.dims || [0]).length;
+          if (nd !== (r.dims || 1)) throw bad(`"${r.name}" ha ${nd} ${nd === 1 ? 'dimensione' : 'dimensioni'}, ma ${func.name} restituisce un array a ${r.dims || 1}`);
+          const ct = this.cellType(cell), rt = this.resolve(r.type, frame.tctx);
+          if (!this.unresolved(ct) && !this.unresolved(rt) && !_E.sameType(ct, rt)) throw bad(`"${r.name}" è un array di ${_E.typeName(ct)}, ma ${func.name} restituisce un array di ${_E.typeName(rt)}`);
+          vals.push({ t: 'ArrRef', cell: { name: r.name, type: rt, ctx: null, items: cell.items, dims: (cell.dims || [cell.items.length]).slice() } });
+          continue;
+        }
+        if (cell.value === undefined) {
           this.stack.pop();
           throw new _E.FlowError(`La funzione ${func.name} termina senza aver assegnato un valore a "${r.name}"`, { node, stmtId: 'end:' + func.id });
         }
@@ -609,7 +622,7 @@ class Interpreter {
     return ret;
   }
 
-  *callUser(name, argNodes, node, asStatement, allowMulti) {
+  *callUser(name, argNodes, node, asStatement, allowMulti, allowArray) {
     let cands, self = null;
     if (!this.oo) cands = [this.findFunc(name)];
     else {
@@ -618,7 +631,7 @@ class Interpreter {
       if (!cands.length) cands = this.methodCands(fr.cls, low);
       self = fr.self;
     }
-    return yield* this.callCands(cands, name, argNodes, node, { asStatement, allowMulti, self });
+    return yield* this.callCands(cands, name, argNodes, node, { asStatement, allowMulti, allowArray, self });
   }
 
   *block(stmts) {
@@ -714,6 +727,15 @@ class Interpreter {
         if (!lv.indices && (rx.k === 'var' || rx.k === 'member') && !rx.indices) {
           const tcell = yield* this.cellOf(lv);
           if (tcell.array) { yield* this.storeArray(tcell, lv, rx); return; }
+        }
+        // array ← funzione(...) che restituisce un array
+        if (!lv.indices && ((rx.k === 'call' && this.hasUser(rx.name)) || rx.k === 'mcall')) {
+          const tcell = yield* this.cellOf(lv);
+          if (tcell.array) {
+            const v = rx.k === 'call' ? yield* this.callUser(rx.name, rx.args, rx, false, undefined, true) : yield* this.mcall(rx, { allowArray: true });
+            yield* this.store(lv, v);
+            return;
+          }
         }
         const val = yield* ev(s.expression);
         yield* this.store(lv, val);
@@ -860,13 +882,17 @@ class Interpreter {
 
   *storeArray(tcell, lv, rx) {
     const nm = lv.k === 'var' ? lv.name : this.label(lv);
-    if (tcell.constant) throw new _E.FlowError(`"${tcell.name}" è una costante: il suo valore non si può modificare`);
     const src = yield* this.cellOf(rx);
     if (!src.array) throw new _E.FlowError(`"${nm}" è un array: a destra serve un array dello stesso tipo, oppure indica l'elemento da modificare, es. ${nm}[i]`);
+    this.linkArray(tcell, nm, src, `"${this.label(rx)}"`);
+  }
+  /* l'array a sinistra diventa lo stesso array di src (come in Java) */
+  linkArray(tcell, nm, src, what) {
+    if (tcell.constant) throw new _E.FlowError(`"${tcell.name}" è una costante: il suo valore non si può modificare`);
     const tt = this.cellType(tcell), st = this.cellType(src);
-    if (!this.unresolved(tt) && !this.unresolved(st) && !_E.sameType(tt, st)) throw new _E.FlowError(`Tipi incompatibili: "${this.label(rx)}" è un array di ${_E.typeName(st)}, ma "${nm}" è un array di ${_E.typeName(tt)}`);
+    if (!this.unresolved(tt) && !this.unresolved(st) && !_E.sameType(tt, st)) throw new _E.FlowError(`Tipi incompatibili: ${what} è un array di ${_E.typeName(st)}, ma "${nm}" è un array di ${_E.typeName(tt)}`);
     const sd = src.dims || [src.items.length], td = tcell.dims || [tcell.items.length];
-    if (sd.length !== td.length) throw new _E.FlowError(`"${this.label(rx)}" ha ${sd.length} ${sd.length === 1 ? 'dimensione' : 'dimensioni'}, "${nm}" ne ha ${td.length}`);
+    if (sd.length !== td.length) throw new _E.FlowError(`${what} ha ${sd.length} ${sd.length === 1 ? 'dimensione' : 'dimensioni'}, "${nm}" ne ha ${td.length}`);
     tcell.items = src.items; tcell.dims = sd.slice();
     tcell.lastWrite = undefined;
     tcell.writes = (tcell.writes || 0) + 1;
@@ -875,6 +901,12 @@ class Interpreter {
     const cell = yield* this.cellOf(lv);
     const nm = lv.k === 'var' ? lv.name : this.label(lv).replace(/\[…\]$/, '');
     if (cell.constant) throw new _E.FlowError(`"${cell.name}" è una costante: il suo valore non si può modificare`);
+    // array restituito da una funzione
+    if (val && val.t === 'ArrRef') {
+      if (!cell.array || lv.index) throw new _E.FlowError(`"${nm}" non è un array: a destra c'è una funzione che restituisce un array di ${_E.typeName(val.cell.type)}`);
+      this.linkArray(cell, nm, val.cell, 'il valore restituito');
+      return;
+    }
     if (cell.array) {
       if (!lv.index) throw new _E.FlowError(`"${nm}" è un array: indica l'elemento da modificare, es. ${nm}[i]`);
       const ivs = [];
