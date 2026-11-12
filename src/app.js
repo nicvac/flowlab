@@ -308,19 +308,36 @@
     } else {
       const f = func();
       const c = isOO() ? M.classOf(st.prog, f) : null;
-      const out = renderer.func(f, st.expanded, isOO() ? { owner: c ? c.name : '', isMain: st.fi === 0 } : undefined);
+      // un diagramma appena aperto è sempre esteso
+      if (st.compactFid !== f.id) { st.compact = false; st.compactFid = f.id; }
+      const out = renderer.func(f, st.expanded, Object.assign(isOO() ? { owner: c ? c.name : '', isMain: st.fi === 0 } : {}, { compact: !!st.compact }));
       st.ins = out.ins;
       st.edges = out.edges;
       holder.innerHTML = out.svg;
       applyZoom();
       decorate();
     }
+    syncCompactBtn();
     renderFuncSelect();
     renderViewSwitch();
     $('#undoBtn').disabled = !st.undo.length;
     $('#redoBtn').disabled = !st.redo.length;
     $('#progName').textContent = st.prog.attrs.name || 'Programma senza nome';
     clearTimeout(codeTimer); codeTimer = setTimeout(() => { renderCode(); autosave(); }, 120);
+  }
+  /* vista compatta: solo per i diagrammi di flusso; l'esportazione è sempre estesa */
+  function syncCompactBtn() {
+    const b = $('#compactBtn'); if (!b) return;
+    b.hidden = isUml() || (isOO() && func().abstract);
+    const on = !!st.compact && !b.hidden;
+    b.setAttribute('aria-pressed', String(on));
+    b.querySelector('.lbl').textContent = on ? 'Estendi' : 'Compatta';
+    b.title = on ? 'Vista estesa: frecce tra tutti i blocchi (Maiusc+K)' : 'Vista compatta: i blocchi in sequenza si toccano (Maiusc+K)';
+  }
+  function toggleCompact() {
+    if (isUml() || (isOO() && func().abstract)) return;
+    st.compact = !st.compact; st.compactFid = func().id;
+    render();
   }
   function decorate() {
     // durante il tragitto del cursore resta acceso il blocco di partenza
@@ -2622,6 +2639,11 @@
   }
 
   function exportSvg(source, css) {
+    // l'esportazione è sempre nella vista estesa
+    if (!source && st.compact && !isUml() && !(isOO() && func().abstract)) {
+      const f = func(), c = isOO() ? M.classOf(st.prog, f) : null;
+      source = svgFromString(new RenderLib.Renderer().func(f, st.expanded, isOO() ? { owner: c ? c.name : '', isMain: st.fi === 0 } : {}).svg);
+    }
     const svg = (source || $('#chart svg')).cloneNode(true);
     svg.setAttribute('width', svg.dataset.w); svg.setAttribute('height', svg.dataset.h);
     svg.insertBefore(h('style', null, css || exportCss()), svg.firstChild);
@@ -2906,7 +2928,7 @@
     ]],
     ['Vista', [
       ['Ctrl+Alt+F  ·  Ctrl+Alt+O', 'Vista Funzioni, vista Oggetti'], ['Alt+1  2  3  4', 'Schede Console, Variabili, Codice, File'], ['Ctrl+B', 'Mostra o nascondi il pannello'],
-      ['Ctrl++  Ctrl+-  Ctrl+0', 'Zoom avanti, indietro, 100%'], ['Maiusc+1', 'Adatta alla finestra'], ['Ctrl+rotella', 'Zoom'],
+      ['Ctrl++  Ctrl+-  Ctrl+0', 'Zoom avanti, indietro, 100%'], ['Maiusc+1', 'Adatta alla finestra'], ['Maiusc+K', 'Vista compatta del diagramma di flusso (i blocchi in sequenza si toccano) / vista estesa'], ['Ctrl+rotella', 'Zoom'],
       ['F1', 'Guida rapida'], ['Esc', 'Chiudi finestre e menu'],
     ]],
   ];
@@ -2987,6 +3009,7 @@
       const lab = keyLabel(e);
       if (lab === 'N') return go(() => $('#funcAdd').click());
       if (lab === 'U' && isOO() && !isUml()) return go(showUml);
+      if (lab === 'Maiusc+K' && !isUml()) return go(toggleCompact);
       if (isUml()) {
         if ((e.key === 'Delete' || e.key === 'Backspace') && st.usel && !isRunning()) { e.preventDefault(); deleteUmlSel(); }
         else if (e.key === 'Enter' && st.usel) { e.preventDefault(); if (st.usel.kind === 'method') openMethod(st.usel.fid); else if (!isRunning()) editUmlSel(); }
@@ -3047,6 +3070,7 @@
     $('#zoomIn').addEventListener('click', () => setZoom(st.zoom * 1.15));
     $('#zoomOut').addEventListener('click', () => setZoom(st.zoom / 1.15));
     $('#zoomFit').addEventListener('click', fitZoom);
+    $('#compactBtn').addEventListener('click', toggleCompact);
     $('#zoomVal').addEventListener('click', () => setZoom(1));
     $('#tabs').addEventListener('keydown', (e) => {
       if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;

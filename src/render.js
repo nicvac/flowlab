@@ -73,6 +73,10 @@ function dedupe(pts) {
   return out;
 }
 const cat2 = (a, b) => a.concat(b);
+/* vista compatta: questi blocchi, se sono uno dopo l'altro, si toccano (freccia di lunghezza 0) */
+const COMPACT_KINDS = new Set(['declare', 'const', 'assign', 'input', 'output', 'call', 'comment', 'breakpoint']);
+const COMPOUND_KINDS = new Set(['if', 'while', 'for', 'do']);
+const TAIL_C = 14; // ultima freccia di un ramo o del corpo di un ciclo: corta, quanto basta per il +
 const TOG = 24, LINE_H = 17;
 
 const KIND_IT = {
@@ -139,7 +143,7 @@ const CAT_OF = {
 
 class Renderer {
   constructor() { this.reset(); }
-  reset() { this.ins = []; this.sh = []; this.ln = []; this.hit = []; this.lbl = []; this.edges = []; }
+  reset() { this.ins = []; this.sh = []; this.ln = []; this.hit = []; this.hitTop = []; this.lbl = []; this.edges = []; }
 
   /* ---- grafo dei percorsi (per il cursore che segue le frecce) ----
      Ogni disegno riceve "head" = {node, pts, tag}: il percorso pendente che arriva
@@ -154,6 +158,11 @@ class Renderer {
   insPoint(arr, idx, x, y1, y2, head) {
     const k = this.ins.length;
     this.ins.push({ arr, idx });
+    // freccia di lunghezza 0 (vista compatta): il + sta sul punto, sopra i blocchi
+    if (y2 === y1) {
+      this.hitTop.push(`<g class="ins zero" data-ins="${k}"><rect x="${x - 22}" y="${y1 - 8}" width="44" height="16"/><circle cx="${x}" cy="${y1}" r="9"/><path d="M${x - 4} ${y1}H${x + 4}M${x} ${y1 - 4}V${y1 + 4}"/></g>`);
+      return;
+    }
     this.line([[x, y1], [x, y2]], head);
     const hh = y2 - y1;
     this.hit.push(`<g class="ins" data-ins="${k}"><rect x="${x - 22}" y="${y1}" width="44" height="${hh}"/><circle cx="${x}" cy="${y1 + hh / 2}" r="9"/><path d="M${x - 4} ${y1 + hh / 2}H${x + 4}M${x} ${y1 + hh / 2 - 4}V${y1 + hh / 2 + 4}"/></g>`);
@@ -234,7 +243,13 @@ class Renderer {
 
   seq(arr, tailHead) {
     const parts = arr.map((s) => this.stmt(s));
-    let L = 22, R = 22, h = R_.GAP * (arr.length + 1);
+    // vista compatta: i blocchi semplici consecutivi si toccano (freccia di lunghezza 0)
+    const glued = arr.map((s, i) => !!this.compact && i > 0 && COMPACT_KINDS.has(s.kind) && COMPACT_KINDS.has(arr[i - 1].kind));
+    // in un ramo o nel corpo di un ciclo l'ultima freccia è corta; dopo un altro ciclo o un Se è nulla
+    // (l'uscita del blocco prosegue dritta nel ritorno, senza gradini)
+    const last = arr[arr.length - 1];
+    const tail = !tailHead && last ? (COMPOUND_KINDS.has(last.kind) ? 0 : TAIL_C) : R_.GAP;
+    let L = 22, R = 22, h = R_.GAP * (arr.length - glued.filter(Boolean).length) + tail;
     for (const p of parts) { L = Math.max(L, p.L); R = Math.max(R, p.R); h += p.h; }
     return {
       L, R, h,
@@ -242,14 +257,15 @@ class Renderer {
         let cur = y;
         let pend = head;
         parts.forEach((p, i) => {
-          this.insPoint(arr, i, cx, cur, cur + R_.GAP, true);
-          const arrow = [[cx, cur], [cx, cur + R_.GAP]];
-          cur += R_.GAP;
+          const gap = glued[i] ? 0 : R_.GAP;
+          this.insPoint(arr, i, cx, cur, cur + gap, true);
+          const arrow = [[cx, cur], [cx, cur + gap]];
+          cur += gap;
           pend = p.draw(cx, cur, { node: pend.node, pts: cat2(pend.pts, arrow), tag: pend.tag });
           cur += p.h;
         });
-        this.insPoint(arr, arr.length, cx, cur, cur + R_.GAP, tailHead);
-        return { node: pend.node, pts: cat2(pend.pts, [[cx, cur], [cx, cur + R_.GAP]]), tag: pend.tag };
+        this.insPoint(arr, arr.length, cx, cur, cur + tail, tailHead);
+        return { node: pend.node, pts: cat2(pend.pts, [[cx, cur], [cx, cur + tail]]), tag: pend.tag };
       },
     };
   }
@@ -295,7 +311,9 @@ class Renderer {
       const dw = mb.w, dh = mb.h;
       const B = this.seq(s.body, false);
       const lo = Math.max(dw / 2, B.L) + 20, ro = Math.max(dw / 2, B.R) + 20;
-      const h = dh + B.h + 28;
+      // sotto il corpo: il ritorno parte subito, l'uscita passa 12 px più in basso
+      const rd = 0, xd = 12;
+      const h = dh + B.h + xd;
       return {
         L: lo + 4, R: ro + 4, h,
         draw: (cx, y, head) => {
@@ -306,12 +324,12 @@ class Renderer {
           this.label(cx + 6, y + dh + 13, s.kind === 'for' ? 'Ripeti' : 'Vero', 'start');
           // il ritorno si innesta a metà della freccia che entra nella condizione
           const jy = y - R_.GAP / 2;
-          this.line([[cx, by], [cx, by + 10], [cx - lo, by + 10], [cx - lo, jy], [cx - 4, jy]], true, 'back');
+          this.line([[cx, by], [cx, by + rd], [cx - lo, by + rd], [cx - lo, jy], [cx - 4, jy]], true, 'back');
           this.ln.push(`<circle class="joint" cx="${cx}" cy="${jy}" r="3.5"/>`);
-          this.line([[cx + dw / 2, m], [cx + ro, m], [cx + ro, by + 22], [cx, by + 22], [cx, y + h]]);
+          this.line(dedupe([[cx + dw / 2, m], [cx + ro, m], [cx + ro, by + xd], [cx, by + xd], [cx, y + h]]));
           this.label(cx + dw / 2 + 6, m - 6, s.kind === 'for' ? 'Fine' : 'Falso', 'start');
-          this.edge(tB.node, s.id, cat2(tB.pts, [[cx, by + 10], [cx - lo, by + 10], [cx - lo, jy], [cx, jy], [cx, y]]), tB.tag);
-          return { node: s.id, pts: [[cx + dw / 2, m], [cx + ro, m], [cx + ro, by + 22], [cx, by + 22]], tag: 'F' };
+          this.edge(tB.node, s.id, cat2(tB.pts, [[cx, by + rd], [cx - lo, by + rd], [cx - lo, jy], [cx, jy], [cx, y]]), tB.tag);
+          return { node: s.id, pts: [[cx + dw / 2, m], [cx + ro, m], [cx + ro, by + xd], [cx, by + xd]], tag: 'F' };
         },
       };
     }
@@ -341,10 +359,11 @@ class Renderer {
     }
     if (s.kind === 'comment' && !cap.incomplete) return this.comment(s, title);
     const mb = this.measure(s, cap, shp, H);
-    const w = mb.w, h = mb.h;
+    const w0 = mb.w, h = mb.h;
     return {
-      L: w / 2 + 6, R: w / 2 + 6, h,
-      draw: (cx, y, head) => {
+      L: w0 / 2 + 6, R: w0 / 2 + 6, h, w: w0,
+      draw: (cx, y, head, wForce) => {
+        const w = wForce || w0;
         this.edge(head.node, s.id, head.pts, head.tag);
         this.shape(s.id, s.kind, cat, shp, cx, y, w, h, cap.text, title, s.kind === 'comment' ? ' comment' : '', cap.incomplete ? null : cap.badge, mb);
         return { node: s.id, pts: [[cx, y + h]] };
@@ -372,9 +391,11 @@ class Renderer {
       w = widthFor(true, shown);
     }
     const h = open ? Math.max(R_.H - 4, shown.length * LH + 14) : R_.H - 4;
+    const wn = w;
     return {
-      L: w / 2 + 6, R: w / 2 + 6, h,
-      draw: (cx, y, head) => {
+      L: wn / 2 + 6, R: wn / 2 + 6, h, w: wn,
+      draw: (cx, y, head, wForce) => {
+        const w = wForce || wn;
         this.edge(head.node, s.id, head.pts, head.tag);
         const l = cx - w / 2, r = cx + w / 2;
         let g = `<g class="shape c-comment comment${open ? ' open' : ''}" data-id="${s.id}" data-kind="comment"><title>${esc(title)}</title>${shapePath('note', cx, y, w, h)}`;
@@ -394,10 +415,12 @@ class Renderer {
   }
 
   /* opts.owner: nome della classe (vista Oggetti), opts.isMain: è il punto di partenza */
+  /* opts.compact: vista compatta (i blocchi semplici consecutivi si toccano) */
   func(f, expanded, opts) {
     this.reset();
     this.expanded = expanded;
     const o = opts || {};
+    this.compact = !!o.compact;
     const isMain = o.isMain != null ? o.isMain : f.name.toLowerCase() === 'main';
     const ps = f.params.map((p) => `${p.name}${p.array ? `[${','.repeat((p.dims || 1) - 1)}]` : ''}: ${ExprLib.typeName(p.type)}`).join(', ');
     const sig = isMain ? 'Inizio' : f.ctor ? `new ${f.name}(${ps})` : `${o.owner ? o.owner + '.' : ''}${f.name}${(f.tparams || []).length ? `<${f.tparams.join(', ')}>` : ''}(${ps})`;
@@ -415,7 +438,7 @@ class Renderer {
     this.shape('end:' + f.id, '', 'term', 'term', cx, y0 + R_.H + B.h, ew, R_.H, endText, rsl.length ? `${o.owner ? 'Il metodo' : 'La funzione'} restituisce ${rsl.map((x) => `${x.name}: ${ExprLib.typeName(x.type)}`).join(', ')}` : (f.ctor ? 'Fine del costruttore: l\'oggetto è pronto' : `Fine ${o.owner ? 'del metodo' : 'della funzione'}`));
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" class="chart" viewBox="0 0 ${W} ${Hh}" width="${W}" height="${Hh}" data-w="${W}" data-h="${Hh}">`
       + '<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" class="ahead"/></marker></defs>'
-      + `<g class="lines">${this.ln.join('')}</g><g class="hits">${this.hit.join('')}</g><g class="trail"></g><g class="shapes">${this.sh.join('')}</g><g class="labels">${this.lbl.join('')}</g></svg>`;
+      + `<g class="lines">${this.ln.join('')}</g><g class="hits">${this.hit.join('')}</g><g class="trail"></g><g class="shapes">${this.sh.join('')}</g><g class="hits hits-top">${this.hitTop.join('')}</g><g class="labels">${this.lbl.join('')}</g></svg>`;
     return { svg, W, H: Hh, ins: this.ins, edges: this.edges };
   }
 }

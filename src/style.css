@@ -705,3 +705,13 @@ body.udragging .uml .umod { cursor: grabbing; }
 .ackind.a { background: var(--s-decl); }
 .aclabel { font-family: var(--font-mono); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .acowner { margin-left: auto; font-size: 11px; color: var(--faint); white-space: nowrap; }
+
+/* vista compatta del diagramma: pulsante in alto a sinistra, prima della barra della classe */
+#chartTools { position: absolute; left: 12px; top: 10px; z-index: 3; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); pointer-events: none; }
+#chartTools > * { pointer-events: auto; }
+#chartTools #crumbBar { position: static; max-width: none; min-width: 0; }
+#compactBtn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 11px 0 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--ink); font-weight: 700; font-size: 12.5px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.08); white-space: nowrap; }
+#compactBtn[hidden] { display: none; }
+#compactBtn:hover { border-color: var(--accent); color: var(--accent); }
+#compactBtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+#compactBtn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
