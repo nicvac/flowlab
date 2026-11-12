@@ -17,6 +17,21 @@ title = '<title>FlowLab</title>'
 inner = f'{title}\n<meta name="description" content="Editor ed esecutore di diagrammi di flusso compatibile con i file .fprg">\n{fonts}\n<style>\n{css}\n</style>\n{body}\n<script>\n{js}\n</script>\n'
 out = pathlib.Path('dist'); out.mkdir(exist_ok=True)
 (out/'artifact.html').write_text(inner)
-full = f'<!doctype html>\n<html lang="it">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n{title}\n<meta name="description" content="Editor ed esecutore di diagrammi di flusso compatibile con i file .fprg">\n{fonts}\n<style>\n{css}\n</style>\n</head>\n<body>\n{body}\n<script>\n{js}\n</script>\n</body>\n</html>\n'
+favicon = '<link rel="icon" href="data:image/svg+xml,' + __import__('urllib.parse').parse.quote((src/'pwa'/'icona.svg').read_text().replace('\n', '')) + '">\n<meta name="theme-color" content="#0c6c80">'
+full = f'<!doctype html>\n<html lang="it">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n{title}\n{favicon}\n<meta name="description" content="Editor ed esecutore di diagrammi di flusso compatibile con i file .fprg">\n{fonts}\n<style>\n{css}\n</style>\n</head>\n<body>\n{body}\n<script>\n{js}\n</script>\n</body>\n</html>\n'
 (out/'FlowLab.html').write_text(full)
+# installazione come app (PWA) dalla versione online: manifest, service worker (versione = impronta della pagina), icone
+import hashlib, shutil
+manifest = {
+  'id': './FlowLab.html', 'name': 'FlowLab', 'short_name': 'FlowLab', 'lang': 'it',
+  'description': 'Editor ed esecutore di diagrammi di flusso compatibile con i file .fprg',
+  'start_url': './FlowLab.html', 'scope': './', 'display': 'standalone',
+  'background_color': '#e9edf1', 'theme_color': '#0c6c80',
+  'icons': [{'src': 'icona-192.png', 'sizes': '192x192', 'type': 'image/png', 'purpose': 'any'},
+            {'src': 'icona-512.png', 'sizes': '512x512', 'type': 'image/png', 'purpose': 'any'},
+            {'src': 'icona-512.png', 'sizes': '512x512', 'type': 'image/png', 'purpose': 'maskable'}],
+}
+(out/'manifest.webmanifest').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
+(out/'sw.js').write_text((src/'pwa'/'sw.js').read_text().replace('__VERSIONE__', hashlib.sha1(full.encode()).hexdigest()[:12]))
+for n in ('icona-192.png', 'icona-512.png'): shutil.copy(src/'pwa'/n, out/n)
 print(len(full)//1024, 'KB')

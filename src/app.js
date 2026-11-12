@@ -2849,7 +2849,35 @@
       { label: 'Scarica codice sorgente', key: 'Ctrl+Maiusc+S', do: downloadCode },
       '-',
       { label: 'Proprietà del programma…', key: 'Alt+Invio', do: editProgram },
+      ...(isStandalone() ? [] : ['-', { label: 'Installa FlowLab come app…', do: installApp, cls: 'install' }]),
     ]);
+  }
+  /* ---- installazione come app (PWA): dalla versione online, aperta in una scheda di Chrome o Edge ---- */
+  const ONLINE_URL = 'https://nicvac.github.io/flowlab/dist/FlowLab.html';
+  let installEvt = null;
+  const isStandalone = () => { try { return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; } catch (e) { return false; } };
+  function setupPwa() {
+    if (location.protocol === 'file:' || window.self !== window.top) return;
+    if (!document.querySelector('link[rel=manifest]')) document.head.append(h('link', { rel: 'manifest', href: 'manifest.webmanifest' }));
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+    // Chrome propone l'installazione: si usa dal menu File
+    addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
+    addEventListener('appinstalled', () => { installEvt = null; toast('FlowLab è installato: lo trovi tra le app del computer', 'ok'); });
+  }
+  async function installApp() {
+    if (installEvt) {
+      const e = installEvt; installEvt = null;
+      e.prompt();
+      try { const r = await e.userChoice; if (r.outcome !== 'accepted') installEvt = e; } catch (err) { /* nulla */ }
+      return;
+    }
+    const ua = navigator.userAgent;
+    let why;
+    if (location.protocol === 'file:' || window.self !== window.top) why = `Questa copia di FlowLab non si può installare. FlowLab si installa dalla versione online, ${ONLINE_URL}, aperta con Chrome o Edge: poi da qui, menu File › Installa FlowLab come app.`;
+    else if (/Firefox\//.test(ua)) why = 'Firefox non installa le app web. Apri questa pagina con Chrome o Edge e scegli di nuovo File › Installa FlowLab come app.';
+    else if (/Safari\//.test(ua) && !/Chrome|Chromium|Edg\//.test(ua)) why = /iPhone|iPad/.test(ua) ? 'In Safari: tocca Condividi e poi «Aggiungi alla schermata Home».' : 'In Safari: menu File › «Aggiungi al Dock».';
+    else why = 'FlowLab è forse già installato: lo trovi tra le app del computer (in Chrome anche alla pagina chrome://apps). Altrimenti usa l\'icona di installazione a destra nella barra degli indirizzi, oppure ricarica la pagina e riprova.';
+    infoBox('Installa FlowLab come app', why);
   }
   function exportSvgFile() { download(safeName(st.prog.attrs.name) + '_' + (isUml() ? 'classi' : safeName(fname(func()))) + '.svg', exportSvg(), 'image/svg+xml'); }
   function downloadCode() { download(safeName(st.prog.attrs.name) + '.' + CodeGen.LANGS[st.lang].ext, CodeGen.generate(st.prog, st.lang), 'text/plain'); }
@@ -3125,7 +3153,7 @@
   }
   function init() {
     ArrayView.configure({ host: () => $('#floatLayer'), nextZ: () => ++zTop });
-    bindUi(); bindChart(); bindKeys();
+    bindUi(); bindChart(); bindKeys(); setupPwa();
     const saved = store.get('autosave', null);
     let ok = false;
     if (saved && saved.xml) {

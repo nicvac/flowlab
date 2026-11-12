@@ -1,0 +1,32 @@
+{
+  "id": "./FlowLab.html",
+  "name": "FlowLab",
+  "short_name": "FlowLab",
+  "lang": "it",
+  "description": "Editor ed esecutore di diagrammi di flusso compatibile con i file .fprg",
+  "start_url": "./FlowLab.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#e9edf1",
+  "theme_color": "#0c6c80",
+  "icons": [
+    {
+      "src": "icona-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icona-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icona-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

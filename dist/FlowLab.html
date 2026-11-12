@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>FlowLab</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20512%20512%22%3E%20%20%3Crect%20width%3D%22512%22%20height%3D%22512%22%20fill%3D%22%23fdfefe%22/%3E%20%20%3Cg%20transform%3D%22translate%28112%20112%29%20scale%289%29%22%3E%20%20%20%20%3Crect%20x%3D%229%22%20y%3D%221.5%22%20width%3D%2214%22%20height%3D%226%22%20rx%3D%223%22%20fill%3D%22%23e8e2f5%22%20stroke%3D%22%2374609e%22%20stroke-width%3D%221.5%22/%3E%20%20%20%20%3Cpath%20d%3D%22M16%207.5V11%22%20stroke%3D%22%234c5b69%22%20stroke-width%3D%221.5%22/%3E%20%20%20%20%3Cpath%20d%3D%22M16%2011L24%2017L16%2023L8%2017Z%22%20fill%3D%22%23fadedb%22%20stroke%3D%22%23b45d54%22%20stroke-width%3D%221.5%22/%3E%20%20%20%20%3Cpath%20d%3D%22M24%2017H28V27H16M8%2017H4V27H16V30.5%22%20fill%3D%22none%22%20stroke%3D%22%230c6c80%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22/%3E%20%20%3C/g%3E%3C/svg%3E">
+<meta name="theme-color" content="#0c6c80">
 <meta name="description" content="Editor ed esecutore di diagrammi di flusso compatibile con i file .fprg">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
@@ -396,6 +398,9 @@ table.vars .avlink:hover, table.vars .avlink:focus-visible { color: var(--ink); 
 .ctxmenu button { display: flex; align-items: center; justify-content: space-between; gap: 18px; border: 0; background: transparent; text-align: left; padding: 7px 10px; border-radius: 6px; cursor: pointer; }
 .ctxmenu button:hover, .ctxmenu button:focus-visible { background: var(--accent-soft); outline: none; }
 .ctxmenu button.danger { color: var(--err); }
+/* voce «Installa FlowLab come app»: in evidenza rispetto alle altre */
+.ctxmenu button.install { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.ctxmenu button.install:hover, .ctxmenu button.install:focus-visible { background: var(--accent); filter: brightness(1.12); }
 .ctxmenu kbd { font: 11px var(--font-mono); color: var(--faint); }
 .ctxmenu hr { border: 0; border-top: 1px solid var(--line-soft); margin: 4px 0; }
 .ctxmenu.examples { min-width: 290px; }
@@ -9043,7 +9048,35 @@ const ArrayView = (() => {
       { label: 'Scarica codice sorgente', key: 'Ctrl+Maiusc+S', do: downloadCode },
       '-',
       { label: 'Proprietà del programma…', key: 'Alt+Invio', do: editProgram },
+      ...(isStandalone() ? [] : ['-', { label: 'Installa FlowLab come app…', do: installApp, cls: 'install' }]),
     ]);
+  }
+  /* ---- installazione come app (PWA): dalla versione online, aperta in una scheda di Chrome o Edge ---- */
+  const ONLINE_URL = 'https://nicvac.github.io/flowlab/dist/FlowLab.html';
+  let installEvt = null;
+  const isStandalone = () => { try { return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; } catch (e) { return false; } };
+  function setupPwa() {
+    if (location.protocol === 'file:' || window.self !== window.top) return;
+    if (!document.querySelector('link[rel=manifest]')) document.head.append(h('link', { rel: 'manifest', href: 'manifest.webmanifest' }));
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+    // Chrome propone l'installazione: si usa dal menu File
+    addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
+    addEventListener('appinstalled', () => { installEvt = null; toast('FlowLab è installato: lo trovi tra le app del computer', 'ok'); });
+  }
+  async function installApp() {
+    if (installEvt) {
+      const e = installEvt; installEvt = null;
+      e.prompt();
+      try { const r = await e.userChoice; if (r.outcome !== 'accepted') installEvt = e; } catch (err) { /* nulla */ }
+      return;
+    }
+    const ua = navigator.userAgent;
+    let why;
+    if (location.protocol === 'file:' || window.self !== window.top) why = `Questa copia di FlowLab non si può installare. FlowLab si installa dalla versione online, ${ONLINE_URL}, aperta con Chrome o Edge: poi da qui, menu File › Installa FlowLab come app.`;
+    else if (/Firefox\//.test(ua)) why = 'Firefox non installa le app web. Apri questa pagina con Chrome o Edge e scegli di nuovo File › Installa FlowLab come app.';
+    else if (/Safari\//.test(ua) && !/Chrome|Chromium|Edg\//.test(ua)) why = /iPhone|iPad/.test(ua) ? 'In Safari: tocca Condividi e poi «Aggiungi alla schermata Home».' : 'In Safari: menu File › «Aggiungi al Dock».';
+    else why = 'FlowLab è forse già installato: lo trovi tra le app del computer (in Chrome anche alla pagina chrome://apps). Altrimenti usa l\'icona di installazione a destra nella barra degli indirizzi, oppure ricarica la pagina e riprova.';
+    infoBox('Installa FlowLab come app', why);
   }
   function exportSvgFile() { download(safeName(st.prog.attrs.name) + '_' + (isUml() ? 'classi' : safeName(fname(func()))) + '.svg', exportSvg(), 'image/svg+xml'); }
   function downloadCode() { download(safeName(st.prog.attrs.name) + '.' + CodeGen.LANGS[st.lang].ext, CodeGen.generate(st.prog, st.lang), 'text/plain'); }
@@ -9319,7 +9352,7 @@ const ArrayView = (() => {
   }
   function init() {
     ArrayView.configure({ host: () => $('#floatLayer'), nextZ: () => ++zTop });
-    bindUi(); bindChart(); bindKeys();
+    bindUi(); bindChart(); bindKeys(); setupPwa();
     const saved = store.get('autosave', null);
     let ok = false;
     if (saved && saved.xml) {

@@ -8,6 +8,7 @@ Il software è stato creato con **Claude Opus 5.5** di Anthropic.
 
 👉 **Per usarlo:**
 - **online**, senza installare nulla: apri <https://nicvac.github.io/flowlab/dist/FlowLab.html>;
+- **come app**: dalla versione online, menu File › *Installa FlowLab come app* (Chrome o Edge); si apre in una finestra sua e funziona anche senza rete;
 - **offline**: scarica [`dist/FlowLab.html`](dist/FlowLab.html) e aprilo con Chrome.
 
 ### Aprire un programma da un indirizzo web
@@ -49,6 +50,7 @@ https://nicvac.github.io/flowlab/dist/FlowLab.html?url=https://github.com/utente
   - I valori di un Tipo Generico si confrontano con `= != < <= > >=`.
   - Nel codice: `class Coppia<T>` e `static <T> T massimo(T[] v, int n)` in Java, con `Objects.equals` e `compareTo` e con `T extends Comparable<T>` solo se servono i confronti `< >`; gli array di tipi base passati a una funzione con Tipo Generico diventano `Integer[]`, `Double[]`. In C# `class Coppia<T>` e `massimo<T>(...)` con `where T : IComparable<T>`; in C++ `template <typename T>`.
 - **Moduli** (pulsante *Importa modulo* accanto a *Esempi*, oppure Ctrl+I): un modulo è un normale programma `.fprg` da riusare. I moduli si prendono da **raccolte su GitHub**: una raccolta è una cartella di un repository pubblico in cui ogni sottocartella è un argomento (`strutture_dati` diventa «Strutture dati») e contiene i file `.fprg`. Nel dialogo le raccolte si sfogliano ad albero (raccolta › argomento › moduli) e una raccolta si scarica da GitHub solo quando la si apre. Di default c'è la [raccolta ufficiale](moduli/) (strutture dati: `ArrayList<T>`, `Stack<T>`, `Queue<T>` con i costruttori di Java, compresi quelli con la capacità iniziale e quelli che copiano un'altra struttura; algoritmi di ordinamento e di ricerca); se ne possono aggiungere altre incollando il link della cartella, e un modulo si può importare anche da un file o da un indirizzo web. La descrizione mostrata è quella scritta in Proprietà del programma. Se il modulo ha delle classi, le classi compaiono in un riquadro «modulo …» del diagramma delle classi, che si può condensare (solo i nomi delle classi) o espandere con il pulsantino sul riquadro, con *Condensa i moduli* o con Maiusc+M; se ha solo funzioni, le funzioni si aggiungono al programma e si chiamano per nome, senza cambiare vista. In entrambi i casi restano in sola lettura (i loro diagrammi di flusso si possono aprire e seguire passo passo), si aggiornano e si rimuovono dallo stesso dialogo, e il Main del modulo serve solo per provarlo. Chiunque può scrivere un modulo, anche uno studente. Nel codice generato i moduli della raccolta ufficiale che hanno un equivalente nel linguaggio usano le classi già disponibili (`java.util.ArrayList`, `Stack`, `Queue`; `list` e `deque` in Python; `vector`, `stack`, `queue` in C++; `List`, `Stack`, `Queue` in C#; gli array in JavaScript); gli altri diventano classi o funzioni scritte nel codice.
+- **Installazione come app** (menu File › *Installa FlowLab come app*, oppure l'icona di installazione nella barra degli indirizzi di Chrome o Edge): dalla [versione online](https://nicvac.github.io/flowlab/dist/FlowLab.html) FlowLab si installa sul computer o sul Chromebook e si apre in una finestra sua, con l'icona tra le app; funziona anche senza rete (la pagina si chiede prima alla rete, così c'è sempre l'ultima versione, e altrimenti si usa la copia salvata). La copia scaricata in locale non si installa: la voce del menu spiega dove farlo.
 - **Codice generato:** pseudocodice italiano, Python, C++, Java, C#, JavaScript.
 - **Esportazione:** `.fprg`, SVG, PNG, codice sorgente e **tutto il progetto in PDF** (copertina con indice, diagramma delle classi, diagramma di flusso di ogni funzione o metodo con i testi espansi, ciascuno intero su una pagina alta quanto serve, pensata per la lettura a schermo, con il testo dei blocchi sempre a 9 pt (i diagrammi più larghi di un A4 allargano la pagina); codice sorgente nel linguaggio scelto nella scheda Codice, su pagine A4 orizzontali e colorato come nella scheda).
 - **Scorciatoie da tastiera** per tutte le operazioni, indicate nei menu contestuali, nei suggerimenti dei pulsanti e nella Guida rapida (F1). Una lettera aggiunge un blocco dopo quello selezionato (D Dichiara, A Assegna, I Input, O Output, S Se, M Mentre, P Per…; anche nel menu «Aggiungi un blocco»), Alt+↑/↓ sposta il blocco; nel diagramma delle classi A, M e C aggiungono attributo, metodo e costruttore alla classe selezionata, N una nuova classe; F2 modifica, Pag↑/Pag↓ passano da un diagramma all'altro.
@@ -107,9 +109,10 @@ src/
   examples.js  programmi di esempio
   app.js       interfaccia
   style.css, body.html
+  pwa/         installazione come app: service worker e icone (si rigenerano con node tools/icone.mjs)
 esempi/        gli esempi in formato .fprg (si rigenerano con node tools/esempi.js)
 moduli/        libreria dei moduli per argomento (si rigenera con node tools/moduli.js; build.py la include nella pagina)
-build.py       unisce i sorgenti in dist/FlowLab.html (standalone) e dist/artifact.html
+build.py       unisce i sorgenti in dist/FlowLab.html (standalone) e dist/artifact.html; scrive anche manifest, service worker e icone per l'installazione come app
 test/          test Node e Playwright
 ```
 

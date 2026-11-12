@@ -387,6 +387,9 @@ table.vars .avlink:hover, table.vars .avlink:focus-visible { color: var(--ink); 
 .ctxmenu button { display: flex; align-items: center; justify-content: space-between; gap: 18px; border: 0; background: transparent; text-align: left; padding: 7px 10px; border-radius: 6px; cursor: pointer; }
 .ctxmenu button:hover, .ctxmenu button:focus-visible { background: var(--accent-soft); outline: none; }
 .ctxmenu button.danger { color: var(--err); }
+/* voce «Installa FlowLab come app»: in evidenza rispetto alle altre */
+.ctxmenu button.install { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.ctxmenu button.install:hover, .ctxmenu button.install:focus-visible { background: var(--accent); filter: brightness(1.12); }
 .ctxmenu kbd { font: 11px var(--font-mono); color: var(--faint); }
 .ctxmenu hr { border: 0; border-top: 1px solid var(--line-soft); margin: 4px 0; }
 .ctxmenu.examples { min-width: 290px; }
