@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Operatore NOT: piove"/>
+        <attribute name="authors" value="Nicola Vacca"/>
+        <attribute name="about" value="Legge piove (true/false) e scrive se serve prendere l'ombrello, prima con la condizione piove e poi con not(piove)."/>
+        <attribute name="saved" value="2026-11-13 10:00:00 AM"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Operatore NOT: piove e not(piove) danno risposte opposte, quindi i due rami si scambiano"/>
+            <comment text="INPUT"/>
+            <declare name="piove" type="Boolean" array="False" size=""/>
+            <output expression="&quot;Piove? (true/false): &quot;" newline="True"/>
+            <input variable="piove"/>
+            <comment text="Condizione diretta: piove"/>
+            <if expression="piove">
+                <then>
+                    <output expression="&quot;Prendi l'ombrello&quot;" newline="True"/>
+                </then>
+                <else>
+                    <output expression="&quot;Non serve l'ombrello&quot;" newline="True"/>
+                </else>
+            </if>
+            <comment text="Condizione negata: not(piove) e' vera quando non piove"/>
+            <if expression="not(piove)">
+                <then>
+                    <output expression="&quot;Non serve l'ombrello&quot;" newline="True"/>
+                </then>
+                <else>
+                    <output expression="&quot;Prendi l'ombrello&quot;" newline="True"/>
+                </else>
+            </if>
+        </body>
+    </function>
+</flowgorithm>

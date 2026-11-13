@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Biglietto del cinema con OR"/>
+        <attribute name="authors" value="Nicola Vacca"/>
+        <attribute name="about" value="Data l'età in input, scrive se il biglietto è gratis (meno di 10 anni o più di 80 anni), con un solo blocco di selezione e l'operatore OR."/>
+        <attribute name="saved" value="2026-11-13 10:00:00 AM"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Nel cinema entrano gratis coloro che hanno meno di 10 anni e piu' di 80 anni."/>
+            <comment text="INPUT"/>
+            <declare name="etaAnni" type="Integer" array="False" size=""/>
+            <output expression="&quot;Età (anni): &quot;" newline="True"/>
+            <input variable="etaAnni"/>
+            <comment text="Gratis se eta minore di 10 OR maggiore di 80: basta che una delle due condizioni sia vera"/>
+            <if expression="etaAnni &lt; 10 or etaAnni &gt; 80">
+                <then>
+                    <output expression="&quot;Biglietto gratis&quot;" newline="True"/>
+                </then>
+                <else>
+                    <output expression="&quot;Biglietto a pagamento&quot;" newline="True"/>
+                </else>
+            </if>
+        </body>
+    </function>
+</flowgorithm>
