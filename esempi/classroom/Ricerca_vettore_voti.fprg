@@ -1,0 +1,347 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Ricerca parziale e totale in un vettore"/>
+        <attribute name="authors" value="Nicola Vacca"/>
+        <attribute name="about" value="Voti di 10 studenti (da 2 a 10): ricerca totale (quanti uguali, minori, maggiori) e ricerca parziale (primo indice da idxStart, oppure -1), con funzioni sul vettore."/>
+        <attribute name="saved" value="2026-11-13 07:26:37 PM"/>
+        <attribute name="created" value="Zmxvd2xhYjticm93c2VyOzIwMjYtMTEtMTMgMDc6MjY6MzcgUE07MQ=="/>
+        <attribute name="edited" value="Zmxvd2xhYjticm93c2VyOzIwMjYtMTEtMTMgMDc6MjY6MzcgUE07MQ=="/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Voti di una verifica di 10 studenti, interi da 2 a 10. Il main usa solo ricercaTotale(..., tipo) e ricercaParziale(..., tipo)."/>
+            <comment text="COSTANTI"/>
+            <declare name="N_STUDENTI" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="N_STUDENTI" expression="10"/>
+            <declare name="VOTO_MIN" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="VOTO_MIN" expression="2"/>
+            <declare name="VOTO_MAX" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="VOTO_MAX" expression="10"/>
+            <declare name="SUFFICIENZA" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="SUFFICIENZA" expression="6"/>
+            <declare name="UGUALE" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="UGUALE" expression="0"/>
+            <declare name="MINORE" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="MINORE" expression="-1"/>
+            <declare name="MAGGIORE" type="Integer" array="False" size="" flowlab-const="True"/>
+            <assign variable="MAGGIORE" expression="1"/>
+            <comment text="INPUT"/>
+            <declare name="xTotale, xParziale, xElenco" type="Integer" array="False" size=""/>
+            <comment text="LAVORO"/>
+            <declare name="idxStart" type="Integer" array="False" size=""/>
+            <comment text="OUTPUT"/>
+            <declare name="voti" type="Integer" array="True" size="N_STUDENTI"/>
+            <declare name="numUguali, numMinori, numMaggiori" type="Integer" array="False" size=""/>
+            <declare name="idxParziale, idx, idxInsuff" type="Integer" array="False" size=""/>
+            <comment text="Caricamento e visualizzazione dei voti"/>
+            <call expression="caricaRandom(voti, N_STUDENTI, VOTO_MIN, VOTO_MAX)"/>
+            <call expression="visualizza(voti, N_STUDENTI)"/>
+            <output expression="&quot;&quot;" newline="True"/>
+            <comment text="Ricerca totale"/>
+            <output expression="&quot;Ricerca totale - voto: &quot;" newline="False"/>
+            <input variable="xTotale"/>
+            <assign variable="numUguali" expression="ricercaTotale(voti, N_STUDENTI, xTotale, UGUALE)"/>
+            <assign variable="numMinori" expression="ricercaTotale(voti, N_STUDENTI, xTotale, MINORE)"/>
+            <assign variable="numMaggiori" expression="ricercaTotale(voti, N_STUDENTI, xTotale, MAGGIORE)"/>
+            <output expression="&quot;Voto uguale a &quot; &amp; xTotale &amp; &quot;: &quot; &amp; numUguali &amp; &quot; studenti&quot;" newline="True"/>
+            <output expression="&quot;Voto minore di &quot; &amp; xTotale &amp; &quot;: &quot; &amp; numMinori &amp; &quot; studenti&quot;" newline="True"/>
+            <output expression="&quot;Voto maggiore di &quot; &amp; xTotale &amp; &quot;: &quot; &amp; numMaggiori &amp; &quot; studenti&quot;" newline="True"/>
+            <output expression="&quot;&quot;" newline="True"/>
+            <comment text="Ricerca parziale: primo studente con il voto cercato, partendo dall'inizio"/>
+            <output expression="&quot;Ricerca parziale - voto: &quot;" newline="False"/>
+            <input variable="xParziale"/>
+            <assign variable="idxParziale" expression="ricercaParziale(voti, N_STUDENTI, xParziale, 0, UGUALE)"/>
+            <if expression="idxParziale == -1">
+                <then>
+                    <output expression="&quot;Il voto &quot; &amp; xParziale &amp; &quot; non è presente&quot;" newline="True"/>
+                </then>
+                <else>
+                    <output expression="&quot;Il voto &quot; &amp; xParziale &amp; &quot; è presente, primo studente: &quot; &amp; (idxParziale + 1)" newline="True"/>
+                </else>
+            </if>
+            <output expression="&quot;&quot;" newline="True"/>
+            <comment text="Elenco: ogni ricerca riparte dalla posizione successiva all'ultima trovata, finché la funzione restituisce -1"/>
+            <output expression="&quot;Elenco - voto: &quot;" newline="False"/>
+            <input variable="xElenco"/>
+            <output expression="&quot;Studenti con voto &quot; &amp; xElenco &amp; &quot;: &quot;" newline="False"/>
+            <assign variable="idxStart" expression="0"/>
+            <do expression="idx != -1">
+                <assign variable="idx" expression="ricercaParziale(voti, N_STUDENTI, xElenco, idxStart, UGUALE)"/>
+                <if expression="idx&gt;=0">
+                    <then>
+                        <output expression="(idx + 1) &amp; &quot; &quot;" newline="False"/>
+                        <assign variable="idxStart" expression="idx + 1"/>
+                    </then>
+                    <else/>
+                </if>
+            </do>
+            <output expression="&quot;&quot;" newline="True"/>
+            <comment text="Primo insufficiente: primo voto minore di SUFFICIENZA"/>
+            <assign variable="idxInsuff" expression="ricercaParziale(voti, N_STUDENTI, SUFFICIENZA, 0, MINORE)"/>
+            <if expression="idxInsuff == -1">
+                <then>
+                    <output expression="&quot;Nessun insufficiente&quot;" newline="True"/>
+                </then>
+                <else>
+                    <output expression="&quot;Primo insufficiente: studente &quot; &amp; (idxInsuff + 1) &amp; &quot; (voto &quot; &amp; voti[idxInsuff] &amp; &quot;)&quot;" newline="True"/>
+                </else>
+            </if>
+            <comment text="Tutti sufficienti? Sì se la ricerca parziale di un voto minore di SUFFICIENZA restituisce -1"/>
+            <if expression="ricercaParziale(voti, N_STUDENTI, SUFFICIENZA, 0, MINORE) == -1">
+                <then>
+                    <output expression="&quot;Tutti sufficienti? Sì&quot;" newline="True"/>
+                </then>
+                <else>
+                    <output expression="&quot;Tutti sufficienti? No&quot;" newline="True"/>
+                </else>
+            </if>
+        </body>
+    </function>
+    <function name="caricaRandom" type="None" variable="">
+        <parameters>
+            <parameter name="V" type="Integer" array="True"/>
+            <parameter name="N" type="Integer" array="False"/>
+            <parameter name="a" type="Integer" array="False"/>
+            <parameter name="b" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Riempie V con N valori casuali in [a, b]: a + Random(b - a + 1) va da a a b"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; N">
+                <assign variable="V[i]" expression="a + Random(b - a + 1)"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="visualizza" type="None" variable="">
+        <parameters>
+            <parameter name="V" type="Integer" array="True"/>
+            <parameter name="N" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Visualizza il vettore nel formato Studente N: voto (numero dello studente = indice + 1)"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; N">
+                <output expression="&quot;Studente &quot; &amp; (i + 1) &amp; &quot;: &quot; &amp; V[i]" newline="True"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="ricercaTotaleEqual" type="Integer" variable="conta">
+        <parameters>
+            <parameter name="V" type="Integer" array="True"/>
+            <parameter name="N" type="Integer" array="False"/>
+            <parameter name="elem" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Ricerca totale: conta gli elementi uguali a elem"/>
+            <declare name="i, conta" type="Integer" array="False" size=""/>
+            <assign variable="conta" expression="0"/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; N">
+                <if expression="V[i] == elem">
+                    <then>
+                        <assign variable="conta" expression="conta + 1"/>
+                    </then>
+                    <else/>
+                </if>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="ricercaTotaleLess" type="Integer" variable="conta">
+        <parameters>
+            <parameter name="V" type="Integer" array="True"/>
+            <parameter name="N" type="Integer" array="False"/>
+            <parameter name="elem" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Ricerca totale: conta gli elementi minori di elem"/>
+            <declare name="i, conta" type="Integer" array="False" size=""/>
+            <assign variable="conta" expression="0"/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; N">
+                <if expression="V[i] &lt; elem">
+                    <then>
+                        <assign variable="conta" expression="conta + 1"/>
+                    </then>
+                    <else/>
+                </if>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="ricercaTotaleGreater" type="Integer" variable="conta">
+        <parameters>
+            <parameter name="V" type="Integer" array="True"/>
+            <parameter name="N" type="Integer" array="False"/>
+            <parameter name="elem" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Ricerca totale: conta gli elementi maggiori di elem"/>
+            <declare name="i, conta" type="Integer" array="False" size=""/>
+            <assign variable="conta" expression="0"/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; N">
+                <if expression="V[i] &gt; elem">
+                    <then>
+                        <assign variable="conta" expression="conta + 1"/>
+                    </then>
+                    <else/>
+                </if>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="ricercaTotale" type="Integer" variable="conta">
+        <parameters>
+            <parameter name="V" type="Integer" array="True"/>
+            <parameter name="N" type="Integer" array="False"/>
+            <parameter name="elem" type="Integer" array="False"/>
+            <parameter name="tipo" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="tipo: 0 = uguale, -1 = minore, 1 = maggiore. Chiama la funzione specifica corrispondente; con un tipo non valido restituisce -1"/>
+            <declare name="conta" type="Integer" array="False" size=""/>
+            <if expression="tipo == 0">
+                <then>
+                    <assign variable="conta" expression="ricercaTotaleEqual(V, N, elem)"/>
+                </then>
+                <else>
+                    <if expression="tipo == -1">
+                        <then>
+                            <assign variable="conta" expression="ricercaTotaleLess(V, N, elem)"/>
+                        </then>
+                        <else>
+                            <if expression="tipo == 1">
+                                <then>
+                                    <assign variable="conta" expression="ricercaTotaleGreater(V, N, elem)"/>
+                                </then>
+                                <else>
+                                    <assign variable="conta" expression="-1"/>
+                                </else>
+                            </if>
+                        </else>
+                    </if>
+                </else>
+            </if>
+        </body>
+    </function>
+    <function name="ricercaParzialeEqual" type="Integer" variable="idx">
+        <parameters>
+            <parameter name="V" type="Integer" array="True"/>
+            <parameter name="N" type="Integer" array="False"/>
+            <parameter name="elem" type="Integer" array="False"/>
+            <parameter name="idxStart" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Ricerca parziale: indice del primo elemento uguale a elem a partire da idxStart, oppure -1 se non esiste. Il ciclo si ferma appena trovato diventa vero"/>
+            <declare name="i, idx" type="Integer" array="False" size=""/>
+            <declare name="trovato" type="Boolean" array="False" size=""/>
+            <assign variable="idx" expression="-1"/>
+            <assign variable="trovato" expression="false"/>
+            <assign variable="i" expression="idxStart"/>
+            <while expression="i &lt; N and not(trovato)">
+                <if expression="V[i] == elem">
+                    <then>
+                        <assign variable="trovato" expression="true"/>
+                        <assign variable="idx" expression="i"/>
+                    </then>
+                    <else/>
+                </if>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="ricercaParzialeLess" type="Integer" variable="idx">
+        <parameters>
+            <parameter name="V" type="Integer" array="True"/>
+            <parameter name="N" type="Integer" array="False"/>
+            <parameter name="elem" type="Integer" array="False"/>
+            <parameter name="idxStart" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Ricerca parziale: indice del primo elemento minore di elem a partire da idxStart, oppure -1 se non esiste. Il ciclo si ferma appena trovato diventa vero"/>
+            <declare name="i, idx" type="Integer" array="False" size=""/>
+            <declare name="trovato" type="Boolean" array="False" size=""/>
+            <assign variable="idx" expression="-1"/>
+            <assign variable="trovato" expression="false"/>
+            <assign variable="i" expression="idxStart"/>
+            <while expression="i &lt; N and not(trovato)">
+                <if expression="V[i] &lt; elem">
+                    <then>
+                        <assign variable="trovato" expression="true"/>
+                        <assign variable="idx" expression="i"/>
+                    </then>
+                    <else/>
+                </if>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="ricercaParzialeGreater" type="Integer" variable="idx">
+        <parameters>
+            <parameter name="V" type="Integer" array="True"/>
+            <parameter name="N" type="Integer" array="False"/>
+            <parameter name="elem" type="Integer" array="False"/>
+            <parameter name="idxStart" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Ricerca parziale: indice del primo elemento maggiore di elem a partire da idxStart, oppure -1 se non esiste. Il ciclo si ferma appena trovato diventa vero"/>
+            <declare name="i, idx" type="Integer" array="False" size=""/>
+            <declare name="trovato" type="Boolean" array="False" size=""/>
+            <assign variable="idx" expression="-1"/>
+            <assign variable="trovato" expression="false"/>
+            <assign variable="i" expression="idxStart"/>
+            <while expression="i &lt; N and not(trovato)">
+                <if expression="V[i] &gt; elem">
+                    <then>
+                        <assign variable="trovato" expression="true"/>
+                        <assign variable="idx" expression="i"/>
+                    </then>
+                    <else/>
+                </if>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="ricercaParziale" type="Integer" variable="idx">
+        <parameters>
+            <parameter name="V" type="Integer" array="True"/>
+            <parameter name="N" type="Integer" array="False"/>
+            <parameter name="elem" type="Integer" array="False"/>
+            <parameter name="idxStart" type="Integer" array="False"/>
+            <parameter name="tipo" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="tipo: 0 = uguale, -1 = minore, 1 = maggiore. Chiama la funzione specifica corrispondente; con un tipo non valido restituisce -1"/>
+            <declare name="idx" type="Integer" array="False" size=""/>
+            <if expression="tipo == 0">
+                <then>
+                    <assign variable="idx" expression="ricercaParzialeEqual(V, N, elem, idxStart)"/>
+                </then>
+                <else>
+                    <if expression="tipo == -1">
+                        <then>
+                            <assign variable="idx" expression="ricercaParzialeLess(V, N, elem, idxStart)"/>
+                        </then>
+                        <else>
+                            <if expression="tipo == 1">
+                                <then>
+                                    <assign variable="idx" expression="ricercaParzialeGreater(V, N, elem, idxStart)"/>
+                                </then>
+                                <else>
+                                    <assign variable="idx" expression="-1"/>
+                                </else>
+                            </if>
+                        </else>
+                    </if>
+                </else>
+            </if>
+        </body>
+    </function>
+</flowgorithm>
