@@ -7309,7 +7309,7 @@ const ArrayView = (() => {
   /* ------------------------------ State --------------------------------- */
   const st = {
     prog: null, fi: 0, sel: null, msel: null, clip: null, undo: [], redo: [], dirty: false,
-    zoom: store.get('zoom', 1), speed: store.get('speed', 2), lang: CodeGen.LANGS[store.get('lang', 'python')] ? store.get('lang', 'python') : 'python', tab: store.get('tab', 'console'),
+    zoom: store.get('zoom', 1), speed: store.get('speed', 2), lang: CodeGen.LANGS[store.get('lang', 'java')] ? store.get('lang', 'java') : 'java', tab: store.get('tab', 'console'),
     fileName: null, ins: [], expanded: new Set(), modCollapsed: new Set(store.get('modCollapsed', [])), varsOpen: new Set(), vfs: new Map(Object.entries(store.get('vfs', {}))),
     // Functions or Objects view; in the Objects view the sheet shows the class diagram (uml) or a method
     view: store.get('view', 'functions') === 'objects' ? 'objects' : 'functions', uml: true, usel: null,
@@ -11648,9 +11648,9 @@ const ArrayView = (() => {
     codeStart();
   }
   // starting a program (new, opened from a file or from a web address, an example): the Code tab in Java
+  /* a program that starts (new, opened, example): the Code tab, in the language last chosen (Java if none) */
   function codeStart() {
-    st.lang = 'java'; store.set('lang', 'java');
-    const ls = $('#langSel'); if (ls) ls.value = 'java';
+    const ls = $('#langSel'); if (ls) ls.value = st.lang;
     if ($('#tabs')) setTab('code');
   }
   function init() {

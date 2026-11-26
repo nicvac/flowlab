@@ -1,0 +1,23 @@
+// Code tab: when a program starts it shows the language last chosen (Java the first time), also after reloading the page
+import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
+const browser = await chromium.launch();
+const page = await browser.newPage({ locale: 'it-IT', viewport: { width: 1440, height: 900 } });
+const errs = []; page.on('pageerror', (e) => errs.push(e.message));
+await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
+await page.evaluate(() => localStorage.clear()); await page.reload(); await page.waitForTimeout(400);
+const wait = (ms = 150) => page.waitForTimeout(ms);
+const ok = (name, cond) => console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`);
+const state = () => page.evaluate(() => ({ tab: FlowLab.state.tab, lang: document.querySelector('#langSel').value }));
+await page.evaluate(() => FlowLab.loadExample('times_table')); await wait(250);
+let s = await state();
+ok('prima volta: ' + JSON.stringify(s), s.tab === 'code' && s.lang === 'java');
+await page.selectOption('#langSel', 'python'); await wait(150);
+await page.evaluate(() => { FlowLab.setTab('console'); FlowLab.loadExample('grade_average'); }); await wait(250);
+s = await state();
+ok('nuovo programma, ultimo scelto: ' + JSON.stringify(s), s.tab === 'code' && s.lang === 'python' && /def |print\(/.test(await page.innerText('#codeOut')));
+await page.reload(); await wait(400);
+await page.evaluate(() => FlowLab.loadExample('times_table')); await wait(250);
+s = await state();
+ok('dopo aver ricaricato la pagina: ' + JSON.stringify(s), s.lang === 'python');
+console.log('ERR', errs);
+await browser.close();
