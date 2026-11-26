@@ -202,7 +202,8 @@
   const orderGen = (old, used) => [...(old || []).filter((t) => used.some((u) => u.toLowerCase() === t.toLowerCase())), ...used.filter((u) => !(old || []).some((t) => t.toLowerCase() === u.toLowerCase()))];
   /* types that make a class generic: instance attributes, constructors, non-static methods (except skip) */
   function classTypes(c, skip) {
-    const out = [];
+    // also the type arguments given to the parent class (Pila<T> extends Lista<T>)
+    const out = skip === 'pargs' ? [] : [...(c.pargs || [])];
     for (const a of c.attributes) if (a !== skip && !a.static) out.push(a.type);
     for (const f of M.membersOf(st.prog, c)) if (f !== skip && (f.ctor || !f.static)) out.push(...f.params.map((p) => p.type), ...M.rets(f).map((r) => r.type));
     return out;
@@ -214,10 +215,31 @@
     const added = nu.filter((t) => !(c.tparams || []).includes(t)), gone = (c.tparams || []).filter((t) => !nu.includes(t));
     const what = [added.length ? L('ui.theGenericTypeWouldBeAdded', { list: added.join(', ') }) : '', gone.length ? L('ui.theGenericTypeWouldBeRemoved', { list: gone.join(', ') }) : ''].filter(Boolean).join(' e ') || L('ui.theOrderOfTheGenericTypes');
     if (nu.length && c === M.mainClass(st.prog)) return { err: L('ui.isTheMainClassItCannot', { name: c.name }) };
-    if (nu.length && c.parent) return { err: L('ui.inheritsFromInFlowlabAClass', { name: c.name, parent: c.parent }) };
-    if (nu.length && st.prog.classes.some((k) => (k.parent || '').toLowerCase() === c.name.toLowerCase())) return { err: L('ui.hasSubclassesInFlowlabAClass', { name: c.name }) };
     if (classUsed(c)) return { err: L('ui.isAlreadyUsedInTheProgram', { name: c.name, what, c: M.classTitle(c), text: nu.length ? `${c.name}<${nu.join(', ')}>` : c.name, name2: c.name }) };
-    return { nu };
+    const subs = subGenChange(c, c.tparams || [], nu);
+    if (subs.err) return subs;
+    return { nu, subs };
+  }
+  /* the subclasses follow the Generic Types of the parent class: those kept keep their argument, a new one is
+     passed on with the same name (Pila<T> extends Lista<T>), so the subclass gets it too. Returns [{ k, pargs, tparams }] */
+  function subGenChange(c, old, nu, out) {
+    out = out || [];
+    for (const k of st.prog.classes.filter((x) => (x.parent || '').toLowerCase() === c.name.toLowerCase())) {
+      const pargs = nu.map((t) => { const j = old.findIndex((o) => o.toLowerCase() === t.toLowerCase()); return j >= 0 && (k.pargs || [])[j] ? k.pargs[j] : t; });
+      const kt = orderGen(k.tparams, genNamesIn([...classTypes(k, 'pargs'), ...pargs], k.tparams));
+      const changed = kt.join(',') !== (k.tparams || []).join(',');
+      if (changed && k === M.mainClass(st.prog)) return { err: L('ui.isTheMainClassItCannot', { name: k.name }) };
+      if (changed && classUsed(k)) return { err: L('ui.theSubclassWouldChangeItsGeneric', { name: k.name, c: M.classTitle(k), text: kt.length ? `${k.name}<${kt.join(', ')}>` : k.name }) };
+      out.push({ k, pargs, tparams: kt });
+      if (changed) { const r = subGenChange(k, k.tparams || [], kt, out); if (r.err) return r; }
+    }
+    return out;
+  }
+  /* applies a change of the Generic Types of a class (and of its subclasses) */
+  function applyGen(c, ch) {
+    if (!ch || !ch.nu) return;
+    c.tparams = ch.nu;
+    for (const x of ch.subs || []) { x.k.pargs = x.pargs.length ? x.pargs : undefined; if (!x.pargs.length) delete x.k.pargs; x.k.tparams = x.tparams; }
   }
   /* Generic Types that can be used in a function: those of the class (non-static methods, constructors) or its own */
   function typeCtx(f) {
@@ -988,10 +1010,14 @@
       if (c && (c.tparams || []).length && g.args.length) { map = {}; c.tparams.forEach((p, k) => { map[p.toLowerCase()] = g.args[k]; }); }
     }
     if (!c) return null;
-    const T = (x) => E.typeName(map ? E.substType(x, map) : x);
+    // a member inherited from a generic parent class: first its types written with those of c (T of Lista<T> -> Integer for ListaInteri)
+    const cm = M.chainMap(st.prog, c);
+    let owner0 = c;
+    const T = (x) => E.typeName(map ? E.substType(M.substT(x, cm.get(owner0.id)), map) : M.substT(x, cm.get(owner0.id)));
     const canSee = (vis, owner) => (vis || 'public') === 'public' || (vis === 'private' ? here === owner : !!here && M.isSubclass(st.prog, here, owner));
     const items = [], seen = new Set();
     for (const k of M.chainOf(st.prog, c)) {
+      owner0 = k;
       for (const a of k.attributes) {
         if (!!a.static !== statics || !canSee(a.visibility, k) || seen.has('a:' + a.name.toLowerCase())) continue;
         seen.add('a:' + a.name.toLowerCase());
@@ -1000,7 +1026,7 @@
       if (lvalueOnly) continue;
       for (const m of M.membersOf(st.prog, k)) {
         if (m.ctor || m === st.prog.functions[0] || !!m.static !== statics || !canSee(m.visibility, k)) continue;
-        const sig = m.name.toLowerCase() + '(' + m.params.map((p) => p.type.toLowerCase()).join(',');
+        const sig = m.name.toLowerCase() + '(' + m.params.map((p) => M.substT(p.type, cm.get(k.id)).toLowerCase().replace(/\s+/g, '')).join(',');
         if (seen.has(sig)) continue; // overridden in a subclass
         seen.add(sig);
         const rl = M.rets(m);
@@ -1480,14 +1506,14 @@
         let tps = [], clsGen = null;
         if (inst) {
           const ch = classGenChange(cls, f, [...params.map((p) => p.type), ...rets.map((r) => r.type)]);
-          if (ch.err) return ch.err; clsGen = ch.nu;
+          if (ch.err) return ch.err; clsGen = ch;
         } else {
           tps = orderGen(f.tparams, dialogGens(false));
           const missing = dialogGens(true).filter((t) => !tps.includes(t) && !(cls && M.isTypeParam(cls, t)));
           if (missing.length) return L('ui.theGenericTypeOfAReturn', { list: missing.join(', ') });
           if (cls && dialogGens(true).some((t) => M.isTypeParam(cls, t))) return L('ui.cannotUseTheGenericTypesOf', { text: oo && !ctor ? L('ui.aStaticMethod') : L('ui.thisFunction'), cls: M.classTitle(cls) });
           // the method becomes static: the class may lose some Generic Types
-          if (oo && cls) { const ch = classGenChange(cls, f, []); if (ch.err) return ch.err; clsGen = ch.nu; }
+          if (oo && cls) { const ch = classGenChange(cls, f, []); if (ch.err) return ch.err; clsGen = ch; }
         }
         const seen = new Set();
         for (const p of params) {
@@ -1499,7 +1525,7 @@
           const target = isNew ? M.makeFunction(name, { params }) : f;
           Object.assign(target, { name, params });
           if (tps.length) target.tparams = tps; else delete target.tparams;
-          if (clsGen) cls.tparams = clsGen;
+          if (clsGen) applyGen(cls, clsGen);
           if (oo) Object.assign(target, { cls: cls.id, visibility: visW ? visW._get() : 'public', static: isStatic || target === st.prog.functions[0], ctor, abstract: isAbs });
           // a returned attribute is written as it is declared (the languages are case-sensitive)
           for (const r of rets) { const a = attrOf(r.name); if (a) { r.name = a.attr.name; r.type = a.attr.type; } }
@@ -1543,7 +1569,7 @@
     if (ch.err) { infoBox(L('ui.methodWithGenericType'), ch.err); return; }
     confirmBox(f.ctor ? L('ui.deleteTheConstructor') : isOO() ? L('ui.deleteTheMethod') : L('ui.deleteTheFunction'), L('ui.andAllItsBlocksWillBe', { what }), L('ui.delete'), () => mutate(() => {
       st.prog.functions.splice(i, 1);
-      if (ch.nu) owner.tparams = ch.nu;
+      applyGen(owner, ch);
       if (st.fi === i) { st.fi = 0; if (isOO()) st.uml = true; } else if (st.fi > i) st.fi--;
       if (st.usel && st.usel.fid === f.id) st.usel = { cls: st.usel.cls, kind: 'class' };
     }));
@@ -1580,6 +1606,7 @@
     const T = (t) => { const g = E.splitType(t); return E.joinType(g.base.toLowerCase() === lo ? nu : g.base, g.args.map(T)); };
     for (const k of st.prog.classes) {
       if ((k.parent || '').toLowerCase() === lo) k.parent = nu;
+      if (k.pargs) k.pargs = k.pargs.map(T);
       for (const a of k.attributes) { a.type = T(a.type); a.init = renameInExpr(a.init || '', old, nu); a.size = renameInExpr(a.size || '', old, nu); }
     }
     for (const f of st.prog.functions) {
@@ -1608,10 +1635,27 @@
     const what = exc ? L('chart.exception') : L('ui.class');
     const nameW = field({ key: 'cname', label: exc ? L('ui.exceptionName') : L('ui.className'), type: 'ident', required: true, placeholder: exc ? L('ui.eGInvalidgrade') : L('ui.eGPoint'), hint: L('ui.byConventionItStartsWithAn') }, c ? c.name : '');
     const banned = c ? [c, ...descendants(c)] : [];
-    const mine = st.prog.classes.filter((k) => !banned.includes(k) && !(k.tparams || []).length && M.isExcClass(st.prog, k) === exc).map((k) => [k.name, k.name]);
+    // a parent class with Generic Types (not for the exceptions): its types are chosen next to it (Lista<T>, Lista<Integer>)
+    const mine = st.prog.classes.filter((k) => !banned.includes(k) && (exc ? !(k.tparams || []).length : true) && M.isExcClass(st.prog, k) === exc).map((k) => [k.name, exc ? k.name : M.classTitle(k)]);
     const parW = exc
       ? field({ key: 'cpar', label: L('ui.inheritsFromParentException'), type: 'select', options: [...M.EXC_CLASSES.map((k) => [k.name, L('ui.predefinedException2', { name: k.name })]), ...mine] }, c ? c.parent : parentName || 'Exception')
       : field({ key: 'cpar', label: L('ui.inheritsFromParentClass'), type: 'select', options: [['', L('ui.none')], ...mine] }, c ? (c.parent || '') : '');
+    // type arguments of the parent class: base types, classes and the Generic Types of this class (also a new one)
+    const pctx = { gens: c ? (c.tparams || []).slice() : [], allowNew: !(c && c === M.mainClass(st.prog)), taken: () => [...pctx.gens, ...pkids.map((k) => k.get())] };
+    let pkids = [];
+    const pargsEl = h('div', { class: 'tpargs pargs' });
+    const drawPargs = (vals) => {
+      pargsEl.innerHTML = ''; pkids = []; pctx._sels = new Set();
+      const par = !exc && M.classByName(st.prog, parW._get());
+      if (!par || !(par.tparams || []).length) { pargsEl.hidden = true; return; }
+      pargsEl.hidden = false;
+      par.tparams.forEach((t, i) => {
+        const k = typePicker((vals || [])[i] || 'Integer', pctx, null, L('ui.typeOfInTheParentClass', { t, name: par.name }));
+        pkids.push(k);
+        pargsEl.append(h('span', { class: 'tparg' }, h('span', { class: 'tpname' }, t + ':'), k.el));
+      });
+    };
+    if (!exc) { parW.append(pargsEl); drawPargs(c ? c.pargs : null); parW._input.addEventListener('change', () => drawPargs(null)); }
     const isMainCls = c && c === M.mainClass(st.prog);
     const absW = isMainCls ? null : field({ key: 'cabs', label: L('ui.abstractNoObjectsOfThisAre', { what }), type: 'check' }, c ? !!c.abstract : false);
     const help = exc ? L('ui.anExceptionReportsAnErrorIt')
@@ -1627,9 +1671,16 @@
         if (M.excClass(name)) return L('ui.isAPredefinedExceptionChooseAnother', { name, text: exc ? '' : L('ui.forYourOwnExceptionUseNew') });
         const parent = parW._get();
         const abs = !!(absW && absW._get());
-        // the Generic Types of the class come from the attributes and the methods
+        // the Generic Types of the class come from the attributes, the methods and the types given to the parent class
+        const pargs = parent && !exc ? pkids.map((k) => k.get()) : [];
         const tps = c ? c.tparams || [] : [];
-        if (tps.length && parent) return L('ui.hasGenericTypesInFlowlabA', { name: c.name, c: M.classTitle(c) });
+        const ntps = orderGen(tps, genNamesIn([...(c ? classTypes(c, 'pargs') : []), ...pargs], tps));
+        let subs = [];
+        if (ntps.join(',') !== tps.join(',')) {
+          if (c && c === M.mainClass(st.prog)) return L('ui.isTheMainClassItCannot', { name: c.name });
+          if (c && classUsed(c)) return L('ui.theSubclassWouldChangeItsGeneric', { name: c.name, c: M.classTitle(c), text: ntps.length ? `${c.name}<${ntps.join(', ')}>` : c.name });
+          if (c) { const r = subGenChange(c, tps, ntps); if (r.err) return r.err; subs = r; }
+        }
         if ((!c || c.name !== name) && /^[A-Z][0-9]*$/.test(name)) return L('ui.isANameReservedForGeneric', { name });
         if (c && !abs) { const am = M.membersOf(st.prog, c).filter((f) => f.abstract); if (am.length) return L('ui.hasAbstractMethodsToMakeIt', { name: c.name, list: am.map((f) => f.name + '()').join(', ') }); }
         // the attributes cannot have the same name as those of the new parent class
@@ -1639,10 +1690,14 @@
         }
         mutate(() => {
           if (isNew) {
-            const nc = M.makeClass(name, Object.assign({ parent, abstract: abs }, UmlLib.freeSpot(st.prog, pos)));
+            const nc = M.makeClass(name, Object.assign({ parent, abstract: abs, tparams: ntps }, pargs.length ? { pargs } : {}, UmlLib.freeSpot(st.prog, pos)));
             st.prog.classes.push(nc);
             st.usel = { cls: nc.id, kind: 'class' };
-          } else { renameClass(c, name); c.parent = parent; c.abstract = abs; }
+          } else {
+            renameClass(c, name); c.parent = parent; c.abstract = abs;
+            if (pargs.length) c.pargs = pargs; else delete c.pargs;
+            applyGen(c, { nu: ntps, subs });
+          }
         });
         return true;
       },
@@ -1677,7 +1732,7 @@
         const ch = classGenChange(c, a, statW._get() ? [] : [ty]);
         if (ch.err) return ch.err;
         mutate(() => {
-          if (ch.nu) c.tparams = ch.nu;
+          applyGen(c, ch);
           Object.assign(a, { name, type: ty, array: arr, size: arr ? sizeW._get().trim() : '', visibility: visW._get(), static: statW._get(), init: arr ? '' : initW._get().trim() });
           if (isNew) c.attributes.push(a);
           st.usel = { cls: c.id, kind: 'attr', i: c.attributes.indexOf(a) };
@@ -1703,7 +1758,7 @@
     const a = c.attributes[i]; if (!a || roGuard(c)) return;
     const ch = classGenChange(c, a, []);
     if (ch.err) { infoBox(L('ui.attributeWithGenericType'), ch.err); return; }
-    mutate(() => { c.attributes.splice(i, 1); if (ch.nu) c.tparams = ch.nu; st.usel = { cls: c.id, kind: 'class' }; });
+    mutate(() => { c.attributes.splice(i, 1); applyGen(c, ch); st.usel = { cls: c.id, kind: 'class' }; });
     toast(L('ui.attributeDeletedCtrlZToUndo', { name: a.name }));
   }
   const uselClass = () => st.usel && M.classById(st.prog, st.usel.cls);

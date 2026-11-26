@@ -153,7 +153,9 @@ const UmlLib = (() => {
     const rels = [];
     for (const c of [...prog.classes, ...[...boxes.values()].filter((b) => b.builtin).map((b) => b.c)]) {
       const par = ModelLib.classByName(prog, c.parent);
-      if (par && par !== c && boxes.has(par.id)) rels.push({ kind: 'inh', from: c, to: par });
+      // generic parent class: the types it receives, when they are not its own names (T→Integer, T→V)
+      const bind = par && (par.tparams || []).map((t, i) => [t, (c.pargs || [])[i]]).filter(([t, a]) => a && a.toLowerCase() !== t.toLowerCase()).map(([t, a]) => `${t}→${T(a)}`).join(', ');
+      if (par && par !== c && boxes.has(par.id)) rels.push({ kind: 'inh', from: c, to: par, bind });
       for (const a of c.attributes) {
         const t = ModelLib.classByName(prog, ExprLib.splitType(a.type).base);
         if (t && boxes.has(t.id)) rels.push({ kind: 'assoc', from: c, to: t, name: a.name, mult: a.array ? '*' : '0..1', st: a.static });
@@ -185,6 +187,7 @@ const UmlLib = (() => {
       const p1 = clip(A, bx + ox, by + oy, ox, oy), p2 = clip(B, ax + ox, ay + oy, ox, oy);
       if (r.kind === 'inh') {
         lines.push(`<path class="urel inh" d="M${p1[0]} ${p1[1]}L${p2[0]} ${p2[1]}" marker-end="url(#uml-inh)"/>`);
+        if (r.bind) labels.push(`<text class="ulab ubind" x="${(p1[0] + p2[0]) / 2 + 8}" y="${(p1[1] + p2[1]) / 2 + 4}">«bind» ${esc(r.bind)}</text>`);
       } else {
         lines.push(`<path class="urel assoc" d="M${p1[0]} ${p1[1]}L${p2[0]} ${p2[1]}" marker-end="url(#uml-open)"/>`);
         // label near the arrival class
@@ -225,7 +228,7 @@ const UmlLib = (() => {
       const warn = b.missing.length ? L('uml.doesNotDefineInAddOr', { name: c.name, list: b.missing.map((m) => m.f.name + '()').join(', '), text: b.missing.length === 1 ? L('uml.abstract') : L('uml.abstract2'), list2: [...new Set(b.missing.map((m) => m.owner.name))].join(', '), text2: b.missing.length === 1 ? L('chart.theMethod') : L('uml.theMethods') }) : '';
       let g = `<g class="ubox${isSel && sel.kind === 'class' ? ' sel' : ''}${isSel ? ' cur' : ''}${b.main ? ' main' : ''}${b.exc ? ' exc' : ''}${c.abstract ? ' abstract' : ''}${warn ? ' warn' : ''}${c.module ? ' mod' : ''}" data-cls="${c.id}">`;
       g += c.module ? `<title>${L('uml.fromTheModuleReadOnlyDouble', { c: esc(ModelLib.classTitle(c)), name: esc(c.module.name) })}</title>`
-        : `<title>${c.abstract ? L('uml.abstractClass') : ''}${esc(ModelLib.classTitle(c))}${c.parent ? L('uml.inheritsFrom') + esc(c.parent) : ''}${warn ? ' — ⚠ ' + esc(warn) : ''}${L('uml.doubleClickTheNameToEdit')}</title>`;
+        : `<title>${c.abstract ? L('uml.abstractClass') : ''}${esc(ModelLib.classTitle(c))}${c.parent ? L('uml.inheritsFrom') + esc(ModelLib.parentTitle(c)) : ''}${warn ? ' — ⚠ ' + esc(warn) : ''}${L('uml.doubleClickTheNameToEdit')}</title>`;
       g += `<rect class="ubg" x="${x}" y="${y}" width="${w}" height="${b.h}" rx="6"/>`;
       g += `<path class="uheadbg" d="M${x} ${y + b.head}V${y + 6}Q${x} ${y} ${x + 6} ${y}H${x + w - 6}Q${x + w} ${y} ${x + w} ${y + 6}V${y + b.head}Z"/>`;
       g += `<rect class="uhit head" data-part="head" x="${x}" y="${y}" width="${w}" height="${b.head}"/>`;

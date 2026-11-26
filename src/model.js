@@ -104,6 +104,26 @@ function makeClass(name, props) {
 const isTypeParam = (c, t) => !!c && (c.tparams || []).some((p) => p.toLowerCase() === String(t).toLowerCase());
 /* name of the class with the type parameters: ArrayList<T> */
 const classTitle = (c) => (c.tparams && c.tparams.length ? `${c.name}<${c.tparams.join(', ')}>` : c.name);
+/* parent class with its type arguments: Lista<T>, Lista<Integer> (c.pargs: types written with the Generic Types of c) */
+const parentTitle = (c) => (c.parent ? c.parent + ((c.pargs || []).length ? `<${c.pargs.join(', ')}>` : '') : '');
+/* type with the names of the map replaced (keys in lowercase): T -> Integer, ArrayList<T> -> ArrayList<Integer> */
+const substT = (t, map) => (map ? String(t).replace(/[A-Za-z_]\w*/g, (w) => (Object.prototype.hasOwnProperty.call(map, w.toLowerCase()) ? map[w.toLowerCase()] : w)) : String(t));
+/* inheritance with Generic Types: for c and each of its parent classes, the meaning of their Generic Types written with
+   those of c (Pila<T> extends Lista<T>: for Lista T -> T; ListaInteri extends Lista<Integer>: for Lista T -> Integer).
+   Map class id -> { lowercase name of the Generic Type -> type }; for c itself the map is empty */
+function chainMap(prog, c) {
+  const out = new Map(), seen = new Set();
+  let k = c, map = {};
+  while (k && !seen.has(k)) {
+    seen.add(k); out.set(k.id, map);
+    const par = classByName(prog, k.parent);
+    if (!par) break;
+    const next = {};
+    (par.tparams || []).forEach((p, i) => { next[p.toLowerCase()] = substT((k.pargs || [])[i] || p, map); });
+    k = par; map = next;
+  }
+  return out;
+}
 /* imported modules: { name, src, classes: [...], funcs: [...] } (a module with only functions has only funcs) */
 function modulesOf(prog) {
   const out = new Map();
@@ -122,7 +142,8 @@ const hasClasses = (prog) => Array.isArray(prog.classes) && prog.classes.length 
 function classById(prog, id) { return hasClasses(prog) ? prog.classes.find((c) => c.id === id) || null : null; }
 function classByName(prog, name) {
   if (!name) return null;
-  const l = String(name).toLowerCase();
+  // Lista<T> is the class Lista
+  const l = String(name).replace(/<.*$/s, '').trim().toLowerCase();
   // the predefined exceptions are classes always available
   return (hasClasses(prog) && prog.classes.find((c) => c.name.toLowerCase() === l)) || excClass(l);
 }
@@ -166,9 +187,11 @@ function isTrivialOO(prog) {
 /* as above and with the default name: it is saved in the standard format without losing anything */
 /* inherited abstract methods not defined yet: [{ f, owner }] (for a concrete class they must be zero) */
 function missingAbstract(prog, c) {
-  const sig = (f) => f.name.toLowerCase() + '(' + f.params.map((p) => p.type.toLowerCase() + (p.array ? '[' + (p.dims || 1) : '')).join(',') + ')';
+  // the types of the parent classes written with the Generic Types of c (add(x: T) of Lista<T> is add(x: Integer) for ListaInteri)
+  const cm = chainMap(prog, c);
+  const sig = (f, k) => f.name.toLowerCase() + '(' + f.params.map((p) => substT(p.type, cm.get(k.id)).toLowerCase().replace(/\s+/g, '') + (p.array ? '[' + (p.dims || 1) : '')).join(',') + ')';
   const best = new Map(); // signature -> most derived version
-  for (const k of chainOf(prog, c)) for (const f of membersOf(prog, k)) if (!f.ctor && !f.static && !best.has(sig(f))) best.set(sig(f), { f, owner: k });
+  for (const k of chainOf(prog, c)) for (const f of membersOf(prog, k)) if (!f.ctor && !f.static && !best.has(sig(f, k))) best.set(sig(f, k), { f, owner: k });
   return [...best.values()].filter((x) => x.f.abstract);
 }
 const isPlainOO = (prog) => isTrivialOO(prog) && (!hasClasses(prog) || prog.classes[0].name === defaultClassName(prog));
@@ -234,7 +257,7 @@ function parseFprg(text) {
     for (const c of clsEl.children) if (c.nodeName.toLowerCase() === 'class') {
       const tp = (c.getAttribute('tparams') || '').split(',').map((x) => x.trim()).filter((x) => /^[A-Za-z_]\w*$/.test(x));
       const mod = (c.getAttribute('module') || '').trim();
-      const cl = makeClass((c.getAttribute('name') || '').trim(), { parent: (c.getAttribute('parent') || '').trim(), abstract: boolAttr(c.getAttribute('abstract'), false), tparams: tp, module: mod ? { name: mod, src: c.getAttribute('module-src') || '' } : null, x: +c.getAttribute('x') || 40, y: +c.getAttribute('y') || 40 });
+      const cl = makeClass((c.getAttribute('name') || '').trim(), { parent: (c.getAttribute('parent') || '').trim(), _pargs: c.getAttribute('parent-args') || '', abstract: boolAttr(c.getAttribute('abstract'), false), tparams: tp, module: mod ? { name: mod, src: c.getAttribute('module-src') || '' } : null, x: +c.getAttribute('x') || 40, y: +c.getAttribute('y') || 40 });
       for (const t of tp) _typeParams.add(t.toLowerCase());
       if (!cl.name || _classNames.has(cl.name.toLowerCase())) continue;
       _classNames.set(cl.name.toLowerCase(), cl.name);
@@ -250,6 +273,10 @@ function parseFprg(text) {
       delete cl._attrEls;
       // the parent class can also be a predefined exception
       const par = _classNames.get(cl.parent.toLowerCase()) || (excClass(cl.parent) || {}).name; cl.parent = par && par.toLowerCase() !== cl.name.toLowerCase() ? par : '';
+      // type arguments of a generic parent class (Lista<T>): separated by ;
+      const pa = cl._pargs.split(';').map((x) => x.trim()).filter(Boolean);
+      if (cl.parent && pa.length) cl.pargs = pa.map((t) => normType(t));
+      delete cl._pargs;
     }
     if (!prog.classes.length) delete prog.classes;
   }
@@ -479,7 +506,8 @@ function serializeFprg(prog) {
     for (const c of prog.classes) {
       const gen = (c.tparams || []).length ? ` tparams="${xmlEsc(c.tparams.join(','))}"` : '';
       const mod = c.module ? ` module="${xmlEsc(c.module.name)}" module-src="${xmlEsc(c.module.src || '')}"` : '';
-      const head = `        <class name="${xmlEsc(c.name)}" parent="${xmlEsc(c.parent || '')}"${c.abstract ? ' abstract="True"' : ''}${gen}${mod} x="${Math.round(c.x || 0)}" y="${Math.round(c.y || 0)}"`;
+      const pa = c.parent && (c.pargs || []).length ? ` parent-args="${xmlEsc(c.pargs.join(';'))}"` : '';
+      const head = `        <class name="${xmlEsc(c.name)}" parent="${xmlEsc(c.parent || '')}"${pa}${c.abstract ? ' abstract="True"' : ''}${gen}${mod} x="${Math.round(c.x || 0)}" y="${Math.round(c.y || 0)}"`;
       if (!c.attributes.length) { L.push(head + '/>'); continue; }
       L.push(head + '>');
       for (const a of c.attributes) L.push(`            <attribute name="${xmlEsc(a.name)}" type="${xmlEsc(a.type)}" array="${TF(a.array)}" size="${xmlEsc(a.array ? fgExpr(a.size) : '')}" visibility="${a.visibility}" static="${TF(a.static)}" init="${xmlEsc(fgExpr(a.init || ''))}"/>`);
@@ -627,5 +655,5 @@ function isIncomplete(s) {
   }
 }
 
-const ModelLib = { isGlobalFunc, globalFuncs, FPRG_ROOT, KINDS, EXCEPTIONS, EXC_CLASSES, excClass, isExcClass, childArrays, makeCatch, VISIBILITY, VIS_IT, makeClass, isTypeParam, classTitle, modulesOf, isModuleFunc, moduleOfFunc, makeAttribute, hasClasses, classById, classByName, classOf, mainClass, membersOf, chainOf, isSubclass, defaultClassName, wrapInClass, isTrivialOO, isPlainOO, missingAbstract, unwrapClasses, typeList, extendedFeatures, rets, setRets, fgExpr, newId, makeStmt, makeFunction, newProgram, cloneStmt, reId, walk, findStmt, parseFprg, serializeFprg, isIncomplete, normType };
+const ModelLib = { parentTitle, substT, chainMap, isGlobalFunc, globalFuncs, FPRG_ROOT, KINDS, EXCEPTIONS, EXC_CLASSES, excClass, isExcClass, childArrays, makeCatch, VISIBILITY, VIS_IT, makeClass, isTypeParam, classTitle, modulesOf, isModuleFunc, moduleOfFunc, makeAttribute, hasClasses, classById, classByName, classOf, mainClass, membersOf, chainOf, isSubclass, defaultClassName, wrapInClass, isTrivialOO, isPlainOO, missingAbstract, unwrapClasses, typeList, extendedFeatures, rets, setRets, fgExpr, newId, makeStmt, makeFunction, newProgram, cloneStmt, reId, walk, findStmt, parseFprg, serializeFprg, isIncomplete, normType };
 if (typeof module !== 'undefined') module.exports = ModelLib;

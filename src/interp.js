@@ -62,9 +62,33 @@ class Interpreter {
   /* ---- generics: an object of a generic class has its type arguments (obj.targs) ---- */
   /* type with the parameters replaced by those of the object: "T" -> "Integer" for an ArrayList<Integer> */
   resolve(type, obj) {
-    if (!obj || !obj.targs || !(obj.cls.tparams || []).length) return type;
-    if (!obj._tmap) { obj._tmap = {}; obj.cls.tparams.forEach((p, i) => { obj._tmap[p.toLowerCase()] = obj.targs[i]; }); }
-    return _E.substType(type, obj._tmap);
+    const m = this.tmapOf(obj);
+    return m ? _E.substType(type, m) : type;
+  }
+  /* meaning of the Generic Types in a context: an object (its type arguments), a generic call, or an object seen as one of
+     its parent classes (viewAs): the types written in a method of Lista<T> run on an object Pila<Integer> */
+  tmapOf(ctx) {
+    if (!ctx) return null;
+    if (ctx.view) {
+      const P = ctx.as, cm = _M.chainMap(this.prog, ctx.view.cls).get(P.id) || {}, base = this.tmapOf(ctx.view), out = {};
+      for (const p of P.tparams || []) { const t = cm[p.toLowerCase()] !== undefined ? cm[p.toLowerCase()] : p; out[p.toLowerCase()] = base ? _E.substType(t, base) : t; }
+      return out;
+    }
+    if (!ctx.targs || !ctx.cls || !(ctx.cls.tparams || []).length) return null;
+    if (!ctx._tmap) { ctx._tmap = {}; ctx.cls.tparams.forEach((p, i) => { ctx._tmap[p.toLowerCase()] = ctx.targs[i]; }); }
+    return ctx._tmap;
+  }
+  /* the object seen from the class P it inherits from (for the Generic Types of P) */
+  viewAs(obj, P) {
+    if (!obj || !P || !obj.cls || obj.view || obj.cls === P || !(P.tparams || []).length || !this.isA(obj.cls, P)) return obj;
+    return { view: obj, as: P, cls: P };
+  }
+  /* type arguments of the object as class P (null if not known yet) */
+  targsAs(obj, P) {
+    if (obj.cls === P) return obj.targs || null;
+    const m = this.tmapOf(this.viewAs(obj, P)); if (!m) return null;
+    const out = (P.tparams || []).map((p) => m[p.toLowerCase()]);
+    return out.some((t) => this.unresolved(t)) ? null : out;
   }
   /* type parameter not known yet (object created without giving the type) */
   unresolved(t) { return !!this.tparamNames && this.tparamNames.has(_E.splitType(t).base.toLowerCase()); }
@@ -77,6 +101,20 @@ class Interpreter {
     if (!g.args.length) return _E.coerce(val, t, what, isA);
     const v = _E.coerce(val, g.base, what, isA);
     const o = v.v;
+    const B = o && this.byName.get(g.base.toLowerCase());
+    if (o && B && o.cls !== B && (B.tparams || []).length) {
+      // object of a subclass in a variable of the generic parent class: Lista<Integer> l <- new Pila<Integer>()
+      const cm = _M.chainMap(this.prog, o.cls).get(B.id) || {};
+      if (!o.targs && (o.cls.tparams || []).length && !g.args.some((a) => this.unresolved(a))) {
+        // new Pila<>(): the Generic Types of Pila are derived from those of the parent class, where it passes them on
+        const ta = o.cls.tparams.map(() => null);
+        B.tparams.forEach((p, i) => { const k = o.cls.tparams.findIndex((x) => x.toLowerCase() === String(cm[p.toLowerCase()] || '').toLowerCase()); if (k >= 0) ta[k] = g.args[i]; });
+        if (ta.every((x) => x)) { o.targs = ta; delete o._tmap; }
+      }
+      const have = this.targsAs(o, B);
+      if (have && g.args.some((a, i) => !this.unresolved(a) && !_E.sameType(a, have[i]))) throw new _E.FlowError(L('run.incompatibleTypesIsAButIs', { value: what || L('expr.theValue'), joinType: _E.typeName(_E.joinType(B.name, have)), t: _E.typeName(t) }));
+      return v;
+    }
     if (o && (o.cls.tparams || []).length) {
       if (!o.targs) { if (!g.args.some((a) => this.unresolved(a))) { o.targs = g.args.slice(); delete o._tmap; } } // new C<>(): the type is derived from the variable
       else if (g.args.some((a, i) => !this.unresolved(a) && !_E.sameType(a, o.targs[i]))) throw new _E.FlowError(L('run.incompatibleTypesIsAButIs', { value: what || L('expr.theValue'), joinType: _E.typeName(_E.joinType(o.cls.name, o.targs)), t: _E.typeName(t) }));
@@ -92,11 +130,13 @@ class Interpreter {
   }
   /* methods with that name, from the most derived: one version per signature (override) */
   methodCands(c, low) {
-    const out = [], seen = new Set();
+    const out = [], seen = new Set(), cms = _M.chainMap(this.prog, c);
     for (const k of this.chain(c)) {
       for (const f of this.methods.get(k.id) || []) {
         if (f.name.toLowerCase() !== low) continue;
-        const sig = f.params.map((p) => p.type.toLowerCase() + (p.array ? '[' + (p.dims || 1) : '')).join(',');
+        // the types of a parent class written with those of c: add(x: T) of Lista<T> is overridden by add(x: Integer) of ListaInteri
+        const cm = cms.get(k.id);
+        const sig = f.params.map((p) => _M.substT(p.type, cm).toLowerCase().replace(/\s+/g, '') + (p.array ? '[' + (p.dims || 1) : '')).join(',');
         if (seen.has(sig)) continue;
         seen.add(sig); out.push(f);
       }
@@ -150,7 +190,7 @@ class Interpreter {
   }
   /* runs fn in a "service" call to initialize the attributes of a class */
   *withInit(c, obj, fn) {
-    const frame = { func: { id: 'init:' + c.id, name: c.name + L('run.attributes'), params: [], body: [] }, vars: new Map(), depth: this.stack.length, cls: c, self: obj, tctx: obj, executed: 0, init: true };
+    const frame = { func: { id: 'init:' + c.id, name: c.name + L('run.attributes'), params: [], body: [] }, vars: new Map(), depth: this.stack.length, cls: c, self: obj, tctx: this.viewAs(obj, c), executed: 0, init: true };
     this.stack.push(frame);
     try { return yield* fn(); } finally { this.stack.pop(); }
   }
@@ -158,8 +198,8 @@ class Interpreter {
   *attrCell(a, owner) {
     this.checkType(a.type, owner);
     const self = a.static ? null : this.frame.self;
-    const cell = { name: a.name, type: a.type, array: !!a.array, field: true, owner, visibility: a.visibility, static: !!a.static, ctx: self };
-    const dt = this.resolve(a.type, self);
+    const cell = { name: a.name, type: a.type, array: !!a.array, field: true, owner, visibility: a.visibility, static: !!a.static, ctx: this.viewAs(self, owner) };
+    const dt = this.resolve(a.type, cell.ctx);
     try {
       if (a.array) {
         const dims = [];
@@ -311,7 +351,7 @@ class Interpreter {
       let tot = 0;
       for (let i = 0; i < pre.length; i++) {
         const p = f.params[i], a = pre[i];
-        const pt = this.resolve(p.type, self);
+        const pt = this.resolve(p.type, this.viewAs(self, this.classById(f.cls)));
         if (p.array) {
           if (!a.cell || (a.cell.dims || [0]).length !== (p.dims || 1)) return -1;
           const at = this.cellType(a.cell);
@@ -341,7 +381,7 @@ class Interpreter {
     for (const f of cands) { const sc = score(f); if (sc > bs) { bs = sc; best = f; } }
     if (best) return best;
     const got = pre.map((a) => (a.cell ? L('run.arrayOf', { type: _E.typeName(a.cell.type) }) : a.val.t === 'Object' ? (a.val.v ? a.val.v.cls.name : 'null') : _E.typeName(a.val.t))).join(', ');
-    const vers = cands.map((f) => `${f.name}(${f.params.map((p) => _E.typeName(this.resolve(p.type, self)) + (p.array ? '[]' : '')).join(', ')})`).join(' · ');
+    const vers = cands.map((f) => `${f.name}(${f.params.map((p) => _E.typeName(this.resolve(p.type, this.viewAs(self, this.classById(f.cls)))) + (p.array ? '[]' : '')).join(', ')})`).join(' · ');
     throw new _E.FlowError(L('run.noVersionOfAcceptsTheseArguments', { name, value: got || L('run.none'), vers }), { node });
   }
   bindArgs(func, pre, node, self) {
@@ -402,7 +442,7 @@ class Interpreter {
       }
     }
     // generic function: T is derived from the arguments
-    const tctx = (f.tparams || []).length ? this.inferTargs(f, pre, node, self) : self;
+    const tctx = (f.tparams || []).length ? this.inferTargs(f, pre, node, self) : this.viewAs(self, this.classById(f.cls));
     return yield* this.invoke(f, this.bindArgs(f, pre, node, tctx), node, { self, tctx });
   }
   /* type of a value, to deduce T: Integer, Real, Person, ArrayList<Integer>… (null if unknown) */
@@ -438,7 +478,8 @@ class Interpreter {
     });
     const names = [], args = [];
     // a generic method of a generic object also sees the T of the class
-    if (self && self.targs && (self.cls.tparams || []).length) { names.push(...self.cls.tparams); args.push(...self.targs); }
+    const sv = self && this.tmapOf(this.viewAs(self, this.classById(f.cls)));
+    if (sv) for (const p of this.classById(f.cls).tparams || []) { names.push(p); args.push(sv[p.toLowerCase()]); }
     tp.forEach((t, i) => { names.push(t); args.push(map[low[i]] !== undefined ? map[low[i]] : t); });
     return { cls: { tparams: names }, targs: args, generic: f };
   }

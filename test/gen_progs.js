@@ -78,7 +78,46 @@ function genoo() {
   );
   return p;
 }
-module.exports = { genfun, genoo };
+/* inheritance with Generic Types: Pila<T> extends Lista<T>, ListaInteri extends Lista<Integer>, Coppia<K, V> extends Lista<V> */
+function geninh() {
+  const p = oo([
+    decl('p', 'Pila<String>'), decl('l', 'ListaInteri'), decl('q', 'Lista<Integer>'), decl('c', 'Coppia<String, Real>'), decl('x', 'String'),
+    set('p', 'new Pila<String>()'), call('p.push("a")'), call('p.push("b")'), call('p.push("c")'),
+    set('x', 'p.pop()'), set('x', 'x & p.pop()'), out('x & " " & p.size() & " " & p.descrivi()'),
+    set('l', 'new ListaInteri()'), call('l.add(3)'), call('l.add(-1)'), call('l.add(4)'),
+    out('"somma " & l.somma() & " su " & l.size() & ", primo " & l.get(0)'),
+    set('q', 'new Pila<Integer>()'), call('q.add(7)'), call('q.add(8)'),
+    out('"q " & q.get(1) & " " & q.size()'),
+    // through the parent class: the version of ListaInteri (negative values are not added)
+    set('q', 'l'), call('q.add(-5)'), call('q.add(5)'), out('"q " & q.size() & " " & q.get(2)'),
+    set('c', 'new Coppia<String, Real>("k")'), call('c.add(1.5)'), call('c.add(2.25)'),
+    out('c.chiave & " " & c.get(0) & " " & c.ultimo() & " max " & c.massimo() & " " & l.massimo()'),
+  ], [
+    { name: 'Lista', attributes: [{ name: 'items', type: 'T', array: true, size: '10', visibility: 'protected' }, { name: 'n', type: 'Integer', visibility: 'protected', init: '0' }] },
+    { name: 'Pila', parent: 'Lista' },
+    { name: 'ListaInteri', parent: 'Lista' },
+    { name: 'Coppia', parent: 'Lista', attributes: [{ name: 'chiave', type: 'K', visibility: 'public' }] },
+  ], [
+    { cls: 'Lista', name: 'add', params: [['x', 'T']], body: [set('items[n]', 'x'), set('n', 'n + 1')] },
+    { cls: 'Lista', name: 'get', params: [['i', 'Integer']], rets: [['r', 'T']], body: [decl('r', 'T'), set('r', 'items[i]')] },
+    { cls: 'Lista', name: 'size', rets: [['k', 'Integer']], body: [decl('k', 'Integer'), set('k', 'n')] },
+    { cls: 'Lista', name: 'massimo', rets: [['m', 'T']], body: [decl('m', 'T'), decl('i', 'Integer'), set('m', 'items[0]'), forI('i', '1', 'n - 1', [iff('items[i] > m', [set('m', 'items[i]')])])] },
+    { cls: 'Lista', name: 'descrivi', rets: [['s', 'String']], body: [decl('s', 'String'), set('s', '"lista di " & n')] },
+    { cls: 'Pila', name: 'push', params: [['x', 'T']], body: [call('add(x)')] },
+    { cls: 'Pila', name: 'pop', rets: [['r', 'T']], body: [decl('r', 'T'), set('n', 'n - 1'), set('r', 'items[n]')] },
+    { cls: 'ListaInteri', name: 'add', params: [['x', 'Integer']], body: [iff('x >= 0', [call('super.add(x)')])] },
+    { cls: 'ListaInteri', name: 'somma', rets: [['t', 'Integer']], body: [decl('t', 'Integer'), decl('i', 'Integer'), set('t', '0'), forI('i', '0', 'n - 1', [set('t', 't + get(i)')])] },
+    { cls: 'Coppia', ctor: true, params: [['k', 'K']], body: [call('super()'), set('chiave', 'k')] },
+    { cls: 'Coppia', name: 'ultimo', rets: [['t', 'V']], body: [decl('t', 'V'), set('t', 'items[n - 1]')] },
+  ]);
+  const C = (n) => p.classes.find((c) => c.name === n);
+  C('Lista').tparams = ['T'];
+  C('Pila').tparams = ['T']; C('Pila').pargs = ['T'];
+  C('ListaInteri').pargs = ['Integer'];
+  C('Coppia').tparams = ['K', 'V']; C('Coppia').pargs = ['V'];
+  return p;
+}
+module.exports = { geninh, genfun, genoo };
 
 /* funzioni che restituiscono array (anche a più dimensioni, insieme ad altri valori, con un Tipo Generico) */
 function arrret() {

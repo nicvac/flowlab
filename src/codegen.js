@@ -262,7 +262,7 @@ function setupGen(prog, lang) {
     const fn = spec && spec[f.name.toLowerCase()];
     if (fn && fn[lang]) { nativeFns.set(f.name.toLowerCase(), fn); skipF.add(f.id); }
   }
-  GEN = { lang, native, skip, nativeFns, skipF, tparams: new Set(tps), helpers: new Set(), bound: new Set(), boxed: new Set(), cur: null, exc: excInfo(prog), jthrows: new Map() };
+  GEN = { prog, lang, native, skip, nativeFns, skipF, tparams: new Set(tps), helpers: new Set(), bound: new Set(), boxed: new Set(), cur: null, exc: excInfo(prog), jthrows: new Map() };
   if (tps.length) analyzeGenerics(prog, lang);
   if (lang === 'java' && GEN.exc.used) analyzeThrows(prog);
 }
@@ -301,7 +301,18 @@ function excClassLines(lang) {
   return out;
 }
 /* parent class in the language (a class of the program can inherit from a predefined exception) */
-const parentL = (lang, c) => (c.parent && _CM.excClass(c.parent) ? excL(lang, c.parent) : c.parent);
+const parentL = (lang, c) => {
+  if (c.parent && _CM.excClass(c.parent)) return excL(lang, c.parent);
+  // generic parent class: Lista<T>, Lista<Integer> (in Python and JavaScript the name is enough)
+  if (!c.parent || !(c.pargs || []).length) return c.parent;
+  const t = _CE.joinType(c.parent, c.pargs);
+  if (lang === 'java') return tJava(t);
+  if (lang === 'csharp') return tCs(t);
+  if (lang === 'cpp') return `${c.parent}<${c.pargs.map(tCpp).join(', ')}>`;
+  return c.parent;
+};
+/* C++: the members inherited from a parent class are reached with this-> (required when the parent class is a template) */
+const cppInh = (owner, sc) => GEN.lang === 'cpp' && !!sc.cls && !!owner && owner !== sc.cls && owner.fmodule !== true;
 /* what the program uses: Try/Throw, and which runtime errors are caught */
 function excInfo(prog) {
   const caught = new Set(); let used = false;
@@ -356,8 +367,10 @@ function analyzeThrows(prog) {
       for (const f of fl) {
         if (f.ctor || f.static) continue;
         const c = _CM.classOf(prog, f); if (!c) continue;
-        const root = _CM.chainOf(prog, c).filter((k) => !k.builtin).pop();
-        const key = root.id + ':' + f.name.toLowerCase() + '(' + OO.sig(f) + ')';
+        // the family: the first method of the hierarchy that the method overrides (also with Generic Types)
+        let b = f, up; const seen = new Set();
+        while ((up = OO.overBase(prog, b)) && !seen.has(up)) { seen.add(up); b = up; }
+        const key = b.id;
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key).push(f);
       }
@@ -447,6 +460,8 @@ function analyzeGenerics(prog, lang) {
     };
     for (const it of info) [...it.f.params.map((p) => p.type), ..._CM.rets(it.f).map((r) => r.type), ...it.decls.map((d) => d.type)].forEach((t) => typeUse(t, it.f, it.c));
     for (const c of cs) for (const a of c.attributes) typeUse(a.type, null, c);
+    // the parent class: Pila<T> extends Lista<T> with comparable T in Lista
+    for (const c of cs) if (c.parent && (c.pargs || []).length) typeUse(_CE.joinType(c.parent, c.pargs), null, c);
     for (const it of info) for (const n of it.nodes) {
       const g = calleeNode(n, it.sc, prog);
       if (!g || !(g.tparams || []).length) continue;
@@ -517,7 +532,8 @@ function buildScope(prog, func) {
   const cls = ooMode ? _CM.classOf(prog, func) : null;
   if (!ooMode) for (const f of prog.functions) funcs.set(f.name.toLowerCase(), { type: f.type, rets: _CM.rets(f), f, name: f.name });
   // methods with the name of a built-in function are called only with obj.name() or this.name()
-  else for (const k of _CM.chainOf(prog, cls)) for (const f of _CM.membersOf(prog, k)) if (!f.ctor && !funcs.has(f.name.toLowerCase()) && !_CE.BUILTINS[f.name.toLowerCase()]) funcs.set(f.name.toLowerCase(), { type: f.type, rets: _CM.rets(f), f, name: f.name, owner: k });
+  // (the types of the methods inherited from a generic parent class are written with the Generic Types of this class)
+  else { const cm = _CM.chainMap(prog, cls); for (const k of _CM.chainOf(prog, cls)) for (const f of _CM.membersOf(prog, k)) if (!f.ctor && !funcs.has(f.name.toLowerCase()) && !_CE.BUILTINS[f.name.toLowerCase()]) { const m = k === cls ? null : cm.get(k.id); funcs.set(f.name.toLowerCase(), { type: m ? _CM.substT(f.type, m) : f.type, rets: m ? _CM.rets(f).map((r) => ({ ...r, type: _CM.substT(r.type, m) })) : _CM.rets(f), f, name: f.name, owner: k }); } }
   // the functions of the modules with only functions: callable from every class (in the code they are static methods of a class of the module)
   if (ooMode) for (const f of prog.functions) {
     const k = f.cls ? _CM.classOf(prog, f) : null, low = f.name.toLowerCase();
@@ -534,7 +550,9 @@ function buildScope(prog, func) {
 function ooScope(prog, sc) {
   const classNamed = (n) => _CM.classByName(prog, _CE.splitType(n).base);
   // type of a member of a generic class: T replaced with the type of the object (ArrayList<Integer> -> Integer)
-  const subst = (type, objNode, c) => {
+  const subst = (type, objNode, c, owner) => {
+    // a member inherited from a generic parent class: its types written with those of c (T of Lista<T> -> V for Coppia<K, V>)
+    if (owner && owner !== c) type = _CM.substT(type, _CM.chainMap(prog, c).get(owner.id));
     if (!(c.tparams || []).length) return type;
     const g = _CE.splitType(_CE.inferType(objNode, sc)); if (!g.args.length) return type;
     const map = {}; c.tparams.forEach((p, i) => { map[p.toLowerCase()] = g.args[i]; });
@@ -549,14 +567,14 @@ function ooScope(prog, sc) {
     classNamed, fieldHit, methodHit, implicitField, classRef, objClass,
     oo(node) {
       switch (node.k) {
-        case 'var': { const h = implicitField(node.name); return h ? h.attr.type : 'Unknown'; }
+        case 'var': { const h = implicitField(node.name); return h ? (h.owner !== sc.cls ? _CM.substT(h.attr.type, _CM.chainMap(prog, sc.cls).get(h.owner.id)) : h.attr.type) : 'Unknown'; }
         case 'this': return sc.cls ? sc.cls.name : 'Unknown';
         case 'new': { const c = classNamed(node.cls); return c ? (node.targs && node.targs.length ? _CE.joinType(c.name, node.targs) : c.name) : node.cls; }
-        case 'member': { const c = objClass(node.obj); const h = c && fieldHit(c, node.name.toLowerCase()); return h ? subst(h.attr.type, node.obj, c) : 'Unknown'; }
+        case 'member': { const c = objClass(node.obj); const h = c && fieldHit(c, node.name.toLowerCase()); return h ? subst(h.attr.type, node.obj, c, h.owner) : 'Unknown'; }
         case 'mcall': {
           const c = objClass(node.obj); const h = c && methodHit(c, node.name.toLowerCase());
           if (!h) return 'Unknown';
-          const t = subst(h.f.type, node.obj, c);
+          const t = subst(h.f.type, node.obj, c, h.owner);
           return (h.f.tparams || []).length ? _CE.substType(t, _CE.genericMap(h.f, node.args, sc)) : t;
         }
       }
@@ -597,17 +615,21 @@ const OO = {
   methods: (prog, c) => _CM.membersOf(prog, c).filter((f) => !f.ctor && !(GEN.skipF && GEN.skipF.has(f.id))),
   ctors: (prog, c) => _CM.membersOf(prog, c).filter((f) => f.ctor),
   isMain: (prog, f) => f === prog.functions[0],
-  sig: (f) => f.params.map((p) => p.type.toLowerCase() + (p.array ? '[' + (p.dims || 1) : '')).join(','),
-  /* does the method override a method of a parent class? */
-  overrides(prog, f) {
-    const c = _CM.classOf(prog, f);
-    for (const k of _CM.chainOf(prog, c).slice(1)) if (OO.methods(prog, k).some((g) => !g.static && g.name.toLowerCase() === f.name.toLowerCase() && OO.sig(g) === OO.sig(f))) return true;
-    return false;
+  /* signature; m: the Generic Types of a parent class written with those of the subclass (add(T) of Lista<T> is add(Integer) for ListaInteri) */
+  sig: (f, m) => f.params.map((p) => _CM.substT(p.type, m).toLowerCase().replace(/\s+/g, '') + (p.array ? '[' + (p.dims || 1) : '')).join(','),
+  /* the method of a parent class that the method overrides (null if none) */
+  overBase(prog, f) {
+    const c = _CM.classOf(prog, f); if (!c) return null;
+    const cm = _CM.chainMap(prog, c);
+    for (const k of _CM.chainOf(prog, c).slice(1)) { const g = OO.methods(prog, k).find((x) => !x.static && x.name.toLowerCase() === f.name.toLowerCase() && OO.sig(x, cm.get(k.id)) === OO.sig(f)); if (g) return g; }
+    return null;
   },
+  /* does the method override a method of a parent class? */
+  overrides: (prog, f) => !!OO.overBase(prog, f),
   /* is the method overridden in a subclass? */
   overridden(prog, f) {
     const c = _CM.classOf(prog, f);
-    return prog.classes.some((k) => k !== c && _CM.isSubclass(prog, k, c) && OO.methods(prog, k).some((g) => !g.static && g.name.toLowerCase() === f.name.toLowerCase() && OO.sig(g) === OO.sig(f)));
+    return prog.classes.some((k) => k !== c && _CM.isSubclass(prog, k, c) && OO.methods(prog, k).some((g) => !g.static && g.name.toLowerCase() === f.name.toLowerCase() && OO.sig(g) === OO.sig(f, _CM.chainMap(prog, k).get(c.id))));
   },
   hasChildren: (prog, c) => prog.classes.some((k) => k !== c && (k.parent || '').toLowerCase() === c.name.toLowerCase()),
   /* super(...) as the first block of the constructor: { args, rest } */
@@ -947,7 +969,7 @@ LANGS.pseudo = {
       const V = (v) => _CM.VISIBILITY[v || 'public'];
       OO.ordered(prog, true).forEach((c, ci) => {
         if (ci) o.line('');
-        o.line(`${PS(c.abstract ? 'abstractClass' : 'class')} ${_CM.classTitle(c)}${c.module ? '   // ' + C('fromModule', { name: c.module.name }) : ''}${c.parent ? ' ' + PS('inherits', { parent: c.parent }) : ''}${c === main ? '   // ' + C('mainClass') : ''}`);
+        o.line(`${PS(c.abstract ? 'abstractClass' : 'class')} ${_CM.classTitle(c)}${c.module ? '   // ' + C('fromModule', { name: c.module.name }) : ''}${c.parent ? ' ' + PS('inherits', { parent: (c.pargs || []).length ? TP(_CE.joinType(c.parent, c.pargs)) : c.parent }) : ''}${c === main ? '   // ' + C('mainClass') : ''}`);
         o.in();
         if (c.attributes.length) {
           o.line(PS('attributes')); o.in();
@@ -1301,6 +1323,7 @@ function cFamily(cfg) {
           const a = n.args.map((x) => pr(x, sc));
           const uf = sc.funcs.get(n.name.toLowerCase());
           if (uf && cfg.garg && (uf.f.tparams || []).length) a.forEach((x, i) => { x.s = cfg.garg(n.args[i], x.s); });
+          if (uf && !uf.f.static && cppInh(uf.owner, sc)) return { s: `this->${fname(n.name, sc)}(${a.map((x) => x.s).join(', ')})`, p: P.atom };
           if (sc.funcs.has(n.name.toLowerCase())) return { s: `${cfg.qualifyCalls || (uf.owner && uf.owner.fmodule && uf.owner !== sc.cls) ? ucall(sc.funcs.get(n.name.toLowerCase()), sc, 'this') : ''}${fname(n.name, sc)}(${a.map((x) => x.s).join(', ')})`, p: P.atom };
           const low = n.name.toLowerCase();
           const r = cfg.builtin(low, a, n, sc, used);
@@ -1475,6 +1498,7 @@ function cppParts(t, arr, D) {
 }
 LANGS.cpp = cFamily({
   lang: 'cpp', targ: (t) => tCpp(t),
+  field: (h, sc) => (!h.attr.static && cppInh(h.owner, sc) ? `this->${h.attr.name}` : h.attr.name),
   excMsg: (o) => `string(${o}->what())`,
   divFn: (a, b, used) => { used.add('divide'); need('exc:DivisionByZero'); return `divide(${a}, ${b})`; },
   modFn: (a, b, used) => { used.add('remainderOf'); need('exc:DivisionByZero'); return `remainderOf(${a}, ${b})`; },
@@ -1708,9 +1732,15 @@ const jClassTitle = (c) => ((c.tparams || []).length ? c.name + jTP(c.tparams, (
 /* new T[n] cannot be written: (T[]) new Object[n] wants @SuppressWarnings */
 const jUnchecked = (f) => { let u = false; if ((f.tparams || []).length) _CM.walk(f.body, (s) => { if (s.kind === 'declare' && s.array && tpKey(s.type, f, null)) u = true; }); return u; };
 /* returned value: int[], Integer[] if it goes to a generic function, T[] */
-const jRet = (f, r, i) => (r.array ? arrJ(r.type, 'ret:' + f.id + ':' + i) + '[]'.repeat(r.dims || 1) : tJava(r.type));
+/* a method that overrides one of a generic parent class where the type is T: the type "boxed" (add(Integer x) for Lista<Integer>) */
+const jBoxOver = (f, t, baseT) => {
+  if (!GEN.prog || !_CM.hasClasses(GEN.prog) || !BOX_J[t]) return false;
+  const g = f.cls && OO.overBase(GEN.prog, f), k = g && _CM.classOf(GEN.prog, g);
+  return !!k && (k.tparams || []).some((x) => x.toLowerCase() === String(baseT(g) || '').toLowerCase());
+};
+const jRet = (f, r, i) => (jBoxOver(f, r.type, (g) => (_CM.rets(g)[i] || {}).type) ? BOX_J[r.type] + (r.array ? '[]'.repeat(r.dims || 1) : '') : r.array ? arrJ(r.type, 'ret:' + f.id + ':' + i) + '[]'.repeat(r.dims || 1) : tJava(r.type));
 const jRetT = (f) => { const rl = _CM.rets(f); return rl.length ? jRet(f, rl[0], 0) : 'void'; };
-const jParams = (f) => f.params.map((p) => `${p.array ? arrJ(p.type, f.id + ':' + p.name.toLowerCase()) : tJava(p.type)}${p.array ? '[]'.repeat(p.dims || 1) : ''} ${p.name}`).join(', ');
+const jParams = (f) => f.params.map((p, i) => `${jBoxOver(f, p.type, (g) => (g.params[i] || {}).type) ? BOX_J[p.type] : p.array ? arrJ(p.type, f.id + ':' + p.name.toLowerCase()) : tJava(p.type)}${p.array ? '[]'.repeat(p.dims || 1) : ''} ${p.name}`).join(', ');
 let J_PFX = ''; // from the other classes the Scanner and the files are in the main class
 const DEF_C = { Integer: '0', Real: '0.0', String: '""', Boolean: 'false' };
 LANGS.java = cFamily({

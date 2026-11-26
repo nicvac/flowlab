@@ -2,7 +2,7 @@
 const M = require('../src/model.js'), C = require('../src/codegen.js'), { Interpreter } = require('../src/interp.js');
 const P = require('./oo_progs.js');
 const fs = require('fs'), cp = require('child_process'), path = require('path');
-const progs = { punto: P.punto(), forme: P.forme(), lista: P.lista(), vettore: P.vettore(), getter: P.getter(), tostring: P.tostring(), moduli: P.moduli() };
+const progs = { geninh: require('./gen_progs.js').geninh(), punto: P.punto(), forme: P.forme(), lista: P.lista(), vettore: P.vettore(), getter: P.getter(), tostring: P.tostring(), moduli: P.moduli() };
 // funzioni generiche (programma a funzioni e a oggetti)
 const G = require('./gen_progs.js');
 Object.assign(progs, { gen_fun: G.genfun(), gen_oo: G.genoo(), arr_ret: G.arrret() });
