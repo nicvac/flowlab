@@ -8,6 +8,23 @@
         <attribute name="created" value="Zmxvd2xhYjtleGFtcGxlczsyMDI2LTExLTE3IDA4OjAwOjAwIFBNOzE="/>
         <attribute name="edited" value="Zmxvd2xhYjtleGFtcGxlczsyMDI2LTExLTE3IDA4OjAwOjAwIFBNOzE="/>
     </attributes>
+    <flowlab-stages active="0" collapsed="True">
+        <stage file="guess_number_ice.flstage">
+            <bind slot="segreto" variable="Main.secret"/>
+            <bind slot="tentativo" variable="Main.guess"/>
+            <bind slot="tentativi" variable="Main.attempts"/>
+        </stage>
+        <stage file="guess_number.flstage">
+            <bind slot="segreto" variable="Main.secret"/>
+            <bind slot="tentativo" variable="Main.guess"/>
+            <bind slot="tentativi" variable="Main.attempts"/>
+        </stage>
+        <stage file="guess_number_neon.flstage">
+            <bind slot="segreto" variable="Main.secret"/>
+            <bind slot="tentativo" variable="Main.guess"/>
+            <bind slot="tentativi" variable="Main.attempts"/>
+        </stage>
+    </flowlab-stages>
     <function name="Main" type="None" variable="">
         <parameters/>
         <body>

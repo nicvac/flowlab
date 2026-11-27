@@ -1,9 +1,16 @@
-// FlowLab Stage — «I bastoncini di Euclide»: a, b and r are three luminous beams on floating shelves. The remainder r is
-// what is left of a after laying b along it as many times as it fits; then b takes the place of a and r that of b, until
-// b is zero and the length of a is the greatest common divisor.
-export const bindings = {"a":"Main.a","b":"Main.b","r":"Main.r"};
+// FlowLab Stage — «Il tiro al bersaglio»: the numbers from 1 to 100 are a bridge of floating blocks; each attempt is a
+// shooting star thrown by the person on the left. The part of the bridge where the secret cannot be goes dark, and when
+// the star hits the secret the medallion at the top opens and shows it.
+export const bindings = {"segreto":"Main.segreto","tentativo":"Main.tentativo","tentativi":"Main.tentativi"};
 
 import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
+
+/* the texts in the language of FlowLab (stage.lang): Italian and English; any other language takes English */
+const TEXTS = {
+  it: { title: 'Il tiro al bersaglio', attempts: 'tentativi', higher: 'Più alto →', lower: '← Più basso', guessed: 'Indovinato!' },
+  en: { title: 'Darts on the number line', attempts: 'attempts', higher: 'Higher →', lower: '← Lower', guessed: 'Guessed!' },
+};
+let T = TEXTS.en;
 
 /* ---------- the look: flat vector illustration (periwinkle, indigo, lavender, night arches, sunset windows) ---------- */
 const FONT = 'Atkinson Hyperlegible, Avenir Next, Segoe UI, system-ui, sans-serif';
@@ -187,107 +194,112 @@ function stopWalk(gsap, fig, tl) {
   const p = fig && fig._parts; if (p) gsap.to([p.legF, p.legB, p.armF, p.armB], { rotation: 0, duration: 0.15 });
 }
 
-const X0 = 120, ROW = { a: 140, b: 228, r: 316 }, FILL = { a: 'url(#indigoG)', b: 'url(#warm)', r: 'url(#mintG)' }, SIDE = { a: '#2c14a8', b: '#d8453c', r: '#1b8c74' };
-const TOP = { a: '#9a8cff', b: '#ffcf96', r: '#a9f5e2' }, D = 12;
-let st, scale = 4, beams = {}, vals = { a: null, b: null, r: null }, marks, finale;
-const W = (v) => Math.max(0, Number(v) || 0) * scale;
+const X0 = 110, X1 = 740, LINE = 318, MIN = 1, MAX = 100, MX = 425, MY = 128;
+let st, lo = MIN, hi = MAX, secret = null, shadeL, shadeR, counter, orb, fog, orbits, marks, hint, thrower, thrown = 0;
+const xOf = (v) => X0 + ((Math.max(MIN, Math.min(MAX, v)) - MIN) * (X1 - X0)) / (MAX - MIN);
 
-/* a beam: an isometric bar whose length changes (b.len), with its number */
-function beam(k) {
-  const g = st.el('g'); gsap.set(g, { x: X0, y: ROW[k] });
-  const top = st.el('path', { fill: TOP[k] }, g), front = st.el('rect', { x: 0, y: -14, height: 28, rx: 3, fill: FILL[k] }, g), side = st.el('path', { fill: SIDE[k] }, g);
-  const lab = st.el('text', Object.assign({ x: 10, y: 1, 'dominant-baseline': 'central', fill: '#ffffff' }, font(15)), g);
-  const b = { g, len: 0, lab, draw() {
-    const w = b.len;
-    top.setAttribute('d', `M0 -14l${D} ${-D * 0.55}h${w}l${-D} ${D * 0.55}Z`); front.setAttribute('width', w); side.setAttribute('d', `M${w} -14l${D} ${-D * 0.55}v28l${-D} ${D * 0.55}Z`);
-    const inside = w >= 40; lab.setAttribute('x', inside ? 10 : w + D + 8); lab.setAttribute('fill', inside ? '#ffffff' : P.text);
-    for (const e of [top, front, side]) e.style.display = w > 0 ? '' : 'none';
-    g.style.display = w > 0 || lab.textContent ? '' : 'none';
-  } };
-  b.draw();
-  return b;
-}
 function draw() {
   st.clear(); uid = 0; defs(st);
-  room(st, { arches: [[700, 36, 74, 170, 'night'], [600, 40, 66, 120, 'sunset']], steps: [[24, 446, 4, 1]], lights: 6 });
-  for (const k of ['a', 'b', 'r']) {
-    const shelf = st.el('g', { filter: 'url(#soft)' }); block(st, shelf, X0 - 14, ROW[k] + 18, 560, 10, 16);
-    const m = medal(st, st.svg, 20, k, k === 'a' ? '#5a3bff' : k === 'b' ? '#ff7a52' : '#2bb594'); gsap.set(m, { x: 66, y: ROW[k] });
-    beams[k] = beam(k);
+  room(st, { arches: [[16, 50, 64, 150, 'sunset'], [722, 46, 62, 140, 'night']], lights: 5 });
+  // the bridge: ten blocks, with the notches and the numbers on the front
+  const bridge = st.el('g', { filter: 'url(#soft)' });
+  for (let i = 0; i < 10; i++) block(st, bridge, X0 - 8 + i * 64, LINE, 63, 22, 18);
+  for (let v = 0; v <= 100; v += 10) {
+    const x = xOf(Math.max(1, v));
+    st.el('rect', { x: x - 1, y: LINE + 3, width: 2, height: 7, fill: '#ffffff', opacity: 0.9 });
+    st.el('text', Object.assign({ x, y: LINE + 46, 'text-anchor': 'middle', fill: '#ffffff', text: String(Math.max(1, v)) }, font(12)));
   }
+  shadeL = st.el('rect', { x: X0 - 8, y: LINE - 18, width: 0, height: 40, fill: 'url(#night)', opacity: 0.75 });
+  shadeR = st.el('rect', { x: X1 + 8, y: LINE - 18, width: 0, height: 40, fill: 'url(#night)', opacity: 0.75 });
   marks = st.el('g');
-  finale = st.el('g', { opacity: 0 });
-  pill(st, st.svg, 24, 26, 'I bastoncini di Euclide', 15);
+  // the medallion of the secret: a closed portal with orbits around
+  const m = st.el('g', { transform: `translate(${MX} ${MY})` });
+  st.el('circle', { r: 92, fill: 'url(#glow)', opacity: 0.7 }, m);
+  orbits = st.el('g', {}, m);
+  st.el('ellipse', { rx: 104, ry: 30, fill: 'none', stroke: '#ffffff', 'stroke-width': 1.6, opacity: 0.85, transform: 'rotate(-18)' }, orbits);
+  st.el('ellipse', { rx: 96, ry: 26, fill: 'none', stroke: '#ffffff', 'stroke-width': 1.2, opacity: 0.7, transform: 'rotate(32)' }, orbits);
+  st.el('circle', { r: 62, fill: '#ffffff', filter: 'url(#soft)' }, m);
+  orb = medal(st, m, 50, '', '#ffcf73');
+  fog = st.el('g', {}, m);
+  st.el('circle', { r: 55, fill: 'url(#night)' }, fog);
+  for (let i = 0; i < 7; i++) { const s = star(st, fog, ((i * 29) % 70) - 35, ((i * 47) % 60) - 30, i % 2 ? 2.5 : 4.5); s.classList.add('twinkle'); }
+  st.el('text', Object.assign({ x: 0, y: 4, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: P.cream, text: '?' }, font(44)), fog);
+  hint = pill(st, st.svg, MX + 128, MY - 6, '…', 16); gsap.set(hint, { opacity: 0 });
+  // the person that throws the stars, on a block on the left
+  const base = st.el('g', { filter: 'url(#soft)' }); block(st, base, 22, 392, 64, 24, 16);
+  thrower = person(st, st.svg, 132, 0.3); gsap.set(thrower, { x: 50, y: 390 });
+  counter = pill(st, st.svg, 24, 26, `${T.title} · ${T.attempts}: 0`, 15);
+  lo = MIN; hi = MAX; thrown = 0;
+  gsap.to(orbits, { rotation: 360, transformOrigin: '50% 50%', duration: 30, repeat: -1, ease: 'none' });
   alive(gsap, st.svg);
 }
-function rescale() { scale = Math.min(14, 520 / Math.max(1, ...['a', 'b'].map((k) => Math.abs(Number(vals[k]) || 0)))); }
-function show(k, v) { vals[k] = v; beams[k].lab.textContent = v == null ? '' : String(v); }
-const grow = (k, v, t) => gsap.to(beams[k], { len: W(v), duration: t ?? 0.5, ease: 'power2.out', onUpdate: beams[k].draw });
-/* a ← b, b ← r: the beam flies from its shelf to the other one */
-async function move(from, to, v) {
-  const ghost = beams[from].g.cloneNode(true); st.svg.appendChild(ghost);
-  gsap.set(ghost, { x: X0, y: ROW[from] });
-  show(to, v); beams[to].len = 0; beams[to].draw();
-  await gsap.to(ghost, { keyframes: [{ y: ROW[from] - 26, duration: 0.2 }, { y: ROW[to], duration: 0.45, ease: 'power2.inOut' }] });
-  beams[to].len = W(v); beams[to].draw(); ghost.remove();
+function count(n) { setPill(counter, `${T.title} · ${T.attempts}: ${n ?? 0}`); }
+async function shade() {
+  await Promise.all([
+    gsap.to(shadeL, { attr: { width: lo > MIN ? xOf(lo) - X0 + 8 : 0 }, duration: 0.5 }),
+    gsap.to(shadeR, { attr: { x: hi < MAX ? xOf(hi) : X1 + 8, width: hi < MAX ? X1 + 8 - xOf(hi) : 0 }, duration: 0.5 }),
+  ]);
 }
-/* r ← a mod b: copies of b laid along a, what is left becomes r */
-async function remainder(v) {
-  st.clear(marks);
-  const a = Number(vals.a) || 0, b = Number(vals.b) || 0;
-  if (!(b > 0)) { show('r', v); await grow('r', v); return; }
-  const n = Math.floor(a / b);
-  for (let i = 0; i < Math.min(n, 30); i++) {
-    const p = st.el('rect', { x: X0 + W(b) * i + 1, y: ROW.a - 22, width: Math.max(1, W(b) - 2), height: 44, rx: 6, fill: '#ffb36b', 'fill-opacity': 0.35, stroke: '#ffffff', 'stroke-width': 2 }, marks);
-    gsap.set(p, { y: ROW.b - ROW.a });
-    await gsap.to(p, { y: 0, duration: Math.max(0.12, 0.35 - i * 0.02), ease: 'power1.out' });
+/* a shooting star from the hand of the person to the number on the bridge */
+async function shoot(v) {
+  const x = xOf(v), g = st.el('g'), rot = st.el('g', {}, g);
+  const tail = st.el('path', { d: 'M-60 0L0 -3L0 3Z', fill: 'url(#tail)' }, rot);
+  st.el('circle', { r: 12, fill: 'url(#glow)' }, rot);
+  star(st, rot, 0, 0, 8);
+  gsap.set(g, { x: 70, y: 300 });
+  gsap.to(thrower, { rotation: -8, transformOrigin: '50% 100%', duration: 0.15, yoyo: true, repeat: 1 });
+  const path = { t: 0 };
+  const sx = 70, sy = 300, cx = (sx + x) / 2, cy = 120, ex = x, ey = LINE - 22;
+  await gsap.to(path, { t: 1, duration: 0.85, ease: 'power1.inOut', onUpdate: () => {
+    const t = path.t, px = (1 - t) * (1 - t) * sx + 2 * (1 - t) * t * cx + t * t * ex, py = (1 - t) * (1 - t) * sy + 2 * (1 - t) * t * cy + t * t * ey;
+    const dx = 2 * (1 - t) * (cx - sx) + 2 * t * (ex - cx), dy = 2 * (1 - t) * (cy - sy) + 2 * t * (ey - cy);
+    gsap.set(g, { x: px, y: py }); rot.setAttribute('transform', `rotate(${(Math.atan2(dy, dx) * 180) / Math.PI})`);
+  } });
+  tail.remove();
+  rot.setAttribute('transform', 'scale(0.7)'); marks.append(g);
+  const label = pill(st, marks, x, LINE - 48 - (thrown++ % 3) * 26, String(v), 13, 'middle');
+  gsap.from(label, { opacity: 0, duration: 0.3 });
+  if (secret == null) return;
+  if (v === secret) { await reveal(x); return; }
+  if (v < secret) { lo = Math.max(lo, v + 1); setPill(hint, T.higher); } else { hi = Math.min(hi, v - 1); setPill(hint, T.lower); }
+  gsap.fromTo(hint, { opacity: 0 }, { opacity: 1, duration: 0.3 });
+  await shade();
+}
+async function reveal(x) {
+  orb._t.textContent = String(secret);
+  setPill(hint, T.guessed); gsap.to(hint, { opacity: 1, duration: 0.3 });
+  const beam = st.el('line', { x1: x, y1: LINE - 22, x2: MX, y2: MY + 50, stroke: P.cream, 'stroke-width': 4, filter: 'url(#bloom)', opacity: 0 });
+  await gsap.to(beam, { opacity: 1, duration: 0.25 });
+  await gsap.to(fog, { scale: 0, opacity: 0, transformOrigin: '50% 50%', duration: 0.6, ease: 'back.in(1.6)' });
+  gsap.to(beam, { opacity: 0, duration: 0.4, onComplete: () => beam.remove() });
+  for (let i = 0; i < 22; i++) {
+    const s = star(st, st.svg, 0, 0, 4 + (i % 3) * 2, i % 2 ? P.cream : '#ffb36b');
+    gsap.set(s, { x: MX, y: MY });
+    gsap.to(s, { x: MX + Math.cos(i) * (120 + (i % 5) * 30), y: MY + Math.sin(i) * (80 + (i % 4) * 25), opacity: 0, rotation: 180, duration: 1.3, ease: 'power2.out', onComplete: () => s.remove() });
   }
-  const rest = st.el('rect', { x: X0 + W(b) * n, y: ROW.a - 24, width: Math.max(2, W(v)), height: 48, rx: 6, fill: 'none', stroke: P.mint, 'stroke-width': 3, filter: 'url(#bloom)' }, marks);
-  gsap.from(rest, { opacity: 0, duration: 0.3 });
-  await st.wait(0.3);
-  show('r', v); beams.r.len = W(v); beams.r.draw();
-  gsap.set(beams.r.g, { x: X0 + W(b) * n, y: ROW.a });
-  await gsap.to(beams.r.g, { x: X0, y: ROW.r, duration: 0.6, ease: 'power2.inOut' });
-  await gsap.to(marks, { opacity: 0, duration: 0.3 }); st.clear(marks); gsap.set(marks, { opacity: 1 });
-}
-async function celebrate() {
-  st.clear(finale);
-  const o = st.el('g', {}, finale); gsap.set(o, { x: 712, y: 330 });
-  const m = medal(st, finale, 48, String(vals.a), '#5a3bff'); gsap.set(m, { x: 712, y: 330 });
-  st.el('ellipse', { rx: 76, ry: 22, fill: 'none', stroke: '#ffffff', 'stroke-width': 1.5, transform: 'rotate(-20)' }, o);
-  st.el('ellipse', { rx: 70, ry: 18, fill: 'none', stroke: '#ffffff', 'stroke-width': 1.2, transform: 'rotate(28)' }, o);
-  pill(st, finale, 712, 408, `MCD = ${vals.a}`, 18, 'middle');
-  gsap.to(o, { rotation: 360, transformOrigin: '50% 50%', duration: 16, repeat: -1, ease: 'none' });
-  await gsap.fromTo(finale, { opacity: 0, scale: 0.6, svgOrigin: '712 340' }, { opacity: 1, scale: 1, duration: 0.6, ease: 'back.out(1.8)' });
-  await gsap.to(beams.a.g, { opacity: 0.4, duration: 0.25, yoyo: true, repeat: 3 });
+  await gsap.fromTo(orb, { scale: 0.6, transformOrigin: '50% 50%' }, { scale: 1.15, duration: 0.5, ease: 'back.out(2)', yoyo: true, repeat: 1 });
 }
 
 export default {
-  name: 'I bastoncini di Euclide',
-  description: 'a, b e r sono tre travi luminose. Il resto r è quello che avanza di a dopo averci appoggiato b quante più volte possibile; poi b prende il posto di a e r quello di b, finché b non è zero: allora a è il massimo comun divisore.',
+  name: { it: 'Il tiro al bersaglio', en: 'Darts on the number line' },
+  description: {
+    it: 'I numeri da 1 a 100 sono un ponte di blocchi; ogni tentativo è una stella cadente lanciata sul ponte. La parte dove il segreto non può più essere si oscura, e quando la stella colpisce il segreto il medaglione in alto si apre.',
+    en: 'The numbers from 1 to 100 are a bridge of blocks; each attempt is a shooting star thrown on the bridge. The part where the secret cannot be any more goes dark, and when the star hits the secret the medallion at the top opens.',
+  },
   slots: {
-    a: { type: 'Integer', label: 'Il primo numero (a)' },
-    b: { type: 'Integer', label: 'Il secondo numero (b)' },
-    r: { type: 'Integer', label: 'Il resto (r)' },
+    segreto: { type: 'Integer', label: { it: 'Il numero segreto', en: 'The secret number' } },
+    tentativo: { type: 'Integer', label: { it: 'Il tentativo', en: 'The attempt' } },
+    tentativi: { type: 'Integer', label: { it: 'Quanti tentativi', en: 'How many attempts' }, optional: true },
   },
-  setup(stage) { st = stage; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
-  reset(stage, values) {
-    gsap.globalTimeline.clear(); draw();
-    vals = { a: values.a, b: values.b, r: values.r }; rescale();
-    for (const k of ['a', 'b', 'r']) { show(k, vals[k]); beams[k].len = W(vals[k]); beams[k].draw(); }
-  },
-  async update(stage, events) {
+  setup(stage) { st = stage; T = TEXTS[stage.lang] || TEXTS.en; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
+  reset(stage, values) { gsap.globalTimeline.clear(); draw(); secret = values.segreto ?? null; count(values.tentativi || 0); },
+  async update(stage, events, values) {
+    // with the counter bound, a star for each attempt (also when the same number is tried again); otherwise for each new value
+    const counted = stage.bound.includes('tentativi');
     for (const e of events) {
-      if (e.kind === 'vanish' || e.value == null) continue;
-      if (e.slot === 'r') { await remainder(e.value); continue; }
-      const from = e.slot === 'a' && e.value === vals.b ? 'b' : e.slot === 'b' && e.value === vals.r ? 'r' : null;
-      if (from) await move(from, e.slot, e.value);
-      else {
-        // a number from the keyboard: the scale follows the longest beam
-        show(e.slot, e.value); rescale();
-        await Promise.all(['a', 'b', 'r'].map((k) => grow(k, vals[k])));
-      }
-      if (e.slot === 'b' && e.value === 0) await celebrate();
+      if (e.slot === 'segreto' && e.value != null) secret = e.value;
+      if (e.slot === 'tentativi' && e.kind !== 'vanish') { count(e.value); if (e.value > (e.old || 0) && values.tentativo != null) await shoot(values.tentativo); }
+      if (e.slot === 'tentativo' && !counted && (e.kind === 'value' || e.kind === 'appear') && e.value != null) await shoot(e.value);
     }
   },
 };

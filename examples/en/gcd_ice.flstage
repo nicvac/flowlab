@@ -5,6 +5,13 @@ export const bindings = {"a":"Main.a","b":"Main.b","r":"Main.r"};
 
 import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
 
+/* the texts in the language of FlowLab (stage.lang): Italian and English; any other language takes English */
+const TEXTS = {
+  it: { title: 'I BLOCCHI DI EUCLIDE', gcd: 'MCD' },
+  en: { title: "EUCLID'S ICE BLOCKS", gcd: 'GCD' },
+};
+let T = TEXTS.en;
+
 let st;
 /* ---------------------------- the ice field in pixel art (the same for every stage) ---------------------------- */
 const PX = 3;                                   // one pixel of the sprites, in points of the stage
@@ -235,7 +242,7 @@ function bar(k) {
   return b;
 }
 function draw() {
-  head = field('I BLOCCHI DI EUCLIDE', { igloos: [[24, 80], [736, 80]], cubes: [[724, 396], [752, 396]], diamonds: [[748, 118]] });
+  head = field(T.title, { igloos: [[24, 80], [736, 80]], cubes: [[724, 396], [752, 396]], diamonds: [[748, 118]] });
   for (const k of ['a', 'b', 'r']) {
     plaque(st.svg, 100, ROW[k] + H / 2, k, 12, 'middle', { fill: TAG[k], text: '#ffffff' });
     birds[k] = penguin(st.svg, 54, ROW[k] + H + 6, 1);
@@ -287,7 +294,7 @@ async function remainder(v) {
 }
 async function celebrate() {
   st.clear(finale);
-  const p = plaque(finale, 400, 404, `MCD = ${vals.a}`, 16, 'middle', { fill: C.y });
+  const p = plaque(finale, 400, 404, `${T.gcd} = ${vals.a}`, 16, 'middle', { fill: C.y });
   burst(finale, 400, 404, 30);
   for (const k of ['a', 'b', 'r']) hop(birds[k], 4, k === 'a' ? 0 : k === 'b' ? 0.1 : 0.2);
   await gsap.from(p, { y: 30, opacity: 0, duration: 0.5, ease: 'steps(6)' });
@@ -295,14 +302,17 @@ async function celebrate() {
 }
 
 export default {
-  name: 'I blocchi di Euclide',
-  description: 'Un campo di ghiaccio in pixel art: a, b e r sono tre barre di blocchi di ghiaccio, un blocco per unità, ognuna con il suo pinguino. Il resto r è quello che avanza di a dopo averci appoggiato b quante più volte possibile; poi b prende il posto di a e r quello di b, finché b non è zero: allora a è il massimo comun divisore.',
-  slots: {
-    a: { type: 'Integer', label: 'Il primo numero (a)' },
-    b: { type: 'Integer', label: 'Il secondo numero (b)' },
-    r: { type: 'Integer', label: 'Il resto (r)' },
+  name: { it: 'I blocchi di Euclide', en: "Euclid's ice blocks" },
+  description: {
+    it: 'Un campo di ghiaccio in pixel art: a, b e r sono tre barre di blocchi di ghiaccio, un blocco per unità, ognuna con il suo pinguino. Il resto r è quello che avanza di a dopo averci appoggiato b quante più volte possibile; poi b prende il posto di a e r quello di b, finché b non è zero: allora a è il massimo comun divisore.',
+    en: 'An ice field in pixel art: a, b and r are three bars of ice blocks, one block for each unit, each one with its penguin. The remainder r is what is left of a after laying b along it as many times as it fits; then b takes the place of a and r that of b, until b is zero: then a is the greatest common divisor.',
   },
-  setup(stage) { st = stage; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
+  slots: {
+    a: { type: 'Integer', label: { it: 'Il primo numero (a)', en: 'The first number (a)' } },
+    b: { type: 'Integer', label: { it: 'Il secondo numero (b)', en: 'The second number (b)' } },
+    r: { type: 'Integer', label: { it: 'Il resto (r)', en: 'The remainder (r)' } },
+  },
+  setup(stage) { st = stage; T = TEXTS[stage.lang] || TEXTS.en; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
   reset(stage, values) {
     gsap.globalTimeline.clear(); draw();
     vals = { a: values.a, b: values.b, r: values.r }; rescale();

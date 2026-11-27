@@ -81,7 +81,10 @@
   }
   function restore(json) {
     const s = JSON.parse(json);
+    // the stages linked are not part of the history of the edits: they stay as they are
+    const stages = st.prog.stages;
     st.prog = s.prog; st.fi = Math.min(s.fi, st.prog.functions.length - 1);
+    if (stages) st.prog.stages = stages; else delete st.prog.stages;
     st.sel = null;
     if (st.usel && !M.classById(st.prog, st.usel.cls)) st.usel = null;
     render();
@@ -632,7 +635,7 @@
   function showFunc(i) { if (i === st.fi && !st.uml) return; if (V.sync) setSync(V, false); st.fi = i; st.uml = false; st.sel = null; render(); V.wrap.scrollTo(0, 0); }
 
   function autosave() {
-    try { store.set('autosave', { xml: M.serializeFprg(st.prog), fi: withView(MAIN, () => st.fi), fileName: st.fileName, views: viewsData() }); } catch (e) { /* ignore */ }
+    try { store.set('autosave', { xml: M.serializeFprg(st.prog), fi: withView(MAIN, () => st.fi), fileName: st.fileName, views: viewsData(), sourceUrl: st.sourceUrl || null, stageBase: st.stageBase || null }); } catch (e) { /* ignore */ }
   }
 
   /* ------------------------ Mini icons of the shapes ------------------------ */
@@ -3417,10 +3420,12 @@
     resetViews();
     const before = keepUndo ? snapshot() : null;
     st.excPos = new Map(); st.fmodPos = new Map();
-    st.undo = before ? [before] : []; st.redo = []; st.prog = prog; st.fi = 0; st.sel = null; st.fileName = name || null; st.dirty = false; st.sourceUrl = null; st.fileHandle = null;
+    st.undo = before ? [before] : []; st.redo = []; st.prog = prog; st.fi = 0; st.sel = null; st.fileName = name || null; st.dirty = false; st.sourceUrl = null; st.fileHandle = null; st.stageBase = null;
     run.errId = null; run.mainFrame = null;
     startView();
     render(); renderVars();
+    // the stages named by the program (after openUrl has set the address the program comes from)
+    setTimeout(syncStages, 0);
     setTimeout(fitIfLarge, 0);
     if (prog.skipped && prog.skipped.length) toast(L('ui.openedSkippedUnsupportedBlocks', { value: name || L('ui.program'), skippedCount: prog.skipped.length, list: [...new Set(prog.skipped)].join(', ') }), 'warn');
     else toast(L('ui.opened', { value: name || L('ui.program'), text: before ? L('ui.ctrlZToGoBackTo') : '' }), 'ok');
@@ -3788,6 +3793,16 @@
     setTimeout(() => { const mb = body.closest('.modal-body'); if (mb) mb.scrollTop = 0; const b = body.querySelector('.modsrc > summary'); if (b) b.focus(); }, 20);
   }
 
+  /* several files at once (from Open or dragged): the .flstage files become known by name, then the program is opened
+     (its stages are found among them); stage files alone are linked to the program open */
+  async function readFiles(files) {
+    files = [...(files || [])];
+    const stages = files.filter((f) => isStageFile(f.name)), others = files.filter((f) => !isStageFile(f.name));
+    const texts = [];
+    for (const f of stages) { const t = await readText(f); if (t != null) { keepStage(f.name, t); texts.push([f.name, t]); } }
+    if (others.length) { for (const f of others) readFileObj(f); return; }
+    for (const [name, t] of texts) linkStage(name, t);
+  }
   function readFileObj(file) {
     if (!file) return;
     const r = new FileReader();
@@ -3802,7 +3817,7 @@
     confirmBox(L('ui.unsavedChanges'), L('ui.theCurrentProgramHasUnsavedChanges'), L('ui.continue'), action);
   }
   function newProgram() {
-    guardDirty(() => { if (isRunning()) stopRun(); resetViews(); st.excPos = new Map(); st.fmodPos = new Map(); st.prog = M.newProgram(); st.fi = 0; st.sel = null; st.uml = isOO(); st.usel = null; st.undo = []; st.redo = []; st.fileName = null; st.dirty = false; run.mainFrame = null; codeStart(); render(); renderVars(); });
+    guardDirty(() => { if (isRunning()) stopRun(); resetViews(); st.excPos = new Map(); st.fmodPos = new Map(); st.prog = M.newProgram(); st.fi = 0; st.sel = null; st.uml = isOO(); st.usel = null; st.undo = []; st.redo = []; st.fileName = null; st.dirty = false; st.sourceUrl = null; st.stageBase = null; run.mainFrame = null; codeStart(); render(); renderVars(); syncStages(); });
   }
   function loadExample(id) {
     const ex = Examples.get(id); if (!ex) return;
@@ -3810,8 +3825,11 @@
       if (isRunning()) stopRun();
       resetViews(); st.excPos = new Map(); st.fmodPos = new Map();
       st.prog = ex.make(); st.fi = 0; st.sel = null; st.usel = null; st.undo = []; st.redo = []; st.fileName = null; st.dirty = false; run.mainFrame = null; run.errId = null;
+      // the stages of the examples are in the page, as if they were in the folder of the example
+      st.sourceUrl = null; st.stageBase = 'example:' + Examples.lang;
       startView();
       conClear(); render(); renderVars(); setTimeout(fitIfLarge, 0);
+      syncStages();
     });
   }
 
@@ -4031,7 +4049,7 @@
       { label: L('ui.copyTheLinkToThisProgram'), key: 'Ctrl+Shift+L', do: copyShareLink },
       '-',
       { label: L('ui.importAModule'), key: 'Ctrl+I', do: moduleDialog },
-      { label: L('stage.stageMenu'), do: () => stageMenu($('#stageBtn')) },
+      { label: L('stage.stageMenu'), do: () => stageMenu() },
       '-',
       { label: L('ui.exportDiagramAsSvg'), key: 'Ctrl+Shift+G', do: exportSvgFile },
       { label: L('ui.exportDiagramAsPng'), key: 'Ctrl+Shift+E', do: exportPng },
@@ -4110,54 +4128,130 @@
   function exportSvgFile() { download(safeName(st.prog.attrs.name) + '_' + (isUml() ? L('ui.classes') : safeName(fname(func()))) + '.svg', exportSvg(), 'image/svg+xml'); }
   function downloadCode() { download(safeName(st.prog.attrs.name) + '.' + CodeGen.LANGS[st.lang].ext, CodeGen.generate(st.prog, st.lang), 'text/plain'); }
   /* ---- Stage: animated scenes that follow the variables (optional module, loaded only when a stage is opened) ---- */
+  /* ------------------------------ Stage ------------------------------
+     A program can name stages (prog.stages): .flstage files in the same folder as the .fprg (only the name is saved) or
+     at a web address. Without stages nothing of the module is loaded and the execution has no hook. */
   let stageHook = null, stageMod = null;
   const STAGE_ICON = '<svg viewBox="0 0 24 24"><path d="M3 4h18M5 4v13M19 4v13M3 17h18"/><path d="M5 4c2 4 5 5 7 5s5-1 7-5"/><circle cx="9.5" cy="13" r="1.6"/><circle cx="14.5" cy="13" r="1.6"/></svg>';
+  // the texts of the stage files chosen in this session (by name); the stages of the examples are in the page
+  const stageTexts = new Map();
+  const isStageFile = (name) => /\.flstage$/i.test(name);
   function stageModule() {
     if (stageMod) return stageMod;
     // the code of the stages becomes active only now (until now it is only text in the page)
     const sc = document.createElement('script'); sc.textContent = STAGE_SRC; document.head.append(sc); sc.remove();
     stageMod = window.FlowLabStage({
-      L, h, M, toast, openModal, store, ICON: STAGE_ICON,
+      L, h, M, toast, openModal, store, ICON: STAGE_ICON, ICON_MIN, lang: I18n.lang,
       prog: () => st.prog, interp: () => run.interp, winHost, nextZ: () => ++zTop,
+      area: () => $('#canvasWrap').getBoundingClientRect(),
+      stages: () => st.prog.stages || null,
+      resolve: resolveStage, pickFiles: pickStageFiles,
+      // the text of a stage if already at hand (to show its name before loading it)
+      peek: (x) => { if (stageTexts.has(x.file)) return stageTexts.get(x.file); const ex = st.stageBase && st.stageBase.startsWith('example:') ? STAGE_FILES[st.stageBase.slice(8)] : null; return ex && ex[x.file] != null ? STAGE_FILES.texts[ex[x.file]] : null; },
+      // the list and the bindings are part of the program (to save); the active stage and the collapse are saved too,
+      // but they do not count as changes
+      changed: (what) => {
+        if (st.prog.stages && !st.prog.stages.list.length) delete st.prog.stages;
+        if (what === 'list' || what === 'bind') st.dirty = true;
+        autosave();
+      },
       setHook: (x) => {
         stageHook = x; run.stageWait = null; run.stageHold = null;
-        // a stage opened during an execution starts from the values it finds
+        // a stage loaded during an execution starts from the values it finds
         if (x && isRunning() && run.interp) x.start(run.interp);
       },
     });
     return stageMod;
   }
-  function openStage(text, name) { stageModule().open(text, name); }
-  function openStageFile() {
-    const inp = h('input', { type: 'file', accept: '.flstage,.js', hidden: true });
-    inp.addEventListener('change', () => { const f = inp.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => openStage(String(r.result), f.name); r.readAsText(f); });
-    document.body.append(inp); inp.click(); setTimeout(() => inp.remove(), 60000);
+  /* the window of the stages follows the program: shown if it names stages, removed (with the module idle) if not */
+  function syncStages() {
+    if (st.prog.stages && st.prog.stages.list.length) stageModule().mount();
+    else if (stageMod) stageMod.unmount();
   }
-  function openStageUrl() {
+  /* the text of a stage: from its address; from the files chosen; from the examples; next to the program opened from an
+     address; at the start, from the copy kept by the browser of the last stages used */
+  async function resolveStage(x) {
+    const f = x.file;
+    if (/^https?:\/\//i.test(f)) return { text: (await fetchText(f)).text };
+    if (stageTexts.has(f)) return { text: stageTexts.get(f) };
+    const ex = st.stageBase && st.stageBase.startsWith('example:') ? STAGE_FILES[st.stageBase.slice(8)] : null;
+    if (ex && ex[f] != null) return { text: STAGE_FILES.texts[ex[f]] };
+    if (st.sourceUrl) {
+      try { const t = (await fetchText(new URL(f, st.sourceUrl).href)).text; stageTexts.set(f, t); return { text: t }; } catch (e) { return { missing: true }; }
+    }
+    const kept = (store.get('stageCache', {}) || {})[f];
+    if (st.stageBase === 'restore' && kept) return { text: kept };
+    return { missing: true };
+  }
+  function keepStage(name, text) {
+    stageTexts.set(name, text);
+    // a copy in the browser, only to find the stages again when the page is reloaded (the last few)
+    try { const c = store.get('stageCache', {}) || {}; delete c[name]; c[name] = text; const k = Object.keys(c); while (k.length > 6) delete c[k.shift()]; store.set('stageCache', c); } catch (e) { /* ignore */ }
+  }
+  const readText = (file) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => res(null); r.readAsText(file); });
+  /* chooses .flstage files (several at once): they become known by name; resolves with true if at least one */
+  function pickStageFiles() {
+    return new Promise((resolve) => {
+      const inp = h('input', { type: 'file', accept: '.flstage', multiple: true, hidden: true });
+      inp.addEventListener('change', async () => {
+        let n = 0;
+        for (const f of inp.files) { const t = await readText(f); if (t != null && isStageFile(f.name)) { keepStage(f.name, t); n++; } }
+        inp.remove(); resolve(n > 0);
+      });
+      document.body.append(inp); inp.click();
+    });
+  }
+  /* links a stage to the program (by name, or by address), makes it the active one and shows the window */
+  function linkStage(file, text) {
+    if (text != null) keepStage(file, text);
+    const s = st.prog.stages || (st.prog.stages = { list: [], active: 0, collapsed: false });
+    let i = s.list.findIndex((x) => x.file === file);
+    if (i < 0) { s.list.push({ file, bind: {} }); i = s.list.length - 1; st.dirty = true; }
+    s.active = i; s.collapsed = false;
+    autosave();
+    stageModule().mount();
+  }
+  function addStageFiles() {
+    const inp = h('input', { type: 'file', accept: '.flstage', multiple: true, hidden: true });
+    inp.addEventListener('change', async () => {
+      for (const f of inp.files) { const t = await readText(f); if (t != null) linkStage(f.name, t); }
+      inp.remove();
+    });
+    document.body.append(inp); inp.click();
+  }
+  function addStageUrl() {
     const u = field({ key: 'surl', label: L('stage.addressOfTheStage'), type: 'plain', placeholder: 'https://…/fila.flstage' }, '');
-    openModal({ title: L('stage.openAStageFromAnAddress'), body: h('div', { class: 'fields' }, u), okText: L('ui.open'), onOk: () => {
+    openModal({ title: L('stage.linkAStageFromAnAddress'), body: h('div', { class: 'fields' }, u), okText: L('stage.link'), onOk: () => {
       const a = u._get().trim(); if (!a) return L('stage.writeTheAddress');
-      fetchText(a).then(({ text }) => openStage(text, decodeURIComponent(a.split('/').pop() || 'stage.flstage'))).catch((e) => toast(L('stage.cannotDownload', { msg: e.message }), 'error'));
+      fetchText(a).then(({ text, abs }) => { stageTexts.set(abs, text); linkStage(abs); }).catch((e) => toast(L('stage.cannotDownload', { msg: e instanceof TypeError ? L('ui.theSiteDoesNotRespondOr2') : e.message }), 'error'));
       return true;
     } });
   }
-  function stageMenu(btn) {
-    const r = btn.getBoundingClientRect();
-    const B = (label, fn, tag) => h('button', { type: 'button', onclick: () => { closePop(); fn(); } }, h('span', null, label), tag ? h('span', { class: 'tag' }, tag) : null);
-    const box = h('div', { class: 'ctxmenu examples' }, h('div', { class: 'pophead' }, L('stage.stage')));
-    const lang = I18n.lang === 'it' ? 'it' : 'en';
-    for (const x of STAGE_LIB) {
-      const ex = Examples.list.find((e) => e.id === x.example);
-      box.append(B(x.title[lang] || x.title.en, () => openStage(x.text, x.id + '.flstage'), ex ? L('stage.forTheExample', { name: ex.title }) : ''));
+  /* for the tests and the API: links a stage given as text */
+  function openStage(text, name) { linkStage(name || 'stage.flstage', text); }
+  function stageMenu() {
+    const r = $('#fileBtn').getBoundingClientRect();
+    const s = st.prog.stages;
+    const B = (label, fn) => h('button', { type: 'button', onclick: () => { closePop(); fn(); } }, h('span', null, label));
+    const box = h('div', { class: 'ctxmenu examples' }, h('div', { class: 'pophead' }, L('stage.stage')),
+      h('p', { class: 'muted small stage-hint' }, L('stage.sameFolder')),
+      B(L('stage.linkStageFiles'), addStageFiles), B(L('stage.linkAStageFromAnAddress'), addStageUrl));
+    if (s && s.list.length) {
+      box.append(h('hr'));
+      if (s.collapsed) box.append(B(L('stage.showTheStage'), () => { s.collapsed = false; stageModule().mount(); autosave(); }));
+      if (stageMod && stageMod.isOpen()) box.append(B(L('stage.bindTheVariables'), () => stageMod.bindDialog()), B(L('stage.saveTheStage'), () => stageMod.save()));
+      box.append(B(L('stage.unlinkTheStage'), () => { s.list.splice(s.active, 1); s.active = Math.min(s.active, s.list.length - 1); if (!s.list.length) delete st.prog.stages; st.dirty = true; autosave(); syncStages(); }));
     }
-    box.append(h('hr'), B(L('stage.openAStageFile'), openStageFile), B(L('stage.openAStageFromAnAddress'), openStageUrl));
-    if (stageMod && stageMod.isOpen()) box.append(h('hr'), B(L('stage.bindTheVariables'), () => stageMod.bindDialog()), B(L('stage.saveTheStage'), () => stageMod.save()), B(L('stage.closeTheStage'), () => stageMod.close()));
     openPop(r.left, r.bottom + 4, box);
   }
   function examplesMenu(btn) {
     const r = btn.getBoundingClientRect();
     const box = h('div', { class: 'ctxmenu examples' }, h('div', { class: 'pophead' }, L('ui.examplePrograms')));
-    for (const ex of Examples.list) box.append(h('button', { type: 'button', onclick: () => { closePop(); loadExample(ex.id); } }, h('span', null, ex.title), h('span', { class: 'tag' }, ex.tags)));
+    for (const ex of Examples.list) {
+      // the examples linked to stages have the icon of the stage next to the title
+      const ico = ex.stages ? h('span', { class: 'ex-stage', title: L('stage.exampleWithStage'), 'aria-label': L('stage.exampleWithStage'), role: 'img', html: STAGE_ICON }) : null;
+      box.append(h('button', { type: 'button', onclick: () => { closePop(); loadExample(ex.id); } }, h('span', { class: 'ex-title' }, ex.title, ico), h('span', { class: 'tag' }, ex.tags)));
+    }
     openPop(r.left, r.bottom + 4, box);
   }
   function helpDialog() {
@@ -4348,7 +4442,6 @@
   function bindUi() {
     $('#fileBtn').addEventListener('click', (e) => fileMenu(e.currentTarget));
     $('#exBtn').addEventListener('click', (e) => examplesMenu(e.currentTarget));
-    $('#stageBtn').addEventListener('click', (e) => stageMenu(e.currentTarget));
     $('#modBtn').addEventListener('click', moduleDialog);
     $('#modToggle').addEventListener('click', toggleAllModules);
     $('#openBtn').addEventListener('click', openFile);
@@ -4357,7 +4450,7 @@
     $('#redoBtn').addEventListener('click', redo);
     $('#helpBtn').addEventListener('click', helpDialog);
     $('#progName').addEventListener('click', () => { if (isRunning()) { toast(L('ui.stopTheProgramToEditThe'), 'warn'); return; } editProgram(); });
-    $('#fileInput').addEventListener('change', (e) => { readFileObj(e.target.files[0]); e.target.value = ''; });
+    $('#fileInput').addEventListener('change', (e) => { readFiles(e.target.files).then(() => { e.target.value = ''; }); });
     enhanceSel($('#funcSel'));
     $('#funcSel').addEventListener('change', (e) => { focusView(MAIN); if (e.target.value === 'uml') showUml(); else showFunc(+e.target.value); });
     const busy = () => { if (isRunning()) { toast(L('ui.stopTheProgramToEditThe'), 'warn'); return true; } return false; };
@@ -4382,6 +4475,12 @@
     $('#compactBtn').addEventListener('click', () => { focusView(MAIN); toggleCompact(); });
     $('#zoomVal').addEventListener('click', () => { focusView(MAIN); setZoom(1); });
     $('#tabs').addEventListener('keydown', (e) => {
+      if (below.matches) {
+        if (!['ArrowUp', 'ArrowDown'].includes(e.key) || document.body.classList.contains('side-hidden')) return;
+        e.preventDefault();
+        setSideH($('#side').getBoundingClientRect().height + (e.key === 'ArrowUp' ? 30 : -30));
+        return;
+      }
       if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
       const tabs = $$('#tabs [role=tab]'); const i = tabs.findIndex((t) => t.dataset.tab === st.tab);
       const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]; setTab(n.dataset.tab); n.focus();
@@ -4421,21 +4520,35 @@
     // drag and drop files
     document.addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); document.body.classList.add('filedrag'); } });
     document.addEventListener('dragleave', (e) => { if (e.target === document.documentElement || !e.relatedTarget) document.body.classList.remove('filedrag'); });
-    document.addEventListener('drop', (e) => { if (!e.dataTransfer || !e.dataTransfer.files.length) return; e.preventDefault(); document.body.classList.remove('filedrag'); readFileObj(e.dataTransfer.files[0]); });
+    document.addEventListener('drop', (e) => { if (!e.dataTransfer || !e.dataTransfer.files.length) return; e.preventDefault(); document.body.classList.remove('filedrag'); readFiles(e.dataTransfer.files); });
     // panel divider
     const grip = $('#grip');
     const sideW = store.get('sideW', null); if (sideW) document.documentElement.style.setProperty('--side-w', sideW + 'px');
+    const sideH = store.get('sideH', null); if (sideH) document.documentElement.style.setProperty('--side-h', sideH + 'px');
+    // on narrow screens the panel is below the diagram: the divider is horizontal and changes the height of the panel
+    const below = matchMedia('(max-width: 900px)');
+    const orient = () => grip.setAttribute('aria-orientation', below.matches ? 'horizontal' : 'vertical');
+    orient(); below.addEventListener('change', orient);
+    const setSideH = (h) => { h = Math.round(Math.max(140, Math.min(window.innerHeight - 220, h))); document.documentElement.style.setProperty('--side-h', h + 'px'); store.set('sideH', h); };
     $('#sideToggle').addEventListener('pointerdown', (e) => e.stopPropagation());
     $('#sideToggle').addEventListener('click', (e) => { e.stopPropagation(); setSideHidden(!document.body.classList.contains('side-hidden')); });
     setSideHidden(!!store.get('sideHidden', false));
     grip.addEventListener('pointerdown', (e) => {
       if (document.body.classList.contains('side-hidden')) return;
       grip.setPointerCapture(e.pointerId);
-      const mv = (ev) => { const w = Math.max(280, Math.min(window.innerWidth - 320, window.innerWidth - ev.clientX)); document.documentElement.style.setProperty('--side-w', w + 'px'); store.set('sideW', w); };
+      const mv = below.matches
+        ? (ev) => setSideH(window.innerHeight - ev.clientY - 3)
+        : (ev) => { const w = Math.max(280, Math.min(window.innerWidth - 320, window.innerWidth - ev.clientX)); document.documentElement.style.setProperty('--side-w', w + 'px'); store.set('sideW', w); };
       const up = () => { grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); };
       grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up);
     });
     grip.addEventListener('keydown', (e) => {
+      if (below.matches) {
+        if (!['ArrowUp', 'ArrowDown'].includes(e.key) || document.body.classList.contains('side-hidden')) return;
+        e.preventDefault();
+        setSideH($('#side').getBoundingClientRect().height + (e.key === 'ArrowUp' ? 30 : -30));
+        return;
+      }
       if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
       const cur = $('#side').getBoundingClientRect().width; const w = Math.max(280, cur + (e.key === 'ArrowLeft' ? 30 : -30));
       document.documentElement.style.setProperty('--side-w', w + 'px'); store.set('sideW', w);
@@ -4473,13 +4586,14 @@
     const saved = store.get('autosave', null);
     let ok = false;
     if (saved && saved.xml) {
-      try { st.prog = M.parseFprg(saved.xml); st.fi = Math.min(saved.fi || 0, st.prog.functions.length - 1); st.fileName = saved.fileName || null; ok = true; } catch (e) { ok = false; }
+      try { st.prog = M.parseFprg(saved.xml); st.fi = Math.min(saved.fi || 0, st.prog.functions.length - 1); st.fileName = saved.fileName || null; st.sourceUrl = saved.sourceUrl || null; st.stageBase = saved.stageBase || 'restore'; ok = true; } catch (e) { ok = false; }
     }
     if (!ok) st.prog = Examples.get('grade_average').make();
     startView();
     render(); initLayout(); renderVars(); renderFiles(); setStatus('idle', L('ui.ready'));
     // the auxiliary views of the open program
     if (ok && Array.isArray(saved.views)) { for (const o of saved.views) openView(Object.assign({}, o, { restore: true })); focusView(MAIN); }
+    if (ok) syncStages();
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { render(); fitIfLarge(); });
     setTimeout(fitIfLarge, 0);
     // ?url=…: opens the given program; then the parameter is removed from the address bar,

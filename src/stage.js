@@ -1,9 +1,12 @@
 /* FlowLab Stage: animated scenes that follow the variables of the program.
-   This file is NOT part of the page script: the build puts it in the page as text, and it runs only when a stage is
-   opened (FlowLab.loadStage). Until then nothing of it exists and the execution of the programs costs nothing more.
+   This file is NOT part of the page script: the build puts it in the page as text, and it runs only when a program
+   linked to stages is opened (or a stage is linked). Until then nothing of it exists and the execution of the programs
+   costs nothing more. A program (.fprg) names its stages (prog.stages: the .flstage files in the same folder, with the
+   variables bound to their slots); one at a time is active, and with the window collapsed to its title bar the stage is
+   unloaded (no iframe, no hook: the execution is exactly as without stages).
 
    A stage file (.flstage) is a JavaScript module:
-     export const bindings = { "fila": "Main.dati" };      // written by FlowLab: slot -> variable of the program
+     export const bindings = { "fila": "Main.dati" };      // the default bindings (the program keeps its own): slot -> variable
      export default { name, description, slots: { fila: { type: 'Integer[]', label: '…' } }, setup(stage), reset(stage, values),
                       update(stage, events, values), stop(stage) };
    It runs in an isolated iframe (sandbox): it receives the changes of the variables and answers when its animation is over;
@@ -11,7 +14,10 @@
 window.FlowLabStage = (host) => {
   const { L, h, M } = host;
   const NS_ID = 'flowlabStage';
-  let cur = null; // the open stage
+  let cur = null; // the stage loaded in the iframe (null: none, also with the window collapsed)
+  let win = null; // the window of the stages of the program
+  let token = 0; // the last loading asked (an older one that ends later is ignored)
+  const names = new Map(); // file -> name of the stage, once loaded
   let seq = 0;
 
   /* ------------------------------ the stage document (inside the iframe) ------------------------------ */
@@ -22,6 +28,9 @@ window.FlowLabStage = (host) => {
   const speedFns = [];
   const stage = {
     svg, width: 800, height: 450, speed: 1, bound: [],
+    // the language of FlowLab (it, en…) and the text in that language of { it: '…', en: '…' } (else English, else the first)
+    lang: String(window.__flowlabLang || 'en'),
+    text(x) { if (x == null || typeof x !== 'object') return x == null ? '' : String(x); return String(x[stage.lang] ?? x.en ?? Object.values(x)[0] ?? ''); },
     el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs || {}) { if (k === 'text') e.textContent = attrs[k]; else e.setAttribute(k, attrs[k]); } (parent || svg).appendChild(e); return e; },
     clear(parent) { (parent || svg).replaceChildren(); },
     t(s) { return s / stage.speed; },
@@ -37,7 +46,10 @@ window.FlowLabStage = (host) => {
     if (!sc || typeof sc !== 'object') { post({ type: 'error', msg: 'export default {…} is missing' }); return; }
     scene = sc;
     try { if (scene.setup) await scene.setup(stage); } catch (e) { post({ type: 'error', msg: (e && e.message) || String(e) }); }
-    post({ type: 'ready', info: { name: String(sc.name || ''), description: String(sc.description || ''), slots: JSON.parse(JSON.stringify(sc.slots || {})) }, bindings: JSON.parse(JSON.stringify(bindings || {})) });
+    // name, description and labels of the slots: a text, or a text for each language
+    const slots = {};
+    for (const [k, v] of Object.entries(sc.slots || {})) slots[k] = Object.assign({}, JSON.parse(JSON.stringify(v)), v && v.label != null ? { label: stage.text(v.label) } : {});
+    post({ type: 'ready', info: { name: stage.text(sc.name), description: stage.text(sc.description), slots }, bindings: JSON.parse(JSON.stringify(bindings || {})) });
   };
   window.addEventListener('message', (e) => {
     if (e.source !== parent) return;
@@ -62,7 +74,7 @@ window.FlowLabStage = (host) => {
     return '<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;height:100%;overflow:hidden;background:#fbfaf6}'
       + 'svg#stage{display:block;width:100%;height:100%}</style></head><body>'
       + '<svg id="stage" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet"></svg>'
-      + `<script>${RUNTIME}</script>`
+      + `<script>window.__flowlabLang = ${JSON.stringify(String(host.lang || 'en'))};</script><script>${RUNTIME}</script>`
       + `<script type="module" onerror="parent.postMessage({ ${NS_ID}: 1, type: 'error', msg: 'load' }, '*')">${mod}\n;window.__boot(typeof __scene === 'undefined' ? null : __scene, typeof __bindings === 'undefined' ? {} : __bindings);</script>`
       + '</body></html>';
   }
@@ -213,15 +225,17 @@ window.FlowLabStage = (host) => {
     if (m.type === 'ready') {
       clearTimeout(cur.loadTimer);
       cur.ready = true; cur.info = m.info;
-      cur.bindings = Object.assign({}, m.bindings || {});
-      cur.title.textContent = cur.info.name || cur.fileName;
+      // the bindings are those of the program; a stage just linked takes those written in its file
+      if (!Object.keys(cur.bindings).length && m.bindings) Object.assign(cur.bindings, m.bindings);
+      if (cur.info.name && names.get(cur.entry.file) !== cur.info.name) { names.set(cur.entry.file, cur.info.name); fillSelect(); }
+      if (win) win.classList.add('stage-ready');
       note('');
       send({ type: 'speed', value: cur.speed });
       reset();
       if (missing().length) bindDialog();
     }
   }
-  function note(text, kind) { if (!cur) return; cur.msg.textContent = text || ''; cur.msg.hidden = !text; cur.msg.className = 'stage-msg' + (kind ? ' ' + kind : ''); }
+  function note(text, kind) { if (!win) return; win.msg.textContent = text || ''; win.msg.hidden = !text; win.msg.className = 'stage-msg' + (kind ? ' ' + kind : ''); }
 
   /* ------------------------------ hook into the execution ------------------------------ */
   const hook = {
@@ -247,58 +261,149 @@ window.FlowLabStage = (host) => {
   }
 
   /* ------------------------------ window ------------------------------ */
-  function open(text, fileName) {
-    if (cur) close();
-    const frame = h('iframe', { class: 'stage-frame', sandbox: 'allow-scripts', title: L('stage.stage'), referrerpolicy: 'no-referrer' });
-    const title = h('span', { class: 'fwin-title' }, fileName || L('stage.stage'));
-    const speedLbl = h('span', { class: 'stage-speedval' }, '1×');
-    const SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
+  const ICONS = {
+    bind: '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6.5 9.5l3-3M5 7.5L3.8 8.7a2.3 2.3 0 0 0 3.3 3.3L8.3 10.8M11 8.5l1.2-1.2a2.3 2.3 0 0 0-3.3-3.3L7.7 5.2"/></svg>',
+    save: '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v8M4.8 7.5L8 10.7l3.2-3.2M3 13.5h10"/></svg>',
+    unlink: '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 7.5L3.8 8.7a2.3 2.3 0 0 0 3.3 3.3L8.3 10.8M11 8.5l1.2-1.2a2.3 2.3 0 0 0-3.3-3.3L7.7 5.2M2.5 2.5l11 11"/></svg>',
+  };
+  const SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
+  const list = () => { const s = host.stages(); return s && s.list.length ? s : null; };
+  /* the name of a stage: the one it declares (read from its text, if already at hand, without running it), or its file */
+  function label(x) {
+    if (!names.has(x.file)) {
+      const t = host.peek(x), n = t && staticName(t);
+      if (n) names.set(x.file, n);
+    }
+    return names.get(x.file) || decodeURIComponent(String(x.file).split(/[?#]/)[0].split('/').pop()).replace(/\.flstage$/i, '');
+  }
+  /* the name declared by a stage, read from its text without running it: name: '…' or name: { it: '…', en: '…' } */
+  function staticName(t) {
+    const m = /export\s+default\s*\{[\s\S]*?\bname\s*:\s*(?:(['"`])((?:(?!\1).)*)\1|\{([^}]*)\})/.exec(t);
+    if (!m) return '';
+    if (m[2] != null) return m[2];
+    const pick = (lang) => { const r = new RegExp('\\b' + lang + '\\s*:\\s*([\'"`])((?:(?!\\1).)*)\\1').exec(m[3]); return r ? r[2] : ''; };
+    return pick(host.lang) || pick('en') || (/(['"`])((?:(?!\1).)*)\1/.exec(m[3]) || [])[2] || '';
+  }
+  /* the window of the program's stages: the title bar has the choice of the active stage, the speed of the animations,
+     the bindings, the download of the stage, the unlinking and the collapse (which unloads the stage) */
+  function mount() {
+    const s = list();
+    if (!s) { unmount(); return; }
+    if (!win) build();
+    s.active = Math.max(0, Math.min(s.list.length - 1, s.active || 0));
+    fillSelect();
+    win.classList.toggle('min', !!s.collapsed);
+    win.minBtn.title = s.collapsed ? L('ui.restoreTheWindow') : L('ui.collapseToTheTitleBar');
+    win.minBtn.setAttribute('aria-label', win.minBtn.title);
+    win.minBtn.setAttribute('aria-expanded', String(!s.collapsed));
+    if (s.collapsed) unload(); else load();
+  }
+  function keepPlace() {
+    if (!win) return;
+    const r = { left: win.offsetLeft, top: win.offsetTop, width: parseFloat(win.style.width) || win.offsetWidth, height: parseFloat(win.style.height) || win.offsetHeight };
+    host.store.set('stageWin', r);
+  }
+  function unmount() {
+    keepPlace();
+    unload();
+    if (win) { win.remove(); win = null; }
+  }
+  function fillSelect() {
+    const s = list(); if (!s || !win) return;
+    win.sel.replaceChildren(...s.list.map((x, i) => h('option', { value: String(i) }, label(x))));
+    win.sel.value = String(s.active);
+    win.sel.title = s.list[s.active].file;
+  }
+  function build() {
     let si = +(host.store.get('stageSpeed', 3)); if (!(si >= 0 && si < SPEEDS.length)) si = 3;
+    const speedLbl = h('span', { class: 'stage-speedval' }, SPEEDS[si] + '×');
     const speed = h('input', { type: 'range', min: 0, max: SPEEDS.length - 1, step: 1, value: si, class: 'stage-speed', 'aria-label': L('stage.speedOfTheAnimations'), title: L('stage.speedOfTheAnimations') });
-    const setSpeed = () => { const v = SPEEDS[+speed.value]; speedLbl.textContent = v + '×'; host.store.set('stageSpeed', +speed.value); if (cur) { cur.speed = v; send({ type: 'speed', value: v }); } };
-    speed.addEventListener('input', setSpeed);
-    const btn = (label, icon, fn) => h('button', { class: 'iconbtn', type: 'button', title: label, 'aria-label': label, html: icon, onclick: fn });
+    speed.addEventListener('input', () => { const v = SPEEDS[+speed.value]; speedLbl.textContent = v + '×'; host.store.set('stageSpeed', +speed.value); if (cur) { cur.speed = v; send({ type: 'speed', value: v }); } });
+    const btn = (lbl, icon, fn, cls) => h('button', { class: 'iconbtn' + (cls ? ' ' + cls : ''), type: 'button', title: lbl, 'aria-label': lbl, html: icon, onclick: fn });
+    const sel = h('select', { class: 'stage-sel', 'aria-label': L('stage.activeStage') });
+    sel.addEventListener('change', () => { const s = list(); if (!s) return; s.active = +sel.value; host.changed('active'); mount(); });
+    const minBtn = btn(L('ui.collapseToTheTitleBar'), host.ICON_MIN, () => { const s = list(); if (!s) return; s.collapsed = !s.collapsed; host.changed('collapsed'); mount(); }, 'minbtn');
     const msg = h('div', { class: 'stage-msg', hidden: true });
-    const win = h('div', { class: 'fwin stagewin', role: 'dialog', 'aria-label': L('stage.stage') },
-      h('div', { class: 'fwin-head' }, h('span', { class: 'stage-ico', 'aria-hidden': 'true', html: host.ICON }), title, h('span', { class: 'grow' }),
-        h('span', { class: 'stage-speedbox' }, speed, speedLbl),
-        btn(L('stage.bindTheVariables'), '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6.5 9.5l3-3M5 7.5L3.8 8.7a2.3 2.3 0 0 0 3.3 3.3L8.3 10.8M11 8.5l1.2-1.2a2.3 2.3 0 0 0-3.3-3.3L7.7 5.2"/></svg>', () => bindDialog()),
-        btn(L('stage.saveTheStage'), '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v8M4.8 7.5L8 10.7l3.2-3.2M3 13.5h10"/></svg>', () => save()),
-        btn(L('stage.closeTheStage'), '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>', () => close())),
-      h('div', { class: 'fwin-body stage-body' }, frame, msg));
+    const body = h('div', { class: 'fwin-body stage-body' }, msg);
+    win = h('div', { class: 'fwin stagewin', role: 'dialog', 'aria-label': L('stage.stage') },
+      h('div', { class: 'fwin-head' }, h('span', { class: 'stage-ico', 'aria-hidden': 'true', html: host.ICON }), sel, h('span', { class: 'grow' }),
+        h('span', { class: 'stage-speedbox stage-live' }, speed, speedLbl),
+        btn(L('stage.bindTheVariables'), ICONS.bind, () => bindDialog(), 'stage-live'),
+        btn(L('stage.saveTheStage'), ICONS.save, () => save(), 'stage-live'),
+        btn(L('stage.unlinkTheStage'), ICONS.unlink, () => unlink()),
+        minBtn),
+      body);
+    Object.assign(win, { sel, minBtn, msg, body, speed });
     const hostEl = host.winHost();
-    const W = Math.min(640, hostEl.clientWidth - 40), H = Math.round(W * 450 / 800) + 40;
-    Object.assign(win.style, { left: Math.max(10, hostEl.clientWidth - W - 60) + 'px', top: '70px', width: W + 'px', height: H + 'px', zIndex: host.nextZ() });
+    // where it was last time, or at the top right of the diagram
+    const area = host.area(), W = Math.min(640, area.width - 40), H = Math.round(W * 450 / 800) + 40;
+    const was = host.store.get('stageWin', null), fits = was && was.left >= 0 && was.top >= 0 && was.left < hostEl.clientWidth - 80 && was.top < hostEl.clientHeight - 40;
+    Object.assign(win.style, fits ? { left: was.left + 'px', top: was.top + 'px', width: was.width + 'px', height: was.height + 'px' } : { left: Math.max(10, area.right - W - 16) + 'px', top: (area.top + 12) + 'px', width: W + 'px', height: H + 'px' });
+    win.style.zIndex = host.nextZ();
     hostEl.append(win);
     win.addEventListener('pointerdown', () => { win.style.zIndex = host.nextZ(); }, true);
     const head = win.querySelector('.fwin-head');
     head.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || e.target.closest('button, input')) return;
+      if (e.button !== 0 || e.target.closest('button, input, select')) return;
       e.preventDefault(); head.setPointerCapture(e.pointerId);
-      const sx = e.clientX, sy = e.clientY, ox = win.offsetLeft, oy = win.offsetTop;
-      win.classList.add('moving');
-      const mv = (ev) => { win.style.left = Math.max(0, Math.min(ox + ev.clientX - sx, hostEl.clientWidth - 60)) + 'px'; win.style.top = Math.max(0, Math.min(oy + ev.clientY - sy, hostEl.clientHeight - 30)) + 'px'; };
-      const up = () => { head.removeEventListener('pointermove', mv); head.removeEventListener('pointerup', up); head.removeEventListener('pointercancel', up); win.classList.remove('moving'); };
+      const sx = e.clientX, sy = e.clientY, ox = win.offsetLeft, oy = win.offsetTop, w = win;
+      w.classList.add('moving');
+      const mv = (ev) => { w.style.left = Math.max(0, Math.min(ox + ev.clientX - sx, hostEl.clientWidth - 60)) + 'px'; w.style.top = Math.max(0, Math.min(oy + ev.clientY - sy, hostEl.clientHeight - 30)) + 'px'; };
+      const up = () => { head.removeEventListener('pointermove', mv); head.removeEventListener('pointerup', up); head.removeEventListener('pointercancel', up); w.classList.remove('moving'); keepPlace(); };
       head.addEventListener('pointermove', mv); head.addEventListener('pointerup', up); head.addEventListener('pointercancel', up);
     });
-    cur = { text, fileName: fileName || 'stage.flstage', frame, win, title, msg, info: { slots: {} }, bindings: {}, ready: false, pending: new Map(), snap: {}, speed: SPEEDS[si], interp: host.interp() };
+  }
+  /* loads the active stage in the iframe (its text from the program's folder, from its address or from the files chosen) */
+  async function load() {
+    const s = list(); if (!s || !win) return;
+    const x = s.list[s.active], my = ++token;
+    unload();
+    win.classList.remove('stage-ready');
+    note(L('stage.loading'));
+    let r;
+    try { r = await host.resolve(x); } catch (e) { r = { error: e.message }; }
+    if (my !== token || !win || list() !== s || s.list[s.active] !== x || s.collapsed) return;
+    if (!r || r.missing) { missingNote(x); return; }
+    if (r.error) { note(L('stage.cannotDownload', { msg: r.error }), 'err'); return; }
+    run(r.text, x);
+  }
+  function missingNote(x) {
+    note('');
+    const pick = h('button', { class: 'btn small', type: 'button', onclick: () => host.pickFiles().then((added) => { if (added) mount(); }) }, L('stage.chooseTheFiles'));
+    const box = h('div', { class: 'stage-missing' }, h('p', null, L('stage.missingFile', { file: x.file })), h('p', { class: 'muted small' }, L('stage.sameFolder')), pick);
+    win.body.querySelectorAll('.stage-missing').forEach((n) => n.remove());
+    win.body.append(box);
+  }
+  /* the stage runs: iframe, messages, hook into the execution */
+  function run(text, x) {
+    const frame = h('iframe', { class: 'stage-frame', sandbox: 'allow-scripts', title: L('stage.stage'), referrerpolicy: 'no-referrer' });
+    win.body.prepend(frame);
+    const v = SPEEDS[+win.speed.value];
+    cur = { text, entry: x, fileName: /^https?:/i.test(x.file) ? label(x) + '.flstage' : x.file, frame, info: { slots: {} }, bindings: x.bind || (x.bind = {}), ready: false, pending: new Map(), snap: {}, speed: v, interp: host.interp() };
     window.addEventListener('message', onMessage);
     cur.loadTimer = setTimeout(() => { if (cur && !cur.ready) note(L('stage.cannotLoad'), 'err'); }, 20000);
-    note(L('stage.loading'));
     frame.srcdoc = srcdoc(text);
-    setSpeed();
     host.setHook(hook);
   }
-  function close() {
+  /* the stage stops: no iframe, no hook (the execution goes back to exactly what it is without the stage) */
+  function unload() {
+    if (win) win.body.querySelectorAll('.stage-missing').forEach((n) => n.remove());
     if (!cur) return;
     hook.stop();
     window.removeEventListener('message', onMessage);
     clearTimeout(cur.loadTimer);
-    cur.win.remove();
+    cur.frame.remove();
     cur = null;
-    host.setHook(null); // the execution goes back to exactly what it is without the stage
+    if (win) win.classList.remove('stage-ready');
+    host.setHook(null);
   }
-
+  function unlink() {
+    const s = list(); if (!s) return;
+    s.list.splice(s.active, 1);
+    s.active = Math.min(s.active, s.list.length - 1);
+    host.changed('list');
+    mount();
+  }
   /* ------------------------------ bindings ------------------------------ */
   function bindDialog() {
     if (!cur || !cur.ready) return;
@@ -327,7 +432,7 @@ window.FlowLabStage = (host) => {
       onOk: () => {
         for (const [k, s] of entries) if (!sels[k].value && !s.optional) return L('stage.chooseAVariableFor', { name: s.label || k });
         for (const k of Object.keys(sels)) { if (sels[k].value) cur.bindings[k] = sels[k].value; else delete cur.bindings[k]; }
-        cur.text = withBindings(cur.text, cur.bindings);
+        host.changed('bind');
         cur.interp = host.interp();
         reset();
         return true;
@@ -346,5 +451,9 @@ window.FlowLabStage = (host) => {
     document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
 
-  return { open, close, bindDialog, save, isOpen: () => !!cur, info: () => (cur ? { name: cur.info.name, bindings: Object.assign({}, cur.bindings), ready: cur.ready, text: cur.text } : null) };
+  return {
+    mount, unmount, bindDialog, save,
+    isOpen: () => !!cur,
+    info: () => (cur ? { name: cur.info.name, bindings: Object.assign({}, cur.bindings), ready: cur.ready, text: cur.text, file: cur.entry.file } : null),
+  };
 };

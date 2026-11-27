@@ -1,10 +1,16 @@
-// FlowLab Stage — «La pesca nel ghiaccio»: an ice field in pixel art (an original theme). The numbers from 1 to 100 are a
-// row of ice slabs; each attempt is a snowball thrown by the penguin on the left. The part of the row where the secret
-// cannot be gets covered with snow, and when the snowball hits the secret the big block of ice breaks and the fish
-// frozen inside jumps out with the number.
-export const bindings = {"segreto":"Main.segreto","tentativo":"Main.tentativo","tentativi":"Main.tentativi"};
+// FlowLab Stage — «La torre di ghiaccio»: an ice field in pixel art (an original theme). Each call of the recursive
+// function is a slab of ice put on the tower; when a call ends its slab slides away and its result, a snowball with the
+// number, goes down to the slab below. The penguin next to the tower follows the calls.
+export const bindings = {"n":"Main.n","k":"Fattoriale.k","risultato":"Fattoriale.risultato"};
 
 import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
+
+/* the texts in the language of FlowLab (stage.lang): Italian and English; any other language takes English */
+const TEXTS = {
+  it: { title: 'LA TORRE DI GHIACCIO', fn: 'Fattoriale' },
+  en: { title: 'THE ICE TOWER', fn: 'Factorial' },
+};
+let T = TEXTS.en;
 
 let st;
 /* ---------------------------- the ice field in pixel art (the same for every stage) ---------------------------- */
@@ -205,120 +211,104 @@ function arrowAt(parent, x, y) {
   return a;
 }
 
-const X0 = 120, X1 = 700, LINE = 330, MIN = 1, MAX = 100, MX = 410, MY = 90, MW = 180;
-const FISH = [
-  '.....kkkk....',
-  '...kkffffk.kk',
-  '..kfwkfffkkfk',
-  '.kffkkffffffk',
-  'kfffffffFfffk',
-  '.kFfffffFkkfk',
-  '..kkFFFFk..kk',
-  '....kkkk.....',
-];
-let fans = [], head, lo = MIN, hi = MAX, secret = null, snowL, snowR, cube, fish, ask, hint, marks, fx, thrower, thrown = 0, tries = 0;
-const xOf = (v) => X0 + 4 + ((Math.max(MIN, Math.min(MAX, v)) - MIN) * (X1 - X0 - 8)) / (MAX - MIN);
+const CX = 300, BASE = 396, BH = 26, TOPF = 8, BRICK = 46;
+let head, tower, fx, finale, bird, pile = [], last = null, n = null;
+const stepY = () => Math.min(BH + TOPF + 2, 290 / Math.max(8, Number(n) || 0, pile.length));
+const yOf = (i) => BASE - (i + 1) * stepY();
 
 function draw() {
-  head = field('LA PESCA NEL GHIACCIO', { igloos: [[24, 80], [736, 80]], cubes: [[26, 400], [54, 400]], diamonds: [[748, 118], [30, 118]] });
-  // the row of the numbers: ten slabs of ice, with the notches and the numbers below
-  const row = st.el('g');
-  for (let i = 0; i < 10; i++) iceBlock(row, X0 + i * 58, LINE - 8, 57, 16, 8);
-  for (let v = 0; v <= 100; v += 10) {
-    const x = xOf(Math.max(1, v));
-    st.el('rect', { x: x - 1, y: LINE + 10, width: 3, height: 6, fill: '#0c1440', 'shape-rendering': 'crispEdges' }, row);
-    st.el('text', { x, y: LINE + 40, 'text-anchor': 'middle', fill: '#ffffff', 'font-family': FONT, 'font-size': 9, text: String(Math.max(1, v)) }, row);
-  }
-  // the snow that covers the numbers already excluded
-  snowL = st.el('rect', { x: X0 - 2, y: LINE - 12, width: 0, height: 30, fill: '#f4f9ff', opacity: 0.93, 'shape-rendering': 'crispEdges' });
-  snowR = st.el('rect', { x: X1 + 2, y: LINE - 12, width: 0, height: 30, fill: '#f4f9ff', opacity: 0.93, 'shape-rendering': 'crispEdges' });
-  marks = st.el('g');
-  // the big block of ice with the fish of the secret frozen inside
-  cube = st.el('g');
-  iceBlock(cube, MX - MW / 2, MY, MW, 100, 12);
-  for (const [x, y] of [[MX - MW / 2 + 22, MY + 30], [MX + MW / 2 - 30, MY + 82], [MX + 40, MY + 26]]) st.el('rect', { x, y, width: 8, height: 3, fill: '#ffffff', 'shape-rendering': 'crispEdges' }, cube);
-  fish = sprite(cube, FISH, -32.5, -20, 5); gsap.set(fish, { x: MX, y: MY + 70, opacity: 0.3 });
-  ask = plaque(cube, MX, MY + 40, '?', 18, 'middle');
-  hint = plaque(st.svg, 524, 140, '…', 11); gsap.set(hint, { opacity: 0 });
-  // the penguin that throws the snowballs, on a block of ice on the left
-  iceBlock(st.svg, 40, LINE + 20, 52, 14, 8);
-  thrower = penguin(st.svg, 66, LINE + 24, 1);
-  // two penguins watching from the right
-  iceBlock(st.svg, 628, 214, 110, 14, 8);
-  fans = [penguin(st.svg, 660, 218, -1), penguin(st.svg, 704, 218, -1)];
+  head = field(T.title, { igloos: [[24, 80], [736, 80]], cubes: [[724, 396], [752, 396], [560, 400]], diamonds: [[748, 118], [30, 118]] });
+  sprite(st.svg, IGLOO, 600, 334, 4);
+  // the base of the tower
+  iceBlock(st.svg, CX - 140, BASE, 280, 18, 8);
+  tower = st.el('g');
+  bird = penguin(st.svg, 476, BASE + 26, -1);
   fx = st.el('g');
+  finale = st.el('g');
   snowfall();
-  lo = MIN; hi = MAX; thrown = 0;
+  pile = []; last = null;
 }
-function count(n) { tries = n ?? 0; setPlaque(head, `LA PESCA NEL GHIACCIO · TENTATIVI: ${tries}`); }
-async function cover() {
-  const step = { ease: 'steps(6)', duration: 0.45 };
-  await Promise.all([
-    gsap.to(snowL, Object.assign({ attr: { width: lo > MIN ? xOf(lo) - X0 - 2 : 0 } }, step)),
-    gsap.to(snowR, Object.assign({ attr: { x: hi < MAX ? xOf(hi) + 3 : X1 + 2, width: hi < MAX ? X1 - xOf(hi) - 1 : 0 } }, step)),
-  ]);
+function title() { setPlaque(head, n != null ? `${T.title} · ${n}! = ?` : T.title); }
+/* a slab of the tower: the call with its k, and the place of its result on the right */
+function slab(k) {
+  // a row of bricks of ice, narrower going up, with the name of the call on a plaque
+  const g = st.el('g', {}, tower), bricks = Math.max(4, 6 - Math.floor(pile.length / 2)), w = bricks * BRICK;
+  for (let b = 0; b < bricks; b++) iceBlock(g, -w / 2 + b * BRICK + 1, 0, BRICK - 2, BH, TOPF);
+  plaque(g, -w / 2 + 14, TOPF + BH / 2, `${T.fn}(${k})`, 9);
+  const res = plaque(g, w / 2 - 24, TOPF + BH / 2, '', 10, 'middle', { fill: C.y });
+  res.style.display = 'none';
+  g._res = res; g._k = k; g._w = w;
+  return g;
 }
-/* a snowball from the flipper of the penguin to the number on the row */
-async function shoot(v) {
-  const x = xOf(v), ball = sprite(fx, SNOWBALL, -7.5, -7.5);
-  const sx = 82, sy = LINE - 26, cx = (sx + x) / 2, cy = 120, ey = LINE - 2, o = { t: 0 };
-  frame(thrower, 'hop'); gsap.delayedCall(0.25, () => frame(thrower, 'stand'));
-  gsap.set(ball, { x: sx, y: sy });
-  await gsap.to(o, { t: 1, duration: 0.8, ease: 'power1.inOut', onUpdate: () => {
-    const t = o.t;
-    gsap.set(ball, { x: (1 - t) * (1 - t) * sx + 2 * (1 - t) * t * cx + t * t * x, y: (1 - t) * (1 - t) * sy + 2 * (1 - t) * t * cy + t * t * ey });
-  } });
-  ball.remove(); puff(fx, x, ey);
-  // a crack where it fell, and the number tried above
-  const crack = st.el('g', { 'shape-rendering': 'crispEdges' }, marks);
-  for (const [dx, dy] of [[-6, 0], [-3, 3], [0, 0], [3, 3], [6, 0]]) st.el('rect', { x: x + dx - 1.5, y: LINE - 6 + dy, width: 3, height: 3, fill: '#0c1440' }, crack);
-  const label = plaque(marks, x, LINE - 34 - (thrown++ % 3) * 24, String(v), 9, 'middle');
-  gsap.from(label, { opacity: 0, duration: 0.25 });
-  if (secret == null) return;
-  if (v === secret) { await reveal(x); return; }
-  if (v < secret) { lo = Math.max(lo, v + 1); setPlaque(hint, 'PIÙ ALTO →'); } else { hi = Math.min(hi, v - 1); setPlaque(hint, '← PIÙ BASSO'); }
-  gsap.fromTo(hint, { opacity: 0 }, { opacity: 1, duration: 0.25, ease: 'steps(3)' });
-  await cover();
+async function push(k) {
+  const g = slab(k);
+  pile.push(g);
+  // the tower makes room when it is high
+  pile.forEach((s, i) => gsap.set(s, { x: CX, y: i === pile.length - 1 ? FL.y - 20 : yOf(i) }));
+  gsap.fromTo(g, { opacity: 0 }, { opacity: 1, duration: 0.15 });
+  hop(bird, 1, 0.3);
+  await gsap.to(g, { y: yOf(pile.length - 1), duration: 0.55, ease: 'steps(10)' });
+  puff(fx, CX - g._w / 2, yOf(pile.length - 1) + TOPF + BH); puff(fx, CX + g._w / 2, yOf(pile.length - 1) + TOPF + BH);
 }
-/* the block of ice breaks into pieces and the fish jumps out with the number */
-async function reveal(x) {
-  setPlaque(hint, 'INDOVINATO!'); gsap.to(hint, { opacity: 1, duration: 0.2 });
-  const glow = st.el('rect', { x: x - 8, y: LINE - 10, width: 16, height: 12, fill: C.y, 'shape-rendering': 'crispEdges' }, fx);
-  await gsap.to(glow, { opacity: 0.2, duration: 0.15, repeat: 3, yoyo: true });
-  glow.remove();
-  await gsap.to(cube, { x: 4, duration: 0.05, repeat: 5, yoyo: true, ease: 'steps(1)' });
-  for (let i = 0; i < 26; i++) {
-    const s = 6 + (i % 3) * 3, p = st.el('rect', { x: -s / 2, y: -s / 2, width: s, height: s, fill: i % 2 ? C.c : C.C, stroke: '#163e96', 'stroke-width': 1, 'shape-rendering': 'crispEdges' }, fx);
-    gsap.set(p, { x: MX + ((i * 37) % MW) - MW / 2, y: MY + 10 + ((i * 23) % 80) });
-    gsap.to(p, { x: `+=${Math.cos(i) * (70 + (i % 4) * 30)}`, y: 470, rotation: 90, duration: 1 + (i % 4) * 0.15, ease: 'power1.in', onComplete: () => p.remove() });
+/* the result: a yellow plaque at the right end of the slab on top */
+async function result(v) {
+  if (v == null || !pile.length) return;
+  last = v;
+  const r = pile[pile.length - 1]._res;
+  setPlaque(r, String(v)); r.style.display = '';
+  await gsap.fromTo(r, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: 'steps(3)' });
+}
+async function pop() {
+  const g = pile.pop(); if (!g) return;
+  const res = g._res.style.display === '' ? g._res._t.textContent : '';
+  const sx = CX + g._w / 2 - 24, sy = yOf(pile.length) + TOPF + BH / 2;
+  await gsap.to(g, { x: '+=420', opacity: 0, duration: 0.5, ease: 'steps(8)' });
+  g.remove();
+  // the result goes down to the slab below, which was waiting for it to compute k * Fattoriale(k - 1)
+  if (res && pile.length) {
+    const ball = st.el('g', {}, fx); sprite(ball, SNOWBALL, -7.5, -7.5); plaque(ball, 0, -20, res, 8, 'middle');
+    gsap.set(ball, { x: sx, y: sy });
+    const below = pile[pile.length - 1];
+    await gsap.to(ball, { x: CX + below._w / 2 - 24, y: yOf(pile.length - 1) + TOPF + BH / 2, duration: 0.4, ease: 'steps(6)' });
+    puff(fx, CX + below._w / 2 - 24, yOf(pile.length - 1) + TOPF);
+    ball.remove();
   }
-  gsap.set(cube, { opacity: 0 });
-  const big = st.el('g', {}, fx), f = sprite(big, FISH, -32.5, -20, 5);
-  plaque(big, 0, -48, String(secret), 20, 'middle');
-  gsap.set(big, { x: MX, y: MY + 58 }); gsap.set(f, { scaleX: -1, transformOrigin: '50% 50%' });
-  burst(fx, MX, MY + 50, 30);
-  hop(thrower, 4); fans.forEach((p, i) => hop(p, 4, 0.1 + i * 0.12));
-  await gsap.to(big, { keyframes: [{ y: MY + 6, duration: 0.35, ease: 'power2.out' }, { y: MY + 40, duration: 0.3, ease: 'power2.in' }] });
-  gsap.to(big, { y: MY + 32, duration: 0.4, repeat: -1, yoyo: true, ease: 'steps(4)' });
+}
+async function toK(k) {
+  // a deeper call (a new slab), or the return to a call already on the tower
+  const at = pile.findIndex((g) => g._k === k);
+  if (at >= 0 && at < pile.length - 1) { while (pile.length - 1 > at) await pop(); return; }
+  if (at < 0) await push(k);
+}
+async function finish() {
+  while (pile.length) await pop();
+  if (n == null || last == null) return;
+  st.clear(finale);
+  const p = plaque(finale, CX, 220, `${n}! = ${last}`, 20, 'middle', { fill: C.y });
+  setPlaque(head, T.title);
+  burst(finale, CX, 220, 34);
+  hop(bird, 5);
+  await gsap.from(p, { y: 60, opacity: 0, duration: 0.5, ease: 'steps(6)' });
 }
 
 export default {
-  name: 'La pesca nel ghiaccio',
-  description: 'Un campo di ghiaccio in pixel art: i numeri da 1 a 100 sono una fila di lastre di ghiaccio, e ogni tentativo è una palla di neve lanciata dal pinguino. La parte dove il segreto non può più essere si copre di neve, e quando la palla colpisce il segreto il grande blocco di ghiaccio si rompe e il pesce salta fuori con il numero.',
-  slots: {
-    segreto: { type: 'Integer', label: 'Il numero segreto' },
-    tentativo: { type: 'Integer', label: 'Il tentativo' },
-    tentativi: { type: 'Integer', label: 'Quanti tentativi', optional: true },
+  name: { it: 'La torre di ghiaccio', en: 'The ice tower' },
+  description: {
+    it: 'Un campo di ghiaccio in pixel art: ogni chiamata della funzione ricorsiva è una lastra di ghiaccio messa sulla torre con il suo valore di k; quando la chiamata finisce la lastra scivola via e il suo risultato, una palla di neve con il numero, scende alla lastra sotto.',
+    en: 'An ice field in pixel art: each call of the recursive function is a slab of ice put on the tower with its value of k; when the call ends the slab slides away and its result, a snowball with the number, goes down to the slab below.',
   },
-  setup(stage) { st = stage; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
-  reset(stage, values) { gsap.globalTimeline.clear(); draw(); secret = values.segreto ?? null; count(values.tentativi || 0); },
-  async update(stage, events, values) {
-    // with the counter bound, a snowball for each attempt (also when the same number is tried again); otherwise for each new value
-    const counted = stage.bound.includes('tentativi');
+  slots: {
+    k: { type: 'Integer', label: { it: 'Il parametro della funzione ricorsiva (k)', en: 'The parameter of the recursive function (k)' } },
+    risultato: { type: 'Integer', label: { it: 'Il risultato della chiamata', en: 'The result of the call' }, optional: true },
+    n: { type: 'Integer', label: { it: 'Il numero scelto (n)', en: 'The number chosen (n)' }, optional: true },
+  },
+  setup(stage) { st = stage; T = TEXTS[stage.lang] || TEXTS.en; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
+  reset(stage, values) { gsap.globalTimeline.clear(); draw(); n = values.n; title(); },
+  async update(stage, events) {
     for (const e of events) {
-      if (e.slot === 'segreto' && e.value != null) secret = e.value;
-      if (e.slot === 'tentativi' && e.kind !== 'vanish') { count(e.value); if (e.value > (e.old || 0) && values.tentativo != null) await shoot(values.tentativo); }
-      if (e.slot === 'tentativo' && !counted && (e.kind === 'value' || e.kind === 'appear') && e.value != null) await shoot(e.value);
+      if (e.slot === 'n' && e.value != null) { n = e.value; title(); }
+      if (e.slot === 'k') { if (e.kind === 'vanish') await finish(); else if (e.value != null) await toK(e.value); }
+      if (e.slot === 'risultato' && (e.kind === 'value' || e.kind === 'appear')) await result(e.value);
     }
   },
 };

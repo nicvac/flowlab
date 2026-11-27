@@ -8,6 +8,16 @@
         <attribute name="created" value="Zmxvd2xhYjtleGFtcGxlczsyMDI2LTExLTE3IDA4OjAwOjAwIFBNOzE="/>
         <attribute name="edited" value="Zmxvd2xhYjtleGFtcGxlczsyMDI2LTExLTE3IDA4OjAwOjAwIFBNOzE="/>
     </attributes>
+    <flowlab-stages active="0" collapsed="True">
+        <stage file="bubble_sort_ice.flstage">
+            <bind slot="fila" variable="Main.dati"/>
+            <bind slot="j" variable="Ordina.j"/>
+        </stage>
+        <stage file="bubble_sort.flstage">
+            <bind slot="fila" variable="Main.dati"/>
+            <bind slot="j" variable="Ordina.j"/>
+        </stage>
+    </flowlab-stages>
     <function name="Main" type="None" variable="">
         <parameters/>
         <body>

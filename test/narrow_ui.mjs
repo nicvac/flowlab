@@ -1,0 +1,35 @@
+// Narrow window: the panel goes below the diagram and keeps its divider: dragged it changes the height of the panel,
+// the button (and Ctrl+B) hides and shows it, the arrows of the keyboard resize it; wide again it is on the side
+import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
+const browser = await chromium.launch();
+const page = await browser.newPage({ locale: 'it-IT', viewport: { width: 800, height: 900 } });
+const errs = []; page.on('pageerror', (e) => errs.push(e.message));
+await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
+await page.evaluate(() => localStorage.clear()); await page.reload(); await page.waitForTimeout(400);
+const ok = (name, cond) => console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`);
+const box = (s) => page.evaluate((x) => { const r = document.querySelector(x).getBoundingClientRect(); return { top: Math.round(r.top), h: Math.round(r.height), w: Math.round(r.width), left: Math.round(r.left) }; }, s);
+const shown = () => page.evaluate(() => getComputedStyle(document.querySelector('#side')).display !== 'none');
+let side = await box('#side'), grip = await box('#grip');
+ok(`pannello sotto, a tutta larghezza (${side.top}, ${side.w}×${side.h}), divisore orizzontale sopra (${grip.top}, ${grip.h})`, side.w === 800 && grip.h === 6 && grip.top < side.top && side.top + side.h === 900 && (await page.evaluate(() => document.scrollingElement.scrollHeight)) === 900);
+ok('divisore orizzontale per i lettori di schermo', (await page.evaluate(() => document.querySelector('#grip').getAttribute('aria-orientation'))) === 'horizontal');
+await page.mouse.move(200, grip.top + 3); await page.mouse.down(); await page.mouse.move(200, 300, { steps: 5 }); await page.mouse.up();
+side = await box('#side');
+ok(`trascinato il divisore: il pannello è alto ${side.h}`, Math.abs(side.top - 303) <= 2);
+await page.click('#sideToggle'); await page.waitForTimeout(150);
+const canvas = await box('#canvasWrap'), tog = await box('#sideToggle');
+ok(`nascosto: il diagramma prende lo spazio (${canvas.h}), il pulsante resta in basso (${tog.top})`, !(await shown()) && canvas.h > 750 && tog.top > 850 && tog.top < 900);
+await page.click('#sideToggle'); await page.waitForTimeout(150);
+ok('di nuovo visibile, con la stessa altezza', (await shown()) && Math.abs((await box('#side')).top - 303) <= 2);
+await page.keyboard.press('Control+b'); await page.waitForTimeout(100);
+const hiddenByKey = !(await shown());
+await page.keyboard.press('Control+b'); await page.waitForTimeout(100);
+ok('Ctrl+B lo nasconde e lo mostra', hiddenByKey && (await shown()));
+await page.focus('#grip'); await page.keyboard.press('ArrowDown');
+ok('freccia giù: più basso di 30', Math.abs((await box('#side')).top - 333) <= 2);
+await page.reload(); await page.waitForTimeout(400);
+ok('altezza ricordata dopo il ricaricamento', Math.abs((await box('#side')).top - 333) <= 2);
+await page.setViewportSize({ width: 1400, height: 900 }); await page.waitForTimeout(200);
+side = await box('#side'); grip = await box('#grip');
+ok(`finestra larga: pannello di nuovo a lato (${side.left}, ${side.w}×${side.h})`, side.h > 800 && side.w < 700 && grip.w === 6 && (await page.evaluate(() => document.querySelector('#grip').getAttribute('aria-orientation'))) === 'vertical');
+console.log('ERR', errs);
+await browser.close();

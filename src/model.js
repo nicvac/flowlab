@@ -280,6 +280,18 @@ function parseFprg(text) {
     }
     if (!prog.classes.length) delete prog.classes;
   }
+  // FlowLab extension: the stages linked to the program (only the name of the .flstage file, in the same folder as the
+  // .fprg, or its web address), each one with the variables its slots are bound to; which one is active, and if the
+  // window of the stage is collapsed to its title bar
+  const stEl = [...root.children].find((el) => el.nodeName.toLowerCase() === 'flowlab-stages');
+  if (stEl) {
+    const list = [...stEl.children].filter((x) => x.nodeName.toLowerCase() === 'stage' && (x.getAttribute('file') || '').trim()).map((x) => {
+      const bind = {};
+      for (const b of x.children) if (b.nodeName.toLowerCase() === 'bind' && b.getAttribute('slot') && b.getAttribute('variable')) bind[b.getAttribute('slot')] = b.getAttribute('variable');
+      return { file: x.getAttribute('file').trim(), bind };
+    });
+    if (list.length) prog.stages = { list, active: Math.max(0, Math.min(list.length - 1, parseInt(stEl.getAttribute('active') || '0', 10) || 0)), collapsed: boolAttr(stEl.getAttribute('collapsed'), false) };
+  }
   for (const el of root.children) {
     const tag = el.nodeName.toLowerCase();
     if (tag === 'attributes') {
@@ -515,6 +527,17 @@ function serializeFprg(prog) {
     }
     L.push('    </flowlab-classes>');
   }
+  if (prog.stages && prog.stages.list.length) {
+    L.push(`    <flowlab-stages active="${prog.stages.active || 0}" collapsed="${TF(!!prog.stages.collapsed)}">`);
+    for (const x of prog.stages.list) {
+      const b = Object.entries(x.bind || {});
+      if (!b.length) { L.push(`        <stage file="${xmlEsc(x.file)}"/>`); continue; }
+      L.push(`        <stage file="${xmlEsc(x.file)}">`);
+      for (const [k, v] of b) L.push(`            <bind slot="${xmlEsc(k)}" variable="${xmlEsc(v)}"/>`);
+      L.push('        </stage>');
+    }
+    L.push('    </flowlab-stages>');
+  }
   for (const f of prog.functions) {
     const rs = rets(f);
     let extra = rs.length > 1 || rs.some((r) => r.array) ? ` flowlab-returns="${xmlEsc(rs.map((r) => r.name + ':' + r.type + (r.array ? `[${','.repeat((r.dims || 1) - 1)}]` : '')).join(';'))}"` : '';
@@ -620,6 +643,7 @@ function extendedFeatures(prog) {
   if ((prog.classes || []).some((c) => (c.tparams || []).length)) out.add(L('model.classesWithGenericTypes'));
   if (prog.functions.some((f) => (f.tparams || []).length)) out.add(L('model.functionsWithGenericTypes'));
   if ((prog.classes || []).some((c) => c.module) || prog.functions.some((f) => f.module)) out.add(L('model.importedModules'));
+  if (prog.stages && prog.stages.list.length) out.add(L('model.linkedStages'));
   for (const f of prog.functions) {
     if (rets(f).length > 1) out.add(L('model.functionsWithSeveralReturnValues'));
     if (rets(f).some((r) => r.array)) out.add(L('model.functionsReturningArrays'));

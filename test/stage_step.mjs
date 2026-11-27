@@ -15,13 +15,20 @@ const wait = (ms = 150) => page.waitForTimeout(ms);
 const ok = (name, cond) => console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`);
 const random = () => page.evaluate(() => { let n = 0; const s = [0.5, 0.2, 0.9, 0.1, 0.7, 0.3, 0.6, 0.4]; Math.random = () => s[n++ % s.length]; });
 const speed = (v) => page.evaluate((x) => { const s = document.querySelector('#speed'); s.value = x; s.dispatchEvent(new Event('input')); }, v);
+/* a stage of the example (linked to it): chosen in the title bar of its window and expanded */
+async function useStage(title) {
+  await page.waitForSelector('.stagewin');
+  const i = await page.evaluate((t) => [...document.querySelectorAll('.stagewin .stage-sel option')].findIndex((o) => o.textContent === t), title);
+  await page.selectOption('.stagewin .stage-sel', String(i)); await page.waitForTimeout(100);
+  if (await page.evaluate(() => document.querySelector('.stagewin').classList.contains('min'))) await page.click('.stagewin .minbtn');
+  await page.waitForFunction((t) => FlowLab.stage.info() && FlowLab.stage.info().ready && FlowLab.stage.info().name === t, title, { timeout: 15000 });
+}
 await page.evaluate(() => FlowLab.loadExample('bubble_sort')); await wait(200);
 await speed(0);
 
 // with the stage of the penguins at 1×, and a hurried user: Step pressed every 120 ms (and sometimes after 700 ms)
 await random();
-await page.click('#stageBtn'); await wait(100); await page.click('#pop button:has-text("La fila dei pinguini")');
-await page.waitForFunction(() => FlowLab.stage.info() && FlowLab.stage.info().ready, null, { timeout: 15000 }); await wait(200);
+await useStage('La fila dei pinguini'); await wait(200);
 await page.locator('.stagewin .stage-speed').fill('3'); await page.locator('.stagewin .stage-speed').dispatchEvent('input');
 let heldOk = 0, heldBad = 0, taken = 0, ignored = 0, wrong = 0, s34shown = 0;
 const swapBlock = await page.evaluate(() => { const f = FlowLab.state.prog.functions.find((x) => x.name === 'Ordina'); const s = JSON.stringify(f); return (s.match(/"id":"(s\d+)","kind":"assign","variable":"v\[j \+ 1\]"/) || [])[1]; });
@@ -69,17 +76,18 @@ if (process.env.DBG) console.log(JSON.stringify(steps.map((x, i) => [Math.round(
 let tooFast = 0;
 for (let i = 1; i < steps.length; i++) if (steps[i][1] - steps[i - 1][1] > 1 || (steps[i][0] - steps[i - 1][0] < 200 && !steps[i - 1][2])) tooFast++;
 ok(`esegui con ${toggles} pause e riprese durante le animazioni: ${steps.length} passi, ${tooFast} troppo veloci`, toggles > 3 && steps.length >= 6 && tooFast === 0);
-// a stage opened during the execution starts from the values of that moment (the row and j are there at once)
+// a stage expanded during the execution starts from the values of that moment (the row and j are there at once)
 await page.click('#stopBtn').catch(() => {}); await wait(200);
-await page.click('.stagewin button[title="' + (await page.evaluate(() => document.querySelector('.stagewin .iconbtn:last-child').title)) + '"]'); await wait(200);
+// collapsed: the stage is unloaded
+await page.click('.stagewin .minbtn'); await wait(200);
 await random(); await speed(0);
 for (let i = 0; i < 70; i++) { await page.click('#stepBtn'); await wait(15); }
-await page.click('#stageBtn'); await wait(100); await page.click('#pop button:has-text("La fila dei pinguini")');
+await page.click('.stagewin .minbtn');
 await page.waitForFunction(() => FlowLab.stage.info() && FlowLab.stage.info().ready, null, { timeout: 15000 }); await wait(400);
 const fr = page.frames().find((f) => f !== page.mainFrame() && f.url() === 'about:srcdoc');
 const mid = await fr.evaluate(() => ({ kids: document.querySelectorAll('.kid').length, arrows: document.querySelectorAll('.arrow').length }));
 const before = await page.evaluate(() => FlowLab.run.steps);
 await page.click('#stepBtn'); await wait(100);
-ok(`stage aperto a metà esecuzione: ${mid.kids} pile, ${mid.arrows} frecce, poi il passo ${before} → ${await page.evaluate(() => FlowLab.run.steps)}`, mid.kids === 8 && mid.arrows === 2 && (await page.evaluate(() => FlowLab.run.steps)) === before + 1);
+ok(`stage riaperto a metà esecuzione: ${mid.kids} pile, ${mid.arrows} frecce, poi il passo ${before} → ${await page.evaluate(() => FlowLab.run.steps)}`, mid.kids === 8 && mid.arrows === 2 && (await page.evaluate(() => FlowLab.run.steps)) === before + 1);
 console.log('ERR', errs);
 await browser.close();

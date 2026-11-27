@@ -1,8 +1,16 @@
-// FlowLab Stage — «La torre delle chiamate»: each call of the recursive function is a floating block put on the tower;
-// when a call ends its block flies away and its result, a glowing orb, goes down to the block below.
-export const bindings = {"n":"Main.n","k":"Fattoriale.k","risultato":"Fattoriale.risultato"};
+// FlowLab Stage — «La fila dei ragazzi»: an array of integers as a row of people on a floating terrace, each as tall as its
+// value. They arrive hanging from a glowing lantern; when two values are exchanged (also through a third variable:
+// t ← v[j], v[j] ← v[j + 1], v[j + 1] ← t) the two people walk and change places; a light shows the two positions compared.
+export const bindings = {"fila":"Main.dati","j":"Ordina.j"};
 
 import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
+
+/* the texts in the language of FlowLab (stage.lang): Italian and English; any other language takes English */
+const TEXTS = {
+  it: { title: 'La fila dei ragazzi' },
+  en: { title: 'The row of kids' },
+};
+let T = TEXTS.en;
 
 /* ---------- the look: flat vector illustration (periwinkle, indigo, lavender, night arches, sunset windows) ---------- */
 const FONT = 'Atkinson Hyperlegible, Avenir Next, Segoe UI, system-ui, sans-serif';
@@ -186,93 +194,149 @@ function stopWalk(gsap, fig, tl) {
   const p = fig && fig._parts; if (p) gsap.to([p.legF, p.legB, p.armF, p.armB], { rotation: 0, duration: 0.15 });
 }
 
-const CX = 300, BASE = 392, BH = 34, GAP = 6;
-let st, pile = [], head, last = null, n = null, finale;
+const FLOOR = 352, LEFT = 84, RIGHT = 600;
+let st, layer, spots, light, kids = [], vals = [], pending = null;
+const hOf = (v) => 70 + Math.max(0, Math.min(110, Number(v) || 0)) * 1.75;
+const toneOf = (v) => ((Number(v) || 0) % 10) / 10;
+const slotX = (i, n) => LEFT + (n <= 1 ? (RIGHT - LEFT) / 2 : (i * (RIGHT - LEFT)) / (n - 1));
+const widthK = (n) => Math.min(1.1, (RIGHT - LEFT) / Math.max(1, n - 1) / 52);
 
 function draw() {
   st.clear(); uid = 0; defs(st);
-  room(st, { arches: [[560, 40, 110, 250, 'night'], [690, 120, 70, 160, 'sunset']], steps: [[40, 440, 5, 1]], lights: 6 });
-  const base = st.el('g', { filter: 'url(#soft)' }); block(st, base, CX - 150, BASE, 300, 22, 24);
-  head = pill(st, st.svg, 24, 26, 'La torre delle chiamate', 15);
-  finale = st.el('g', { opacity: 0 });
-  pile = []; last = null;
+  room(st, { arches: [[22, 70, 74, 170, 'night'], [700, 46, 72, 160, 'sunset']], steps: [[650, 440, 5, 1]], lights: 6 });
+  const terrace = st.el('g', { filter: 'url(#soft)' });
+  block(st, terrace, 36, FLOOR, 610, 30, 26);
+  light = st.el('g', { opacity: 0 });
+  for (let i = 0; i < 2; i++) st.el('ellipse', { cx: 0, cy: FLOOR - 6, rx: 30, ry: 9, fill: '#fff4c8', filter: 'url(#bloom)' }, light);
+  spots = st.el('g'); layer = st.el('g');
+  pill(st, st.svg, 24, 26, T.title, 15);
+  kids = []; vals = []; pending = null;
   alive(gsap, st.svg);
 }
-const yOf = (i) => BASE - (i + 1) * (BH + GAP);
-function slab(k) {
-  const g = st.el('g', { filter: 'url(#soft)' }), w = 230 - Math.min(pile.length, 7) * 14;
-  const lvl = Math.min(pile.length, 7) / 7;
-  block(st, g, -w / 2, 0, w, BH, 16, { front: `hsl(${262 - lvl * 30} 90% ${74 - lvl * 14}%)`, side: `hsl(${262 - lvl * 30} 70% ${56 - lvl * 12}%)` });
-  st.el('text', Object.assign({ x: -w / 2 + 16, y: BH / 2 + 1, 'dominant-baseline': 'central', fill: '#ffffff', text: `Fattoriale(${k})` }, font(15)), g);
-  const m = medal(st, g, 14, '', '#ffcf73'); gsap.set(m, { x: w / 2 - 20, y: BH / 2 }); gsap.set(m, { opacity: 0 });
-  g._m = m; g._k = k; g._w = w;
+function drawSpots(n) {
+  st.clear(spots);
+  for (let i = 0; i < n; i++) st.el('text', Object.assign({ x: slotX(i, n), y: FLOOR + 20, 'text-anchor': 'middle', fill: '#ffffff', 'fill-opacity': 0.9, text: `[${i}]` }, font(12, 700)), spots);
+}
+/* a person of value v: g (moved around) contains the drawing, narrowed when the row is long */
+function kid(v) {
+  const g = st.el('g', { class: 'kid' }, layer);
+  const inner = person(st, g, hOf(v), toneOf(v), v);
+  inner.setAttribute('transform', `scale(${widthK(vals.length)} 1)`);
+  g._v = v; g._fig = inner;
   return g;
 }
-async function push(k) {
-  const g = slab(k);
-  pile.push(g);
-  gsap.set(g, { x: CX, y: -60 });
-  await gsap.to(g, { y: yOf(pile.length - 1), duration: 0.65, ease: 'bounce.out' });
+const place = (g, x, y) => gsap.set(g, { x, y: y ?? FLOOR - 6 });
+function lineUp(arr) {
+  layer.querySelectorAll(':scope > g').forEach((k) => k.remove());
+  vals = (arr || []).slice(); pending = null; drawSpots(vals.length);
+  kids = vals.map((v, i) => { if (v == null) return null; const g = kid(v); place(g, slotX(i, vals.length)); return g; });
 }
-/* the result: a glowing orb on the medallion of the block on top */
-async function result(v) {
-  if (v == null || !pile.length) return;
-  last = v;
-  const m = pile[pile.length - 1]._m;
-  m._t.textContent = String(v); m._t.setAttribute('font-size', String(v).length > 3 ? 8 : String(v).length > 2 ? 10 : 12);
-  await gsap.fromTo(m, { opacity: 0, scale: 0.3, transformOrigin: '50% 50%' }, { opacity: 1, scale: 1, duration: 0.45, ease: 'back.out(2)' });
+/* a person comes down hanging from a glowing lantern */
+async function lantern(i, v) {
+  const x = slotX(i, vals.length), g = kid(v), h = hOf(v);
+  const lamp = st.el('g', {}, g);
+  st.el('line', { x1: 21, y1: -h * 0.55, x2: 21, y2: -h - 34, stroke: '#ffffff', 'stroke-width': 1.5 }, lamp);
+  st.el('circle', { cx: 21, cy: -h - 46, r: 22, fill: 'url(#glow)' }, lamp);
+  st.el('circle', { cx: 21, cy: -h - 46, r: 11, fill: P.cream, filter: 'url(#bloom)' }, lamp);
+  st.el('ellipse', { cx: 21, cy: -h - 46, rx: 22, ry: 7, fill: 'none', stroke: '#ffffff', 'stroke-width': 1.2, opacity: 0.8 }, lamp);
+  place(g, x + 50, -30);
+  await gsap.to(g, { x, y: FLOOR - 6, duration: 1.1, ease: 'sine.inOut' });
+  await gsap.to(lamp, { opacity: 0, y: -20, duration: 0.3 });
+  lamp.remove();
+  return g;
 }
-async function pop() {
-  const g = pile.pop(); if (!g) return;
-  const res = g._m._t.textContent;
-  const mx = CX + g._w / 2 - 20, my = yOf(pile.length) + BH / 2;
-  await gsap.to(g, { x: '+=360', y: '-=50', rotation: 12, opacity: 0, duration: 0.55, ease: 'power2.in' });
+/* the person goes away through a portal that opens in the terrace */
+async function portal(g, i) {
+  if (!g) return;
+  const x = slotX(i, vals.length);
+  const p = st.el('ellipse', { cx: x, cy: FLOOR - 4, rx: 0, ry: 0, fill: 'url(#night)', stroke: '#ffffff', 'stroke-width': 2 });
+  layer.parentNode.insertBefore(p, layer);
+  await gsap.to(p, { attr: { rx: 30, ry: 8 }, duration: 0.25 });
+  await gsap.to(g, { y: FLOOR + 60, opacity: 0, duration: 0.45, ease: 'power2.in' });
   g.remove();
-  // the result goes down to the block below, which was waiting for it to compute k * Fattoriale(k - 1)
-  if (res && pile.length) {
-    const orb = st.el('g'); st.el('circle', { r: 18, fill: 'url(#glow)' }, orb); st.el('circle', { r: 8, fill: P.cream, filter: 'url(#bloom)' }, orb);
-    st.el('text', Object.assign({ x: 14, y: -12, fill: '#ffffff', text: res }, font(13)), orb);
-    gsap.set(orb, { x: mx, y: my });
-    const below = pile[pile.length - 1];
-    await gsap.to(orb, { x: CX + below._w / 2 - 20, y: yOf(pile.length - 1) + BH / 2, duration: 0.45, ease: 'power1.inOut' });
-    await gsap.to(orb, { opacity: 0, duration: 0.2 }); orb.remove();
+  await gsap.to(p, { attr: { rx: 0, ry: 0 }, duration: 0.2 }); p.remove();
+}
+/* walk from where the person is to x (in the lane dy: in front of or behind the others) */
+async function walkTo(g, x, dy, t) {
+  // the person turns towards where it goes, and at the end looks forward again
+  const k = widthK(vals.length), face = (d) => g._fig.setAttribute('transform', `scale(${d * k} 1)`);
+  face(x < gsap.getProperty(g, 'x') ? -1 : 1);
+  const tl = walk(gsap, g._fig, t);
+  await gsap.to(g, { keyframes: [{ y: FLOOR - 6 + (dy || 0), duration: 0.15 }, { x, duration: t - 0.3, ease: 'sine.inOut' }, { y: FLOOR - 6, duration: 0.15 }] });
+  stopWalk(gsap, g._fig, tl);
+  face(1);
+}
+/* the two people change places: one passes in front, the other behind */
+async function swap(i, k) {
+  const a = kids[i], b = kids[k], n = vals.length;
+  if (a) layer.appendChild(a); // a passes in front
+  await Promise.all([a && walkTo(a, slotX(k, n), 10, 1.1), b && (gsap.to(b, { opacity: 0.85, duration: 0.2 }), walkTo(b, slotX(i, n), -10, 1.1))].filter(Boolean));
+  if (b) gsap.to(b, { opacity: 1, duration: 0.2 });
+  kids[i] = b; kids[k] = a;
+}
+/* the first copy of an exchange through a third variable: the two look at each other and get ready */
+async function ready(i, k) {
+  const a = kids[i], b = kids[k];
+  await Promise.all([a, b].filter(Boolean).map((g, idx) => gsap.to(g, { keyframes: [{ y: FLOOR - 18, duration: 0.16, ease: 'power1.out' }, { y: FLOOR - 6, duration: 0.18, ease: 'bounce.out' }], delay: idx * 0.06 })));
+}
+/* a value copied from another position that was not an exchange: a copy of that person walks here */
+async function copyFrom(i, k) {
+  const old = kids[i], src = kids[k], v = vals[i];
+  if (old) gsap.to(old, { y: FLOOR + 40, opacity: 0, duration: 0.45, ease: 'power2.in', onComplete: () => old.remove() });
+  const g = kid(v); place(g, src ? gsap.getProperty(src, 'x') : slotX(k, vals.length)); gsap.set(g, { opacity: 0.55 });
+  gsap.to(g, { opacity: 1, duration: 0.6 });
+  await walkTo(g, slotX(i, vals.length), 10, 0.9);
+  kids[i] = g;
+}
+async function settle() { if (!pending) return; const p = pending; pending = null; await copyFrom(p.i, p.k); }
+async function setAt(i, v) {
+  // the second half of an exchange: v[k] receives the old value of v[i]
+  if (pending) {
+    // the partner is the position that had the copied value (with repeated values it is not always the first one found)
+    if (i !== pending.i && v === pending.old && vals[i] === vals[pending.i]) { const p = pending; pending = null; vals[i] = v; await swap(p.i, i); return; }
+    await settle();
   }
+  // where the value comes from: among the positions with the same value, the nearest one
+  let k = -1;
+  vals.forEach((x, idx) => { if (idx !== i && x === v && x != null && (k < 0 || Math.abs(idx - i) < Math.abs(k - i))) k = idx; });
+  const old = vals[i];
+  vals[i] = v;
+  if (v == null) { await portal(kids[i], i); kids[i] = null; return; }
+  // a copy of another value of the row: perhaps the start of an exchange, it is decided at the next change
+  // (an element still at 0, the initial value of an array, is being filled: it is not the start of an exchange)
+  if (k >= 0 && kids[i] && old != null && old !== 0) { pending = { i, k, old }; await ready(i, k); return; }
+  const prev = kids[i];
+  if (prev) await portal(prev, i);
+  kids[i] = await lantern(i, v);
 }
-async function toK(k) {
-  // a deeper call (a new block), or the return to a call already on the tower
-  const at = pile.findIndex((g) => g._k === k);
-  if (at >= 0 && at < pile.length - 1) { while (pile.length - 1 > at) await pop(); return; }
-  if (at < 0) await push(k);
-}
-async function finish() {
-  while (pile.length) await pop();
-  if (n == null || last == null) return;
-  st.clear(finale);
-  const o = st.el('g', {}, finale); gsap.set(o, { x: CX, y: 230 });
-  const m = medal(st, finale, 50, String(last), '#ffb84d'); gsap.set(m, { x: CX, y: 230 });
-  st.el('ellipse', { rx: 92, ry: 26, fill: 'none', stroke: '#ffffff', 'stroke-width': 1.5, transform: 'rotate(-18)' }, o);
-  st.el('ellipse', { rx: 84, ry: 22, fill: 'none', stroke: '#ffffff', 'stroke-width': 1.2, transform: 'rotate(30)' }, o);
-  pill(st, finale, CX, 318, `${n}! = ${last}`, 20, 'middle');
-  setPill(head, 'La torre delle chiamate');
-  gsap.to(o, { rotation: 360, transformOrigin: '50% 50%', duration: 16, repeat: -1, ease: 'none' });
-  await gsap.fromTo(finale, { opacity: 0, scale: 0.6, svgOrigin: `${CX} 260` }, { opacity: 1, scale: 1, duration: 0.6, ease: 'back.out(1.8)' });
+async function spot(j) {
+  const n = vals.length;
+  if (j == null || j < 0 || j + 1 >= n) { await gsap.to(light, { opacity: 0, duration: 0.2 }); return; }
+  const [e1, e2] = light.querySelectorAll('ellipse');
+  gsap.to(e1, { attr: { cx: slotX(j, n) }, duration: 0.25 });
+  gsap.to(e2, { attr: { cx: slotX(j + 1, n) }, duration: 0.25 });
+  await gsap.to(light, { opacity: 1, duration: 0.25 });
 }
 
 export default {
-  name: 'La torre delle chiamate',
-  description: 'Ogni chiamata della funzione ricorsiva è un blocco messo sulla torre con il suo valore di k; quando la chiamata finisce il blocco vola via e il suo risultato, una sfera luminosa, scende al blocco sotto.',
-  slots: {
-    k: { type: 'Integer', label: 'Il parametro della funzione ricorsiva (k)' },
-    risultato: { type: 'Integer', label: 'Il risultato della chiamata', optional: true },
-    n: { type: 'Integer', label: 'Il numero scelto (n)', optional: true },
+  name: { it: 'La fila dei ragazzi', en: 'The row of kids' },
+  description: {
+    it: "Ogni valore dell'array è una persona alta quanto il valore, sulla terrazza: arrivano appese a una lanterna, e quando due valori si scambiano (anche con una variabile di appoggio) le due persone camminano e si scambiano di posto. La luce indica le due posizioni confrontate.",
+    en: 'Each value of the array is a person as tall as the value, on a terrace: they arrive hanging from a lantern, and when two values are exchanged (also through a third variable) the two people walk and change places. The light shows the two positions compared.',
   },
-  setup(stage) { st = stage; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
-  reset(stage, values) { gsap.globalTimeline.clear(); draw(); n = values.n; if (n != null) setPill(head, `La torre delle chiamate · ${n}! = ?`); },
+  slots: {
+    fila: { type: 'Integer[]', label: { it: 'La fila (array di interi)', en: 'The row (array of integers)' } },
+    j: { type: 'Integer', label: { it: 'Posizione confrontata (j)', en: 'Position compared (j)' }, optional: true },
+  },
+  setup(stage) { st = stage; T = TEXTS[stage.lang] || TEXTS.en; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
+  reset(stage, values) { gsap.globalTimeline.clear(); draw(); if (values.fila) lineUp(values.fila); if (values.j != null) spot(values.j); },
   async update(stage, events) {
     for (const e of events) {
-      if (e.slot === 'n' && e.value != null) { n = e.value; setPill(head, `La torre delle chiamate · ${n}! = ?`); }
-      if (e.slot === 'k') { if (e.kind === 'vanish') await finish(); else if (e.value != null) await toK(e.value); }
-      if (e.slot === 'risultato' && (e.kind === 'value' || e.kind === 'appear')) await result(e.value);
+      if (e.slot === 'fila') {
+        if (e.kind === 'appear' || e.kind === 'change') lineUp(e.after);
+        else if (e.kind === 'set') await setAt(e.index, e.value);
+        else if (e.kind === 'swap') { await settle(); [vals[e.index], vals[e.index2]] = [vals[e.index2], vals[e.index]]; await swap(e.index, e.index2); }
+      } else if (e.slot === 'j') await spot(e.kind === 'vanish' ? null : e.value);
     }
   },
 };

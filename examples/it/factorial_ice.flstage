@@ -5,6 +5,13 @@ export const bindings = {"n":"Main.n","k":"Fattoriale.k","risultato":"Fattoriale
 
 import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
 
+/* the texts in the language of FlowLab (stage.lang): Italian and English; any other language takes English */
+const TEXTS = {
+  it: { title: 'LA TORRE DI GHIACCIO', fn: 'Fattoriale' },
+  en: { title: 'THE ICE TOWER', fn: 'Factorial' },
+};
+let T = TEXTS.en;
+
 let st;
 /* ---------------------------- the ice field in pixel art (the same for every stage) ---------------------------- */
 const PX = 3;                                   // one pixel of the sprites, in points of the stage
@@ -210,7 +217,7 @@ const stepY = () => Math.min(BH + TOPF + 2, 290 / Math.max(8, Number(n) || 0, pi
 const yOf = (i) => BASE - (i + 1) * stepY();
 
 function draw() {
-  head = field('LA TORRE DI GHIACCIO', { igloos: [[24, 80], [736, 80]], cubes: [[724, 396], [752, 396], [560, 400]], diamonds: [[748, 118], [30, 118]] });
+  head = field(T.title, { igloos: [[24, 80], [736, 80]], cubes: [[724, 396], [752, 396], [560, 400]], diamonds: [[748, 118], [30, 118]] });
   sprite(st.svg, IGLOO, 600, 334, 4);
   // the base of the tower
   iceBlock(st.svg, CX - 140, BASE, 280, 18, 8);
@@ -221,13 +228,13 @@ function draw() {
   snowfall();
   pile = []; last = null;
 }
-function title() { setPlaque(head, n != null ? `LA TORRE DI GHIACCIO · ${n}! = ?` : 'LA TORRE DI GHIACCIO'); }
+function title() { setPlaque(head, n != null ? `${T.title} · ${n}! = ?` : T.title); }
 /* a slab of the tower: the call with its k, and the place of its result on the right */
 function slab(k) {
   // a row of bricks of ice, narrower going up, with the name of the call on a plaque
   const g = st.el('g', {}, tower), bricks = Math.max(4, 6 - Math.floor(pile.length / 2)), w = bricks * BRICK;
   for (let b = 0; b < bricks; b++) iceBlock(g, -w / 2 + b * BRICK + 1, 0, BRICK - 2, BH, TOPF);
-  plaque(g, -w / 2 + 14, TOPF + BH / 2, `Fattoriale(${k})`, 9);
+  plaque(g, -w / 2 + 14, TOPF + BH / 2, `${T.fn}(${k})`, 9);
   const res = plaque(g, w / 2 - 24, TOPF + BH / 2, '', 10, 'middle', { fill: C.y });
   res.style.display = 'none';
   g._res = res; g._k = k; g._w = w;
@@ -278,21 +285,24 @@ async function finish() {
   if (n == null || last == null) return;
   st.clear(finale);
   const p = plaque(finale, CX, 220, `${n}! = ${last}`, 20, 'middle', { fill: C.y });
-  setPlaque(head, 'LA TORRE DI GHIACCIO');
+  setPlaque(head, T.title);
   burst(finale, CX, 220, 34);
   hop(bird, 5);
   await gsap.from(p, { y: 60, opacity: 0, duration: 0.5, ease: 'steps(6)' });
 }
 
 export default {
-  name: 'La torre di ghiaccio',
-  description: 'Un campo di ghiaccio in pixel art: ogni chiamata della funzione ricorsiva è una lastra di ghiaccio messa sulla torre con il suo valore di k; quando la chiamata finisce la lastra scivola via e il suo risultato, una palla di neve con il numero, scende alla lastra sotto.',
-  slots: {
-    k: { type: 'Integer', label: 'Il parametro della funzione ricorsiva (k)' },
-    risultato: { type: 'Integer', label: 'Il risultato della chiamata', optional: true },
-    n: { type: 'Integer', label: 'Il numero scelto (n)', optional: true },
+  name: { it: 'La torre di ghiaccio', en: 'The ice tower' },
+  description: {
+    it: 'Un campo di ghiaccio in pixel art: ogni chiamata della funzione ricorsiva è una lastra di ghiaccio messa sulla torre con il suo valore di k; quando la chiamata finisce la lastra scivola via e il suo risultato, una palla di neve con il numero, scende alla lastra sotto.',
+    en: 'An ice field in pixel art: each call of the recursive function is a slab of ice put on the tower with its value of k; when the call ends the slab slides away and its result, a snowball with the number, goes down to the slab below.',
   },
-  setup(stage) { st = stage; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
+  slots: {
+    k: { type: 'Integer', label: { it: 'Il parametro della funzione ricorsiva (k)', en: 'The parameter of the recursive function (k)' } },
+    risultato: { type: 'Integer', label: { it: 'Il risultato della chiamata', en: 'The result of the call' }, optional: true },
+    n: { type: 'Integer', label: { it: 'Il numero scelto (n)', en: 'The number chosen (n)' }, optional: true },
+  },
+  setup(stage) { st = stage; T = TEXTS[stage.lang] || TEXTS.en; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
   reset(stage, values) { gsap.globalTimeline.clear(); draw(); n = values.n; title(); },
   async update(stage, events) {
     for (const e of events) {

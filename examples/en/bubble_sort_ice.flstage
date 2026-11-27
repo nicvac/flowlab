@@ -6,6 +6,13 @@ export const bindings = {"fila":"Main.dati","j":"Ordina.j"};
 
 import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
 
+/* the texts in the language of FlowLab (stage.lang): Italian and English; any other language takes English */
+const TEXTS = {
+  it: { title: 'LA FILA DEI PINGUINI' },
+  en: { title: 'THE PENGUIN ROW' },
+};
+let T = TEXTS.en;
+
 const PX = 3;                                   // one pixel of the sprites, in points of the stage
 const BASE = 326, LANE = 50, LEFT = 92, RIGHT = 708, SIDE = 30, STEP = 8;
 const FL = { x: 14, y: 66, w: 772, h: 370 };    // the ice field
@@ -134,7 +141,7 @@ function draw() {
   const title = st.el('g', {}, world);
   const tb = st.el('rect', { x: 16, y: 10, width: 300, height: 30, fill: '#0c1440' }, title);
   const tf = st.el('rect', { x: 19, y: 13, width: 294, height: 24, fill: '#2a5ad6' }, title);
-  const tt = st.el('text', { x: 30, y: 30, fill: '#ffffff', 'font-family': FONT, 'font-size': 13, 'font-weight': 700, text: 'LA FILA DEI PINGUINI' }, title);
+  const tt = st.el('text', { x: 30, y: 30, fill: '#ffffff', 'font-family': FONT, 'font-size': 13, 'font-weight': 700, text: T.title }, title);
   const fit = () => { const w = tt.getComputedTextLength() + 28; tb.setAttribute('width', w + 6); tf.setAttribute('width', w); };
   fit(); if (document.fonts) document.fonts.ready.then(fit);
   marks = st.el('g');
@@ -305,13 +312,16 @@ function spot(j) {
 }
 
 export default {
-  name: 'La fila dei pinguini',
-  description: 'Un campo di ghiaccio in pixel art: ogni valore dell\'array è una pila di blocchi di ghiaccio su una slitta, alta quanto il valore, con il suo pinguino. Quando due valori si scambiano (anche con una variabile di appoggio) i due pinguini spingono le loro pile e si scambiano di posto; le frecce indicano le due posizioni confrontate.',
-  slots: {
-    fila: { type: 'Integer[]', label: 'La fila (array di interi)' },
-    j: { type: 'Integer', label: 'Posizione confrontata (j)', optional: true },
+  name: { it: 'La fila dei pinguini', en: 'The penguin row' },
+  description: {
+    it: "Un campo di ghiaccio in pixel art: ogni valore dell'array è una pila di blocchi di ghiaccio su una slitta, alta quanto il valore, con il suo pinguino. Quando due valori si scambiano (anche con una variabile di appoggio) i due pinguini spingono le loro pile e si scambiano di posto; le frecce indicano le due posizioni confrontate.",
+    en: 'An ice field in pixel art: each value of the array is a pile of ice blocks on a sled, as high as the value, with its penguin. When two values are exchanged (also through a third variable) the two penguins push their piles and change places; the arrows show the two positions compared.',
   },
-  setup(stage) { st = stage; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
+  slots: {
+    fila: { type: 'Integer[]', label: { it: 'La fila (array di interi)', en: 'The row (array of integers)' } },
+    j: { type: 'Integer', label: { it: 'Posizione confrontata (j)', en: 'Position compared (j)' }, optional: true },
+  },
+  setup(stage) { st = stage; T = TEXTS[stage.lang] || TEXTS.en; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
   reset(stage, values) { gsap.globalTimeline.clear(); draw(); if (values.fila) lineUp(values.fila); if (values.j != null) spot(values.j); },
   async update(stage, events) {
     for (const e of events) {

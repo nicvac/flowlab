@@ -5,6 +5,13 @@ export const bindings = {"fila":"Main.dati","j":"Ordina.j"};
 
 import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
 
+/* the texts in the language of FlowLab (stage.lang): Italian and English; any other language takes English */
+const TEXTS = {
+  it: { title: 'La fila dei ragazzi' },
+  en: { title: 'The row of kids' },
+};
+let T = TEXTS.en;
+
 /* ---------- the look: flat vector illustration (periwinkle, indigo, lavender, night arches, sunset windows) ---------- */
 const FONT = 'Atkinson Hyperlegible, Avenir Next, Segoe UI, system-ui, sans-serif';
 const P = { ink: '#3c1fd6', ink2: '#2a1296', lav: '#d9ccff', lavF: '#b498ff', lavS: '#8f6cf0', cream: '#fff2d8', text: '#22146b', mint: '#3fd0b0' };
@@ -202,7 +209,7 @@ function draw() {
   light = st.el('g', { opacity: 0 });
   for (let i = 0; i < 2; i++) st.el('ellipse', { cx: 0, cy: FLOOR - 6, rx: 30, ry: 9, fill: '#fff4c8', filter: 'url(#bloom)' }, light);
   spots = st.el('g'); layer = st.el('g');
-  pill(st, st.svg, 24, 26, 'La fila dei ragazzi', 15);
+  pill(st, st.svg, 24, 26, T.title, 15);
   kids = []; vals = []; pending = null;
   alive(gsap, st.svg);
 }
@@ -312,13 +319,16 @@ async function spot(j) {
 }
 
 export default {
-  name: 'La fila dei ragazzi',
-  description: 'Ogni valore dell\'array è una persona alta quanto il valore, sulla terrazza: arrivano appese a una lanterna, e quando due valori si scambiano (anche con una variabile di appoggio) le due persone camminano e si scambiano di posto. La luce indica le due posizioni confrontate.',
-  slots: {
-    fila: { type: 'Integer[]', label: 'La fila (array di interi)' },
-    j: { type: 'Integer', label: 'Posizione confrontata (j)', optional: true },
+  name: { it: 'La fila dei ragazzi', en: 'The row of kids' },
+  description: {
+    it: "Ogni valore dell'array è una persona alta quanto il valore, sulla terrazza: arrivano appese a una lanterna, e quando due valori si scambiano (anche con una variabile di appoggio) le due persone camminano e si scambiano di posto. La luce indica le due posizioni confrontate.",
+    en: 'Each value of the array is a person as tall as the value, on a terrace: they arrive hanging from a lantern, and when two values are exchanged (also through a third variable) the two people walk and change places. The light shows the two positions compared.',
   },
-  setup(stage) { st = stage; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
+  slots: {
+    fila: { type: 'Integer[]', label: { it: 'La fila (array di interi)', en: 'The row (array of integers)' } },
+    j: { type: 'Integer', label: { it: 'Posizione confrontata (j)', en: 'Position compared (j)' }, optional: true },
+  },
+  setup(stage) { st = stage; T = TEXTS[stage.lang] || TEXTS.en; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
   reset(stage, values) { gsap.globalTimeline.clear(); draw(); if (values.fila) lineUp(values.fila); if (values.j != null) spot(values.j); },
   async update(stage, events) {
     for (const e of events) {

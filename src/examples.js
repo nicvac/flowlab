@@ -8,7 +8,8 @@
 
 const Examples = (() => {
   const all = typeof EXAMPLES !== 'undefined' ? EXAMPLES : {};
-  const set = all[I18n.lang] || all.en || [];
-  const list = set.map((e) => ({ id: e.id, title: e.title, tags: e.tags, make: () => ModelLib.parseFprg(e.text) }));
-  return { list, get: (id) => list.find((e) => e.id === id) };
+  const lang = all[I18n.lang] ? I18n.lang : 'en', set = all[lang] || [];
+  // stages: the example names stages (it is linked to animated scenes)
+  const list = set.map((e) => ({ id: e.id, title: e.title, tags: e.tags, stages: /<flowlab-stages\b/.test(e.text), make: () => ModelLib.parseFprg(e.text) }));
+  return { list, lang, get: (id) => list.find((e) => e.id === id) };
 })();

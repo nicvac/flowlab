@@ -8,6 +8,18 @@
         <attribute name="created" value="Zmxvd2xhYjtleGFtcGxlczsyMDI2LTExLTE3IDA4OjAwOjAwIFBNOzE="/>
         <attribute name="edited" value="Zmxvd2xhYjtleGFtcGxlczsyMDI2LTExLTE3IDA4OjAwOjAwIFBNOzE="/>
     </attributes>
+    <flowlab-stages active="0" collapsed="True">
+        <stage file="factorial_ice.flstage">
+            <bind slot="n" variable="Main.n"/>
+            <bind slot="k" variable="Fattoriale.k"/>
+            <bind slot="risultato" variable="Fattoriale.risultato"/>
+        </stage>
+        <stage file="factorial.flstage">
+            <bind slot="n" variable="Main.n"/>
+            <bind slot="k" variable="Fattoriale.k"/>
+            <bind slot="risultato" variable="Fattoriale.risultato"/>
+        </stage>
+    </flowlab-stages>
     <function name="Main" type="None" variable="">
         <parameters/>
         <body>

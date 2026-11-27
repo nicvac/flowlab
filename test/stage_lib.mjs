@@ -14,11 +14,18 @@ const ok = (name, cond) => console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`);
 const con = () => page.innerText('#conOut');
 const frame = () => page.frames().find((f) => f !== page.mainFrame() && f.url() === 'about:srcdoc');
 const msg = () => page.evaluate(() => { const m = document.querySelector('.stagewin .stage-msg'); return m && !m.hidden ? m.textContent : ''; });
+/* a stage of the example (linked to it): chosen in the title bar of its window and expanded */
+async function useStage(title) {
+  await page.waitForSelector('.stagewin');
+  const i = await page.evaluate((t) => [...document.querySelectorAll('.stagewin .stage-sel option')].findIndex((o) => o.textContent === t), title);
+  await page.selectOption('.stagewin .stage-sel', String(i)); await page.waitForTimeout(100);
+  if (await page.evaluate(() => document.querySelector('.stagewin').classList.contains('min'))) await page.click('.stagewin .minbtn');
+  await page.waitForFunction((t) => FlowLab.stage.info() && FlowLab.stage.info().ready && FlowLab.stage.info().name === t, title, { timeout: 15000 });
+}
 async function open(ex, title) {
   await page.evaluate((x) => FlowLab.loadExample(x), ex); await wait(200);
   await page.evaluate(() => { const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); });
-  await page.click('#stageBtn'); await wait(100); await page.click(`#pop button:has-text("${title}")`);
-  await page.waitForFunction(() => FlowLab.stage.info() && FlowLab.stage.info().ready, null, { timeout: 15000 }); await wait(200);
+  await useStage(title); await wait(200);
   await page.locator('.stagewin .stage-speed').fill('7'); await page.locator('.stagewin .stage-speed').dispatchEvent('input');
 }
 const inputReady = () => page.waitForFunction(() => !document.querySelector('#conInput').disabled || /Fine del programma/.test(document.querySelector('#conOut').innerText), null, { timeout: 60000 });
@@ -99,6 +106,9 @@ async function guessRun(title) {
 }
 const fish = await guessRun('La pesca nel ghiaccio');
 ok('pesca nel ghiaccio: ' + fish.texts.filter((x) => /INDOVINATO|TENTATIVI/.test(x)).join(' | ') + ' ' + await msg(), fish.texts.includes('INDOVINATO!') && !(await msg()));
+const neon = await guessRun('Notte a Neon Bay');
+const board = await frame().evaluate(() => [...document.querySelectorAll('text')].map((t) => t.textContent));
+ok('Neon Bay: ' + neon.texts.filter((x) => /INDOVINATO|TENTATIVI/.test(x)).join(' | ') + ' · cartellone ' + board.filter((x) => /^\d+$/.test(x)).slice(-1) + ' ' + await msg(), neon.texts.includes('INDOVINATO!') && neon.texts.some((x) => /^TENTATIVI: \d+$/.test(x)) && !(await msg()));
 await open('gcd', 'I blocchi di Euclide');
 await page.click('#runBtn'); await inputReady();
 await page.fill('#conInput', '84'); await page.keyboard.press('Enter'); await inputReady();

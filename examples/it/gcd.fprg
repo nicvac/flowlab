@@ -8,6 +8,18 @@
         <attribute name="created" value="Zmxvd2xhYjtleGFtcGxlczsyMDI2LTExLTE3IDA4OjAwOjAwIFBNOzE="/>
         <attribute name="edited" value="Zmxvd2xhYjtleGFtcGxlczsyMDI2LTExLTE3IDA4OjAwOjAwIFBNOzE="/>
     </attributes>
+    <flowlab-stages active="0" collapsed="True">
+        <stage file="gcd_ice.flstage">
+            <bind slot="a" variable="Main.a"/>
+            <bind slot="b" variable="Main.b"/>
+            <bind slot="r" variable="Main.r"/>
+        </stage>
+        <stage file="gcd.flstage">
+            <bind slot="a" variable="Main.a"/>
+            <bind slot="b" variable="Main.b"/>
+            <bind slot="r" variable="Main.r"/>
+        </stage>
+    </flowlab-stages>
     <function name="Main" type="None" variable="">
         <parameters/>
         <body>

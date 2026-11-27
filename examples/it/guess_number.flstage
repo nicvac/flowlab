@@ -5,6 +5,13 @@ export const bindings = {"segreto":"Main.segreto","tentativo":"Main.tentativo","
 
 import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
 
+/* the texts in the language of FlowLab (stage.lang): Italian and English; any other language takes English */
+const TEXTS = {
+  it: { title: 'Il tiro al bersaglio', attempts: 'tentativi', higher: 'Più alto →', lower: '← Più basso', guessed: 'Indovinato!' },
+  en: { title: 'Darts on the number line', attempts: 'attempts', higher: 'Higher →', lower: '← Lower', guessed: 'Guessed!' },
+};
+let T = TEXTS.en;
+
 /* ---------- the look: flat vector illustration (periwinkle, indigo, lavender, night arches, sunset windows) ---------- */
 const FONT = 'Atkinson Hyperlegible, Avenir Next, Segoe UI, system-ui, sans-serif';
 const P = { ink: '#3c1fd6', ink2: '#2a1296', lav: '#d9ccff', lavF: '#b498ff', lavS: '#8f6cf0', cream: '#fff2d8', text: '#22146b', mint: '#3fd0b0' };
@@ -221,12 +228,12 @@ function draw() {
   // the person that throws the stars, on a block on the left
   const base = st.el('g', { filter: 'url(#soft)' }); block(st, base, 22, 392, 64, 24, 16);
   thrower = person(st, st.svg, 132, 0.3); gsap.set(thrower, { x: 50, y: 390 });
-  counter = pill(st, st.svg, 24, 26, 'Il tiro al bersaglio · tentativi: 0', 15);
+  counter = pill(st, st.svg, 24, 26, `${T.title} · ${T.attempts}: 0`, 15);
   lo = MIN; hi = MAX; thrown = 0;
   gsap.to(orbits, { rotation: 360, transformOrigin: '50% 50%', duration: 30, repeat: -1, ease: 'none' });
   alive(gsap, st.svg);
 }
-function count(n) { setPill(counter, `Il tiro al bersaglio · tentativi: ${n ?? 0}`); }
+function count(n) { setPill(counter, `${T.title} · ${T.attempts}: ${n ?? 0}`); }
 async function shade() {
   await Promise.all([
     gsap.to(shadeL, { attr: { width: lo > MIN ? xOf(lo) - X0 + 8 : 0 }, duration: 0.5 }),
@@ -254,13 +261,13 @@ async function shoot(v) {
   gsap.from(label, { opacity: 0, duration: 0.3 });
   if (secret == null) return;
   if (v === secret) { await reveal(x); return; }
-  if (v < secret) { lo = Math.max(lo, v + 1); setPill(hint, 'Più alto →'); } else { hi = Math.min(hi, v - 1); setPill(hint, '← Più basso'); }
+  if (v < secret) { lo = Math.max(lo, v + 1); setPill(hint, T.higher); } else { hi = Math.min(hi, v - 1); setPill(hint, T.lower); }
   gsap.fromTo(hint, { opacity: 0 }, { opacity: 1, duration: 0.3 });
   await shade();
 }
 async function reveal(x) {
   orb._t.textContent = String(secret);
-  setPill(hint, 'Indovinato!'); gsap.to(hint, { opacity: 1, duration: 0.3 });
+  setPill(hint, T.guessed); gsap.to(hint, { opacity: 1, duration: 0.3 });
   const beam = st.el('line', { x1: x, y1: LINE - 22, x2: MX, y2: MY + 50, stroke: P.cream, 'stroke-width': 4, filter: 'url(#bloom)', opacity: 0 });
   await gsap.to(beam, { opacity: 1, duration: 0.25 });
   await gsap.to(fog, { scale: 0, opacity: 0, transformOrigin: '50% 50%', duration: 0.6, ease: 'back.in(1.6)' });
@@ -274,14 +281,17 @@ async function reveal(x) {
 }
 
 export default {
-  name: 'Il tiro al bersaglio',
-  description: 'I numeri da 1 a 100 sono un ponte di blocchi; ogni tentativo è una stella cadente lanciata sul ponte. La parte dove il segreto non può più essere si oscura, e quando la stella colpisce il segreto il medaglione in alto si apre.',
-  slots: {
-    segreto: { type: 'Integer', label: 'Il numero segreto' },
-    tentativo: { type: 'Integer', label: 'Il tentativo' },
-    tentativi: { type: 'Integer', label: 'Quanti tentativi', optional: true },
+  name: { it: 'Il tiro al bersaglio', en: 'Darts on the number line' },
+  description: {
+    it: 'I numeri da 1 a 100 sono un ponte di blocchi; ogni tentativo è una stella cadente lanciata sul ponte. La parte dove il segreto non può più essere si oscura, e quando la stella colpisce il segreto il medaglione in alto si apre.',
+    en: 'The numbers from 1 to 100 are a bridge of blocks; each attempt is a shooting star thrown on the bridge. The part where the secret cannot be any more goes dark, and when the star hits the secret the medallion at the top opens.',
   },
-  setup(stage) { st = stage; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
+  slots: {
+    segreto: { type: 'Integer', label: { it: 'Il numero segreto', en: 'The secret number' } },
+    tentativo: { type: 'Integer', label: { it: 'Il tentativo', en: 'The attempt' } },
+    tentativi: { type: 'Integer', label: { it: 'Quanti tentativi', en: 'How many attempts' }, optional: true },
+  },
+  setup(stage) { st = stage; T = TEXTS[stage.lang] || TEXTS.en; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
   reset(stage, values) { gsap.globalTimeline.clear(); draw(); secret = values.segreto ?? null; count(values.tentativi || 0); },
   async update(stage, events, values) {
     // with the counter bound, a star for each attempt (also when the same number is tried again); otherwise for each new value

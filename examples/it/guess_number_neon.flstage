@@ -1,0 +1,258 @@
+// FlowLab Stage — «Notte a Neon Bay»: a coastal city at sunset in neon colours (an original theme). The numbers from 1 to
+// 100 are the street lamps of the seaside road; each attempt is the sports car that drives to that number. The part of the
+// road where the secret cannot be goes dark, a neon sign says higher or lower, and when the car stops on the secret the
+// billboard lights up with the number and fireworks go up over the sea.
+export const bindings = {"segreto":"Main.segreto","tentativo":"Main.tentativo","tentativi":"Main.tentativi"};
+
+import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
+
+/* the texts in the language of FlowLab (stage.lang): Italian and English; any other language takes English */
+const TEXTS = {
+  it: { title: 'NEON BAY', attempts: 'TENTATIVI', higher: 'PIÙ ALTO →', lower: '← PIÙ BASSO', guessed: 'INDOVINATO!' },
+  en: { title: 'NEON BAY', attempts: 'ATTEMPTS', higher: 'HIGHER →', lower: '← LOWER', guessed: 'GUESSED!' },
+};
+let T = TEXTS.en;
+
+const X0 = 90, X1 = 730, ROAD = 336, MIN = 1, MAX = 100, START = 38, EDGE = 14;
+const C = { pink: '#ff2e88', cyan: '#2ee6ff', yellow: '#ffd166', violet: '#7b2cff', night: '#14082a', ink: '#0b0418' };
+const FONT = '"Orbitron", "Segoe UI", system-ui, sans-serif', SIGN = '"Monoton", "Orbitron", system-ui, sans-serif';
+let st, lo = MIN, hi = MAX, secret = null, thrown = 0;
+let darkL, darkR, lamps = [], marks, fx, car, flip, rims, beam, hint, counter, board, boardText, boardQ;
+const xOf = (v) => X0 + ((Math.max(MIN, Math.min(MAX, v)) - MIN) * (X1 - X0)) / (MAX - MIN);
+const el = (tag, attrs, parent) => st.el(tag, attrs, parent);
+
+/* ------------------------------------ the city ------------------------------------ */
+function defs() {
+  const d = el('defs');
+  const grad = (id, stops, vertical = true) => {
+    const g = el('linearGradient', Object.assign({ id }, vertical ? { x1: 0, y1: 0, x2: 0, y2: 1 } : { x1: 0, y1: 0, x2: 1, y2: 0 }), d);
+    stops.forEach(([o, c, a]) => el('stop', { offset: o, 'stop-color': c, 'stop-opacity': a ?? 1 }, g));
+  };
+  grad('sky', [[0, '#12052e'], [0.45, '#4a0f6b'], [0.75, '#b0186f'], [1, '#ff6a3d']]);
+  grad('sun', [[0, '#ffe66d'], [0.55, '#ff8a3d'], [1, '#ff2e88']]);
+  grad('sea', [[0, '#2a0b4d'], [1, '#090316']]);
+  grad('body', [[0, '#ff5aa8'], [1, '#c4106a']]);
+  grad('beam', [[0, '#fff3b0', 0.75], [1, '#fff3b0', 0]], false);
+  grad('road', [[0, '#1d0f33'], [1, '#0d0619']]);
+  const f = (id, sd) => {
+    const fl = el('filter', { id, x: '-60%', y: '-60%', width: '220%', height: '220%' }, d);
+    el('feGaussianBlur', { stdDeviation: sd, result: 'b' }, fl);
+    const m = el('feMerge', {}, fl); el('feMergeNode', { in: 'b' }, m); el('feMergeNode', { in: 'b' }, m); el('feMergeNode', { in: 'SourceGraphic' }, m);
+  };
+  f('glow', 2.4); f('glow2', 6);
+  // the sun cut by horizontal bands, like the posters of the eighties
+  const cp = el('clipPath', { id: 'sunbands' }, d);
+  for (let i = 0; i < 12; i++) { const y = 140 + i * 10, gap = i < 5 ? 0 : (i - 4) * 1.4; el('rect', { x: 250, y, width: 300, height: 10 - gap }, cp); }
+}
+function palm(x, y, s, flipX) {
+  const g = el('g', { transform: `translate(${x} ${y}) scale(${flipX ? -s : s} ${s})` });
+  el('path', { d: 'M0 0 C 6 -40, 2 -80, 14 -120', stroke: C.ink, 'stroke-width': 9, fill: 'none', 'stroke-linecap': 'round' }, g);
+  // the crown is on the top of the trunk (14, -120) and sways around that point (its own origin)
+  const top = el('g', { transform: 'translate(14 -120)' }, g), crown = el('g', {}, top);
+  for (const [a, l] of [[-160, 62], [-125, 70], [-85, 58], [-40, 66], [-5, 60], [30, 50], [-110, 40]]) {
+    const r = (a * Math.PI) / 180, ex = Math.cos(r) * l, ey = Math.sin(r) * l;
+    el('path', { d: `M0 0 Q ${ex * 0.5} ${ey * 0.5 - 18} ${ex} ${ey + 16} Q ${ex * 0.55} ${ey * 0.5 - 6} 0 0`, fill: C.ink }, crown);
+  }
+  el('circle', { cx: 0, cy: 0, r: 5, fill: C.ink }, crown);
+  const sway = { a: -2 };
+  gsap.to(sway, { a: 3, duration: 2.6 + s, repeat: -1, yoyo: true, ease: 'sine.inOut', onUpdate: () => crown.setAttribute('transform', `rotate(${sway.a.toFixed(2)})`) });
+  return g;
+}
+function skyline() {
+  const g = el('g');
+  let x = 0, k = 7;
+  while (x < 800) {
+    k = (k * 37 + 11) % 97;
+    const w = 22 + (k % 4) * 10, h = 26 + (k % 9) * 11, top = 250 - h;
+    if (x > 250 && x < 550) { x += w; continue; } // the sun stays free
+    el('rect', { x, y: top, width: w - 2, height: h, fill: '#1a0933' }, g);
+    for (let wy = top + 6; wy < 246; wy += 9) for (let wx = x + 4; wx < x + w - 6; wx += 7) if ((wx * 7 + wy * 3 + k) % 5 === 0) el('rect', { x: wx, y: wy, width: 3, height: 4, fill: (wx + wy) % 3 ? C.cyan : C.pink, opacity: 0.85 }, g);
+    if (k % 5 === 0) el('rect', { x: x + w / 2 - 1, y: top - 14, width: 2, height: 14, fill: '#1a0933' }, g);
+    x += w;
+  }
+  return g;
+}
+function draw() {
+  st.clear();
+  const css = el('style');
+  css.textContent = '@import url("https://fonts.googleapis.com/css2?family=Monoton&family=Orbitron:wght@600;800&display=swap");';
+  defs();
+  el('rect', { x: 0, y: 0, width: 800, height: 260, fill: 'url(#sky)' });
+  // stars
+  for (let i = 0; i < 40; i++) { const s = el('circle', { cx: (i * 97) % 800, cy: (i * 53) % 120, r: i % 3 ? 0.9 : 1.6, fill: '#ffffff', opacity: 0.7 }); gsap.to(s, { opacity: 0.15, duration: 1 + (i % 5) * 0.4, repeat: -1, yoyo: true, delay: (i % 7) * 0.3 }); }
+  el('circle', { cx: 400, cy: 250, r: 112, fill: 'url(#sun)', 'clip-path': 'url(#sunbands)', filter: 'url(#glow2)' });
+  skyline();
+  // the sea with the reflection of the sun
+  el('rect', { x: 0, y: 250, width: 800, height: 62, fill: 'url(#sea)' });
+  for (let i = 0; i < 7; i++) { const w = 200 - i * 24, r = el('rect', { x: 400 - w / 2, y: 256 + i * 8, width: w, height: 2.5, rx: 1.2, fill: i % 2 ? C.pink : '#ff9a4a', opacity: 0.75 - i * 0.08 }); gsap.to(r, { x: `+=${i % 2 ? 8 : -8}`, duration: 1.6 + i * 0.2, repeat: -1, yoyo: true, ease: 'sine.inOut' }); }
+  el('line', { x1: 0, y1: 250, x2: 800, y2: 250, stroke: C.pink, 'stroke-width': 1.2, opacity: 0.8, filter: 'url(#glow)' });
+  // the promenade and the road
+  el('rect', { x: 0, y: 312, width: 800, height: 18, fill: '#2b1146' });
+  el('rect', { x: 0, y: 328, width: 800, height: 2, fill: C.cyan, filter: 'url(#glow)', opacity: 0.9 });
+  el('rect', { x: 0, y: 330, width: 800, height: 64, fill: 'url(#road)' });
+  for (let x = -10; x < 800; x += 44) el('rect', { x, y: 361, width: 24, height: 3, fill: C.yellow, opacity: 0.75 });
+  el('rect', { x: 0, y: 394, width: 800, height: 3, fill: C.pink, filter: 'url(#glow)' });
+  el('rect', { x: 0, y: 397, width: 800, height: 53, fill: C.night });
+  palm(26, 330, 1.05, false); palm(780, 330, 1.15, true); palm(735, 330, 0.75, true);
+  // the street lamps: one every ten numbers, with the number on the pavement
+  lamps = [];
+  for (let v = 0; v <= 100; v += 10) {
+    const x = xOf(Math.max(1, v)), g = el('g');
+    el('rect', { x: x - 1.5, y: 286, width: 3, height: 44, fill: '#3a1d5c' }, g);
+    el('path', { d: `M${x} 288 q 0 -8 10 -8`, stroke: '#3a1d5c', 'stroke-width': 3, fill: 'none' }, g);
+    const head = el('ellipse', { cx: x + 11, cy: 281, rx: 5, ry: 2.6, fill: C.cyan, filter: 'url(#glow)' }, g);
+    const label = el('g');
+    el('text', { x, y: 418, 'text-anchor': 'middle', fill: C.cyan, 'font-family': FONT, 'font-size': 12, 'font-weight': 600, filter: 'url(#glow)', text: String(Math.max(1, v)) }, label);
+    el('rect', { x: x - 1, y: 397, width: 2, height: 6, fill: C.cyan, opacity: 0.7 }, label);
+    lamps.push({ v: Math.max(1, v), head, label });
+  }
+  // the dark band on the numbers below the road where the secret cannot be (the road stays visible): half transparent,
+  // so the numbers under it can still be read, darker; the lamps there switch off
+  darkL = el('rect', { x: X0 - EDGE, y: 399, width: 0, height: 32, fill: '#05010c', opacity: 0.5 });
+  darkR = el('rect', { x: X1 + EDGE, y: 399, width: 0, height: 32, fill: '#05010c', opacity: 0.5 });
+  marks = el('g');
+  // the billboard of the secret, on the roof of a building on the right
+  board = el('g', { transform: 'translate(640 52)' });
+  el('rect', { x: -6, y: 70, width: 4, height: 40, fill: '#2a1146' }, board); el('rect', { x: 98, y: 70, width: 4, height: 40, fill: '#2a1146' }, board);
+  el('rect', { x: -18, y: -10, width: 132, height: 82, rx: 6, fill: '#12052a', stroke: C.pink, 'stroke-width': 2.5, filter: 'url(#glow)' }, board);
+  boardQ = el('text', { x: 48, y: 48, 'text-anchor': 'middle', fill: C.pink, 'font-family': SIGN, 'font-size': 44, filter: 'url(#glow)', text: '?' }, board);
+  gsap.to(boardQ, { opacity: 0.35, duration: 0.12, repeat: -1, yoyo: true, repeatDelay: 1.6, ease: 'steps(1)' });
+  boardText = el('text', { x: 48, y: 52, 'text-anchor': 'middle', fill: C.yellow, 'font-family': FONT, 'font-size': 46, 'font-weight': 800, filter: 'url(#glow)', opacity: 0, text: '' }, board);
+  // the title and the counter, in neon
+  el('text', { x: 24, y: 50, fill: C.pink, 'font-family': SIGN, 'font-size': 30, filter: 'url(#glow)', text: T.title });
+  counter = el('text', { x: 26, y: 76, fill: C.cyan, 'font-family': FONT, 'font-size': 13, 'font-weight': 600, filter: 'url(#glow)', text: '' });
+  hint = el('text', { x: 400, y: 108, 'text-anchor': 'middle', fill: C.yellow, 'font-family': FONT, 'font-size': 22, 'font-weight': 800, filter: 'url(#glow)', opacity: 0, text: '' });
+  buildCar();
+  fx = el('g');
+  lo = MIN; hi = MAX; thrown = 0;
+}
+
+/* ------------------------------------ the car ------------------------------------ */
+/* an original sports coupé seen from the side, looking right (long bonnet in front, on the right, the cabin set back);
+   (0, 0) is on the road between the wheels */
+function buildCar() {
+  car = el('g');
+  el('ellipse', { cx: 0, cy: 2, rx: 48, ry: 4, fill: '#000000', opacity: 0.55 }, car);
+  flip = el('g', {}, car); // turned to the left with scale(-1 1): only face() sets it
+  const tilt = el('g', {}, flip); // leaned when the car stops: only the skid sets it
+  car._tilt = tilt; car._spin = 0;
+  beam = el('path', { d: 'M48 -15 L150 -34 L150 6 Z', fill: 'url(#beam)', opacity: 0.55 }, tilt);
+  el('path', { d: 'M48 -8 L48 -18 Q46 -23 37 -24 L17 -25 Q8 -38 -8 -38 L-20 -38 Q-29 -37 -36 -27 L-44 -23 Q-48 -20 -48 -14 L-48 -8 Z', fill: 'url(#body)', stroke: C.pink, 'stroke-width': 1.2, filter: 'url(#glow)' }, tilt);
+  el('path', { d: 'M12 -26 Q5 -35 -7 -35 L-18 -35 Q-25 -34 -30 -26 Z', fill: C.cyan, opacity: 0.85, class: 'cabin' }, tilt);
+  el('rect', { x: -9, y: -35, width: 2, height: 9, fill: '#5a0d3a' }, tilt);
+  el('rect', { x: -42, y: -17, width: 86, height: 2, fill: C.yellow }, tilt);
+  el('ellipse', { cx: 46, cy: -15, rx: 3, ry: 2, fill: '#fff3b0', filter: 'url(#glow)' }, tilt);
+  el('rect', { x: -49, y: -19, width: 4, height: 5, fill: '#ff2a2a', filter: 'url(#glow)' }, tilt);
+  rims = [];
+  for (const wx of [-29, 27]) {
+    el('circle', { cx: wx, cy: -8, r: 9, fill: '#0b0418', stroke: C.pink, 'stroke-width': 1.5 }, tilt);
+    const rim = el('g', {}, tilt);
+    for (let a = 0; a < 4; a++) { const r = (a * Math.PI) / 4; el('line', { x1: wx - Math.cos(r) * 5, y1: -8 - Math.sin(r) * 5, x2: wx + Math.cos(r) * 5, y2: -8 + Math.sin(r) * 5, stroke: C.cyan, 'stroke-width': 1.6 }, rim); }
+    rims.push({ rim, wx });
+  }
+  gsap.set(car, { x: START, y: ROAD + 30 });
+  breathe();
+}
+/* the headlights breathe slowly */
+function breathe() { gsap.killTweensOf(beam); gsap.fromTo(beam, { opacity: 0.55 }, { opacity: 0.35, duration: 0.9, repeat: -1, yoyo: true, ease: 'sine.inOut' }); }
+function face(dir) { flip.setAttribute('transform', dir < 0 ? 'scale(-1 1)' : ''); }
+function smoke(x, y) {
+  for (let i = 0; i < 7; i++) {
+    const p = el('circle', { cx: 0, cy: 0, r: 4 + (i % 3) * 2, fill: '#d8c8ff', opacity: 0.55 }, fx);
+    gsap.set(p, { x, y });
+    gsap.to(p, { x: x - 30 + i * 8, y: y - 10 - (i % 3) * 6, attr: { r: 12 }, opacity: 0, duration: 0.7, ease: 'power1.out', onComplete: () => p.remove() });
+  }
+}
+/* the car drives from where it is to the number v: the wheels turn, a skid at the end */
+async function drive(v) {
+  const x = xOf(v), x0 = gsap.getProperty(car, 'x'), dir = x >= x0 ? 1 : -1, d = Math.abs(x - x0);
+  face(dir);
+  const t = Math.max(0.55, Math.min(1.3, 0.35 + d / 520));
+  // the wheels turn around their own axle (in the coordinates of the car)
+  const spin = { a: car._spin };
+  gsap.to(spin, { a: car._spin + (d / 56) * 360, duration: t, ease: 'power2.inOut', onUpdate: () => { car._spin = spin.a; rims.forEach(({ rim, wx }) => rim.setAttribute('transform', `rotate(${(spin.a % 360).toFixed(1)} ${wx} -8)`)); } });
+  // speed lines behind the car
+  const lines = el('g', {}, fx);
+  for (let i = 0; i < 4; i++) el('rect', { x: -dir * (60 + i * 14), y: -30 + i * 7, width: 26, height: 2, fill: C.cyan, opacity: 0.6 }, lines);
+  gsap.set(lines, { x: x0, y: ROAD + 30 });
+  gsap.to(lines, { x, duration: t, ease: 'power2.inOut', onComplete: () => lines.remove() });
+  await gsap.to(car, { x, duration: t, ease: 'power2.inOut' });
+  smoke(x - dir * 40, ROAD + 26);
+  // the skid: the car leans forward a moment on the front wheel (in its own coordinates)
+  const k = { a: 0 };
+  await gsap.to(k, { a: 3, duration: 0.12, yoyo: true, repeat: 1, ease: 'power1.out', onUpdate: () => car._tilt.setAttribute('transform', `rotate(${k.a.toFixed(2)} 27 0)`) });
+  car._tilt.removeAttribute('transform');
+}
+
+/* ---------------------------------- the attempts ---------------------------------- */
+function count(n) { counter.textContent = `${T.attempts}: ${n ?? 0}`; }
+async function cover() {
+  // the edges are half way between the last number excluded and the first one still possible
+  const left = lo > MIN ? (xOf(lo - 1) + xOf(lo)) / 2 : X0 - EDGE, right = hi < MAX ? (xOf(hi) + xOf(hi + 1)) / 2 : X1 + EDGE;
+  await Promise.all([
+    gsap.to(darkL, { attr: { width: left - (X0 - EDGE) }, duration: 0.5 }),
+    gsap.to(darkR, { attr: { x: right, width: X1 + EDGE - right }, duration: 0.5 }),
+  ]);
+  // the lamps where the secret cannot be switch off, and their numbers dim
+  lamps.forEach((l) => { const out = l.v < lo || l.v > hi; gsap.to(l.head, { opacity: out ? 0.12 : 1, duration: 0.3 }); gsap.to(l.label, { opacity: out ? 0.7 : 1, duration: 0.3 }); });
+}
+function sign(text) {
+  hint.textContent = text;
+  gsap.fromTo(hint, { opacity: 0 }, { opacity: 1, duration: 0.05, repeat: 3, yoyo: true, ease: 'steps(1)', onComplete: () => gsap.set(hint, { opacity: 1 }) });
+}
+async function attempt(v) {
+  await drive(v);
+  const x = xOf(v), s = String(v), w = 14 + s.length * 11, y = 302 - (thrown++ % 3) * 22;
+  const tag = el('g', {}, marks);
+  el('line', { x1: x, y1: y + 9, x2: x, y2: ROAD - 6, stroke: C.pink, 'stroke-width': 1, opacity: 0.6 }, tag);
+  el('rect', { x: x - w / 2, y: y - 9, width: w, height: 18, rx: 4, fill: '#12052a', stroke: C.pink, 'stroke-width': 1.5, filter: 'url(#glow)' }, tag);
+  el('text', { x, y: y + 5, 'text-anchor': 'middle', fill: '#ffffff', 'font-family': FONT, 'font-size': 12, 'font-weight': 600, text: s }, tag);
+  gsap.from(tag, { opacity: 0, duration: 0.25 });
+  if (secret == null) return;
+  if (v === secret) { await reveal(x); return; }
+  if (v < secret) { lo = Math.max(lo, v + 1); sign(T.higher); } else { hi = Math.min(hi, v - 1); sign(T.lower); }
+  await cover();
+}
+function firework(x, y, delay) {
+  const cols = [C.pink, C.cyan, C.yellow, '#b388ff'];
+  for (let i = 0; i < 26; i++) {
+    const a = (i / 26) * Math.PI * 2, p = el('circle', { cx: 0, cy: 0, r: 2.4, fill: cols[(i + Math.round(x)) % 4], filter: 'url(#glow)' }, fx);
+    gsap.set(p, { x, y, opacity: 0 });
+    gsap.to(p, { keyframes: [{ opacity: 1, duration: 0.01 }, { x: x + Math.cos(a) * (60 + (i % 3) * 12), y: y + Math.sin(a) * (60 + (i % 3) * 12) + 20, opacity: 0, duration: 1.3, ease: 'power2.out' }], delay, onComplete: () => p.remove() });
+  }
+}
+/* the car is on the secret: the billboard lights up with the number, fireworks over the sea */
+async function reveal(x) {
+  sign(T.guessed);
+  gsap.killTweensOf(boardQ); gsap.to(boardQ, { opacity: 0, duration: 0.2 });
+  boardText.textContent = String(secret);
+  await gsap.fromTo(boardText, { opacity: 0 }, { opacity: 1, duration: 0.06, repeat: 5, yoyo: true, ease: 'steps(1)', onComplete: () => gsap.set(boardText, { opacity: 1 }) });
+  gsap.killTweensOf(beam); gsap.fromTo(beam, { opacity: 0.4 }, { opacity: 1, duration: 0.1, repeat: 5, yoyo: true, onComplete: breathe });
+  firework(200, 90, 0); firework(420, 60, 0.35); firework(600, 110, 0.7); firework(320, 120, 1.05);
+  await gsap.to(car, { y: ROAD + 22, duration: 0.15, repeat: 3, yoyo: true, ease: 'power1.out' });
+  await st.wait(0.6);
+}
+
+export default {
+  name: { it: 'Notte a Neon Bay', en: 'Neon Bay nights' },
+  description: {
+    it: "Una città sul mare al tramonto, a colori neon: i numeri da 1 a 100 sono i lampioni del lungomare e ogni tentativo è l'auto sportiva che corre fino a quel numero. La strada dove il segreto non può più essere si spegne, un'insegna dice più alto o più basso, e quando l'auto si ferma sul segreto il cartellone si accende con il numero e partono i fuochi d'artificio.",
+    en: 'A city by the sea at sunset, in neon colours: the numbers from 1 to 100 are the street lamps of the seaside road and each attempt is the sports car driving to that number. The road where the secret cannot be any more goes dark, a sign says higher or lower, and when the car stops on the secret the billboard lights up with the number and the fireworks go up.',
+  },
+  slots: {
+    segreto: { type: 'Integer', label: { it: 'Il numero segreto', en: 'The secret number' } },
+    tentativo: { type: 'Integer', label: { it: 'Il tentativo', en: 'The attempt' } },
+    tentativi: { type: 'Integer', label: { it: 'Quanti tentativi', en: 'How many attempts' }, optional: true },
+  },
+  setup(stage) { st = stage; T = TEXTS[stage.lang] || TEXTS.en; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
+  reset(stage, values) { gsap.globalTimeline.clear(); draw(); secret = values.segreto ?? null; count(values.tentativi || 0); },
+  async update(stage, events, values) {
+    // with the counter bound, a drive for each attempt (also when the same number is tried again); otherwise for each new value
+    const counted = stage.bound.includes('tentativi');
+    for (const e of events) {
+      if (e.slot === 'segreto' && e.value != null) secret = e.value;
+      if (e.slot === 'tentativi' && e.kind !== 'vanish') { count(e.value); if (e.value > (e.old || 0) && values.tentativo != null) await attempt(values.tentativo); }
+      if (e.slot === 'tentativo' && !counted && (e.kind === 'value' || e.kind === 'appear') && e.value != null) await attempt(e.value);
+    }
+  },
+};
