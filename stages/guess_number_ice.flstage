@@ -1,0 +1,324 @@
+// FlowLab Stage — «La pesca nel ghiaccio»: an ice field in pixel art (an original theme). The numbers from 1 to 100 are a
+// row of ice slabs; each attempt is a snowball thrown by the penguin on the left. The part of the row where the secret
+// cannot be gets covered with snow, and when the snowball hits the secret the big block of ice breaks and the fish
+// frozen inside jumps out with the number.
+export const bindings = {"segreto":"Main.segreto","tentativo":"Main.tentativo","tentativi":"Main.tentativi"};
+
+import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
+
+let st;
+/* ---------------------------- the ice field in pixel art (the same for every stage) ---------------------------- */
+const PX = 3;                                   // one pixel of the sprites, in points of the stage
+const FL = { x: 14, y: 66, w: 772, h: 370 };    // the ice field
+const FONT = '"Press Start 2P", ui-monospace, Menlo, Consolas, monospace';
+const C = {
+  k: '#0c1440', n: '#1d2b7a', N: '#3a4fb8', w: '#ffffff', W: '#cfe3ff', o: '#ff9b29', O: '#d96a12', r: '#ff4a5c', R: '#b8243c',
+  i: '#123a9c', d: '#1b2f7a', c: '#a9dcf7', C: '#e9f7ff', y: '#ffd23f', Y: '#e0a21a', f: '#ff7a3d', F: '#c94f1f',
+};
+/* the penguin, 14 × 16 pixels, seen from the side looking to the right: navy, white belly, red scarf */
+const HEAD = [
+  '....kkkkk.....',
+  '...knnnnnk....',
+  '..knnNNnnnk...',
+  '..knnnnnwwk...',
+  '..knnnnwkwkk..',
+  '..knnnnwwwook.',
+  '..knnnnwwwkOk.',
+  '.krrrrrrrrk...',
+  'krRrrrrrrrRk..',
+  'kRkknnwwwwwk..',
+];
+const FRAMES = {
+  stand: [...HEAD, 'kk.knNnwwwwwk.', '...knNnwwwwwk.', '...knNnwwwwwk.', '...knnnwwwwk..', '....kkkkkkk...', '...ooo..ooo...'],
+  walk1: [...HEAD, 'kk.knNnwwwwwk.', '...knNnwwwwwk.', '...knNnwwwwwk.', '...knnnwwwwk..', '....kkkkkkk...', '..oo.....ooo..'],
+  walk2: [...HEAD, 'kk.knNnwwwwwk.', '...knNnwwwwwk.', '...knNnwwwwwk.', '...knnnwwwwk..', '....kkkkkkk...', '....ooo.oo....'],
+  hop: [...HEAD, 'kNNNnnnwwwwwk.', '.kkknnnwwwwwk.', '...knnnwwwwwk.', '...knnnwwwwk..', '....kkkkkkk...', '....oo..oo....'],
+};
+const IGLOO = [
+  '.....kkkkkk.....',
+  '...kkwwwwwwkk...',
+  '..kwwwwwwwwwwk..',
+  '.kWWWWWWWWWWWWk.',
+  '.kwwwWwwwwWwwwk.',
+  'kWWWWWWkkWWWWWWk',
+  'kwwWwwkddkwwWwwk',
+  'kWWWWkddddkWWWWk',
+  'kwwwwkddddkwwwwk',
+  'kkkkkkddddkkkkkk',
+];
+const ARROW = ['kkkkkkk', 'koooook', '.kooOk.', '..kOk..', '...k...'];
+const SNOWBALL = ['.kkk.', 'kwwWk', 'kwWWk', 'kWWWk', '.kkk.'];
+
+/* pixels of a sprite as rectangles (one per run of the same colour in a row) */
+function sprite(parent, rows, ox, oy, px) {
+  const g = st.el('g', { 'shape-rendering': 'crispEdges' }, parent), u = px || PX;
+  rows.forEach((row, y) => {
+    let x = 0;
+    while (x < row.length) {
+      const c = row[x]; let n = 1;
+      while (x + n < row.length && row[x + n] === c) n++;
+      if (c !== '.') st.el('rect', { x: ox + x * u, y: oy + y * u, width: n * u, height: u, fill: C[c] }, g);
+      x += n;
+    }
+  });
+  return g;
+}
+const pause = (t) => gsap.to({}, { duration: t });
+
+/* one block of ice in 3/4 view: the top face, the front with its shine, the outline */
+function iceBlock(parent, x, y, w, h, top) {
+  const g = st.el('g', { 'shape-rendering': 'crispEdges' }, parent);
+  st.el('rect', { x: x - 1, y: y - 1, width: w + 2, height: top + h + 2, fill: '#163e96' }, g);
+  st.el('rect', { x, y, width: w, height: top, fill: C.C }, g);
+  st.el('rect', { x, y: y + top, width: w, height: h, fill: C.c }, g);
+  st.el('rect', { x, y: y + top, width: w, height: 2, fill: '#7fc2ea' }, g);
+  st.el('rect', { x: x + 4, y: y + top + 3, width: 3, height: Math.max(2, h - 6), fill: '#ffffff' }, g);
+  st.el('rect', { x: x + 9, y: y + top + 3, width: 2, height: Math.max(2, h - 8), fill: '#ffffff', opacity: 0.7 }, g);
+  return g;
+}
+function diamond(parent, x, y) {
+  st.el('rect', { x, y, width: 22, height: 22, fill: '#0c1440' }, parent);
+  st.el('rect', { x: x + 2, y: y + 2, width: 18, height: 18, fill: '#2a5ad6' }, parent);
+  st.el('polygon', { points: `${x + 11} ${y + 5} ${x + 17} ${y + 11} ${x + 11} ${y + 17} ${x + 5} ${y + 11}`, fill: '#ffffff' }, parent);
+}
+
+/* a box of pixel text (white, navy border) that follows its text, also when the pixel font arrives; anchor: 'start' or 'middle' */
+function plaque(parent, x, y, text, size, anchor, colors) {
+  const g = st.el('g', { 'shape-rendering': 'crispEdges' }, parent), s = size || 10, col = colors || {};
+  const b = st.el('rect', { y: y - s / 2 - 7, height: s + 14, fill: col.border || '#0c1440' }, g);
+  const f = st.el('rect', { y: y - s / 2 - 5, height: s + 10, fill: col.fill || '#ffffff' }, g);
+  const t = st.el('text', { x, y: y + s / 2, fill: col.text || '#0c1440', 'font-family': FONT, 'font-size': s, 'font-weight': 700, 'text-anchor': anchor === 'middle' ? 'middle' : 'start', text: String(text) }, g);
+  g._t = t;
+  g._fit = () => {
+    const w = (t.getComputedTextLength() || String(t.textContent).length * s) + 12, x0 = anchor === 'middle' ? x - w / 2 : x - 6;
+    b.setAttribute('x', x0 - 2); b.setAttribute('width', w + 4); f.setAttribute('x', x0); f.setAttribute('width', w);
+  };
+  g._fit(); if (document.fonts) document.fonts.ready.then(g._fit);
+  return g;
+}
+function setPlaque(g, text) { g._t.textContent = String(text); g._fit(); }
+
+/* the field: wall, ice floor, snow bank with the title, the decorations (deco: igloos, cubes, diamonds as lists of [x, y]) */
+function field(title, deco) {
+  const d = Object.assign({ igloos: [[736, 80]], cubes: [[26, 396], [54, 396], [752, 396]], diamonds: [[748, 118]] }, deco || {});
+  st.clear();
+  const css = st.el('style');
+  css.textContent = '@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");';
+  const defs = st.el('defs');
+  // the floor: tiles of ice with diagonal stripes, like the old consoles
+  const pat = st.el('pattern', { id: 'ice', width: 64, height: 64, patternUnits: 'userSpaceOnUse', x: FL.x, y: FL.y }, defs);
+  for (const [tx, ty] of [[0, 0], [32, 0], [0, 32], [32, 32]]) {
+    const dark = (tx + ty) % 64 === 0;
+    st.el('rect', { x: tx, y: ty, width: 32, height: 32, fill: dark ? '#4a7fe3' : '#5389ea' }, pat);
+    st.el('polygon', { points: `${tx} ${ty + 18} ${tx + 18} ${ty} ${tx + 25} ${ty} ${tx} ${ty + 25}`, fill: '#6b9df3' }, pat);
+    st.el('polygon', { points: `${tx + 9} ${ty + 32} ${tx + 32} ${ty + 9} ${tx + 32} ${ty + 15} ${tx + 15} ${ty + 32}`, fill: '#6b9df3' }, pat);
+    st.el('rect', { x: tx, y: ty, width: 32, height: 2, fill: '#7eaaf7' }, pat);
+    st.el('rect', { x: tx, y: ty, width: 2, height: 32, fill: '#7eaaf7' }, pat);
+    st.el('rect', { x: tx + 30, y: ty, width: 2, height: 32, fill: '#2f5fc7' }, pat);
+    st.el('rect', { x: tx, y: ty + 30, width: 32, height: 2, fill: '#2f5fc7' }, pat);
+  }
+  const world = st.el('g', { 'shape-rendering': 'crispEdges' });
+  st.el('rect', { x: 0, y: 0, width: 800, height: 450, fill: '#0d2470' }, world);
+  // the wall around the field: bricks of dark ice
+  st.el('rect', { x: FL.x - 10, y: FL.y - 10, width: FL.w + 20, height: FL.h + 20, fill: '#1f4bc0' }, world);
+  for (let y = FL.y - 10, r = 0; y < FL.y + FL.h + 10; y += 10, r++) {
+    for (let x = FL.x - 10 + (r % 2) * 10; x < FL.x + FL.w + 10; x += 20) st.el('rect', { x, y, width: 2, height: 10, fill: '#163a9c' }, world);
+    st.el('rect', { x: FL.x - 10, y, width: FL.w + 20, height: 2, fill: '#163a9c' }, world);
+  }
+  st.el('rect', { x: FL.x, y: FL.y, width: FL.w, height: FL.h, fill: 'url(#ice)' }, world);
+  // a scalloped border of snow on the inside of the wall
+  for (let x = FL.x; x < FL.x + FL.w; x += 16) {
+    st.el('rect', { x: x + 2, y: FL.y, width: 12, height: 4, fill: '#ffffff' }, world);
+    st.el('rect', { x: x + 4, y: FL.y + 4, width: 8, height: 2, fill: '#cfe3ff' }, world);
+    st.el('rect', { x: x + 2, y: FL.y + FL.h - 4, width: 12, height: 4, fill: '#cfe3ff' }, world);
+  }
+  for (let y = FL.y; y < FL.y + FL.h; y += 16) {
+    st.el('rect', { x: FL.x, y: y + 2, width: 4, height: 12, fill: '#ffffff' }, world);
+    st.el('rect', { x: FL.x + FL.w - 4, y: y + 2, width: 4, height: 12, fill: '#cfe3ff' }, world);
+  }
+  // the snow bank on top, with pixel bumps
+  st.el('rect', { x: 0, y: 0, width: 800, height: 46, fill: '#eef6ff' }, world);
+  for (let x = 0, k = 0; x < 800; x += 24, k++) {
+    st.el('rect', { x, y: 44, width: 18, height: 6, fill: '#eef6ff' }, world);
+    st.el('rect', { x: x + 2, y: 50, width: 14, height: 3, fill: '#b9d3f6' }, world);
+    if (k % 4 === 1) { st.el('rect', { x: x + 4, y: 12 + (k % 3) * 8, width: 12, height: 4, fill: '#d6e8fb' }, world); st.el('rect', { x: x + 8, y: 8 + (k % 3) * 8, width: 6, height: 4, fill: '#ffffff' }, world); }
+  }
+  for (const [x, y] of d.igloos) sprite(world, IGLOO, x, y, 2.5);
+  for (const [x, y] of d.cubes) iceBlock(world, x, y, 22, 14, 6);
+  for (const [x, y] of d.diamonds) diamond(world, x, y);
+  // the title (it can change: setPlaque(head, …))
+  return plaque(world, 30, 25, title, 13, 'start', { fill: '#2a5ad6', text: '#ffffff' });
+}
+/* light snow falling over everything (call it last) */
+function snowfall() {
+  const flakes = st.el('g', { 'shape-rendering': 'crispEdges' });
+  for (let i = 0; i < 16; i++) {
+    const x = (i * 53 + 17) % 800, s = i % 3 ? 3 : 4, f = st.el('rect', { x: 0, y: 0, width: s, height: s, fill: '#ffffff', opacity: 0.85 }, flakes);
+    gsap.fromTo(f, { x, y: -10 - (i * 37) % 450 }, { x: x + 30, y: 460, duration: 9 + (i % 5) * 2, repeat: -1, ease: 'steps(60)', delay: -(i * 0.9) });
+  }
+  return flakes;
+}
+
+/* a penguin with its feet at (0, 0) of p.g; p.body flips it to look left or right */
+function penguin(parent, x, y, dir) {
+  const g = st.el('g', {}, parent), body = st.el('g', {}, g), frames = {};
+  for (const [name, rows] of Object.entries(FRAMES)) { frames[name] = sprite(body, rows, -7 * PX, -16 * PX); frames[name].style.display = name === 'stand' ? '' : 'none'; }
+  const p = { g, body, frames, wt: null };
+  gsap.set(g, { x, y }); face(p, dir || 1);
+  return p;
+}
+function frame(p, name) { for (const [k, f] of Object.entries(p.frames)) f.style.display = k === name ? '' : 'none'; }
+function face(p, dir) { p.body.setAttribute('transform', dir < 0 ? 'scale(-1 1)' : ''); }
+function walk(p, on) {
+  if (p.wt) { p.wt.kill(); p.wt = null; }
+  if (!on) { frame(p, 'stand'); return; }
+  let s = 0; frame(p, 'walk1');
+  p.wt = gsap.to({}, { duration: 0.12, repeat: -1, onRepeat: () => frame(p, (s ^= 1) ? 'walk2' : 'walk1') });
+}
+/* a hop with the flippers up (times: how many) */
+function hop(p, times, delay) {
+  return gsap.to(p.body, {
+    keyframes: [{ y: -14, duration: 0.15, ease: 'steps(3)' }, { y: 0, duration: 0.15, ease: 'steps(3)' }], repeat: (times || 1) - 1, delay: delay || 0,
+    onStart: () => frame(p, 'hop'), onComplete: () => frame(p, 'stand'),
+  });
+}
+function puff(parent, x, y, color) {
+  for (let i = 0; i < 6; i++) {
+    const p = st.el('rect', { x: -3, y: -3, width: 6, height: 6, fill: color || '#ffffff', 'shape-rendering': 'crispEdges' }, parent);
+    gsap.set(p, { x, y });
+    gsap.to(p, { x: x + (i - 2.5) * 9, y: y - 4 - (i % 2) * 6, opacity: 0, duration: 0.45, ease: 'steps(5)', onComplete: () => p.remove() });
+  }
+}
+/* pixel confetti of snow and gold from (x, y) */
+function burst(parent, x, y, n) {
+  for (let i = 0; i < (n || 24); i++) {
+    const s = 4 + (i % 3) * 2, p = st.el('rect', { x: -s / 2, y: -s / 2, width: s, height: s, fill: ['#ffffff', C.y, C.c, C.r][i % 4], 'shape-rendering': 'crispEdges' }, parent);
+    gsap.set(p, { x, y });
+    gsap.to(p, { x: x + Math.cos(i * 1.7) * (60 + (i % 5) * 24), y: y + Math.sin(i * 1.7) * (40 + (i % 4) * 18) - 20, opacity: 0, duration: 1.2, ease: 'steps(12)', onComplete: () => p.remove() });
+  }
+}
+/* a bouncing arrow pointing down at (x, y) */
+function arrowAt(parent, x, y) {
+  const a = sprite(parent, ARROW, -10.5, 0);
+  gsap.set(a, { x, y });
+  gsap.to(a, { y: y - 8, duration: 0.3, repeat: -1, yoyo: true, ease: 'steps(3)' });
+  return a;
+}
+
+const X0 = 120, X1 = 700, LINE = 330, MIN = 1, MAX = 100, MX = 410, MY = 90, MW = 180;
+const FISH = [
+  '.....kkkk....',
+  '...kkffffk.kk',
+  '..kfwkfffkkfk',
+  '.kffkkffffffk',
+  'kfffffffFfffk',
+  '.kFfffffFkkfk',
+  '..kkFFFFk..kk',
+  '....kkkk.....',
+];
+let fans = [], head, lo = MIN, hi = MAX, secret = null, snowL, snowR, cube, fish, ask, hint, marks, fx, thrower, thrown = 0, tries = 0;
+const xOf = (v) => X0 + 4 + ((Math.max(MIN, Math.min(MAX, v)) - MIN) * (X1 - X0 - 8)) / (MAX - MIN);
+
+function draw() {
+  head = field('LA PESCA NEL GHIACCIO', { igloos: [[24, 80], [736, 80]], cubes: [[26, 400], [54, 400]], diamonds: [[748, 118], [30, 118]] });
+  // the row of the numbers: ten slabs of ice, with the notches and the numbers below
+  const row = st.el('g');
+  for (let i = 0; i < 10; i++) iceBlock(row, X0 + i * 58, LINE - 8, 57, 16, 8);
+  for (let v = 0; v <= 100; v += 10) {
+    const x = xOf(Math.max(1, v));
+    st.el('rect', { x: x - 1, y: LINE + 10, width: 3, height: 6, fill: '#0c1440', 'shape-rendering': 'crispEdges' }, row);
+    st.el('text', { x, y: LINE + 40, 'text-anchor': 'middle', fill: '#ffffff', 'font-family': FONT, 'font-size': 9, text: String(Math.max(1, v)) }, row);
+  }
+  // the snow that covers the numbers already excluded
+  snowL = st.el('rect', { x: X0 - 2, y: LINE - 12, width: 0, height: 30, fill: '#f4f9ff', opacity: 0.93, 'shape-rendering': 'crispEdges' });
+  snowR = st.el('rect', { x: X1 + 2, y: LINE - 12, width: 0, height: 30, fill: '#f4f9ff', opacity: 0.93, 'shape-rendering': 'crispEdges' });
+  marks = st.el('g');
+  // the big block of ice with the fish of the secret frozen inside
+  cube = st.el('g');
+  iceBlock(cube, MX - MW / 2, MY, MW, 100, 12);
+  for (const [x, y] of [[MX - MW / 2 + 22, MY + 30], [MX + MW / 2 - 30, MY + 82], [MX + 40, MY + 26]]) st.el('rect', { x, y, width: 8, height: 3, fill: '#ffffff', 'shape-rendering': 'crispEdges' }, cube);
+  fish = sprite(cube, FISH, -32.5, -20, 5); gsap.set(fish, { x: MX, y: MY + 70, opacity: 0.3 });
+  ask = plaque(cube, MX, MY + 40, '?', 18, 'middle');
+  hint = plaque(st.svg, 524, 140, '…', 11); gsap.set(hint, { opacity: 0 });
+  // the penguin that throws the snowballs, on a block of ice on the left
+  iceBlock(st.svg, 40, LINE + 20, 52, 14, 8);
+  thrower = penguin(st.svg, 66, LINE + 24, 1);
+  // two penguins watching from the right
+  iceBlock(st.svg, 628, 214, 110, 14, 8);
+  fans = [penguin(st.svg, 660, 218, -1), penguin(st.svg, 704, 218, -1)];
+  fx = st.el('g');
+  snowfall();
+  lo = MIN; hi = MAX; thrown = 0;
+}
+function count(n) { tries = n ?? 0; setPlaque(head, `LA PESCA NEL GHIACCIO · TENTATIVI: ${tries}`); }
+async function cover() {
+  const step = { ease: 'steps(6)', duration: 0.45 };
+  await Promise.all([
+    gsap.to(snowL, Object.assign({ attr: { width: lo > MIN ? xOf(lo) - X0 - 2 : 0 } }, step)),
+    gsap.to(snowR, Object.assign({ attr: { x: hi < MAX ? xOf(hi) + 3 : X1 + 2, width: hi < MAX ? X1 - xOf(hi) - 1 : 0 } }, step)),
+  ]);
+}
+/* a snowball from the flipper of the penguin to the number on the row */
+async function shoot(v) {
+  const x = xOf(v), ball = sprite(fx, SNOWBALL, -7.5, -7.5);
+  const sx = 82, sy = LINE - 26, cx = (sx + x) / 2, cy = 120, ey = LINE - 2, o = { t: 0 };
+  frame(thrower, 'hop'); gsap.delayedCall(0.25, () => frame(thrower, 'stand'));
+  gsap.set(ball, { x: sx, y: sy });
+  await gsap.to(o, { t: 1, duration: 0.8, ease: 'power1.inOut', onUpdate: () => {
+    const t = o.t;
+    gsap.set(ball, { x: (1 - t) * (1 - t) * sx + 2 * (1 - t) * t * cx + t * t * x, y: (1 - t) * (1 - t) * sy + 2 * (1 - t) * t * cy + t * t * ey });
+  } });
+  ball.remove(); puff(fx, x, ey);
+  // a crack where it fell, and the number tried above
+  const crack = st.el('g', { 'shape-rendering': 'crispEdges' }, marks);
+  for (const [dx, dy] of [[-6, 0], [-3, 3], [0, 0], [3, 3], [6, 0]]) st.el('rect', { x: x + dx - 1.5, y: LINE - 6 + dy, width: 3, height: 3, fill: '#0c1440' }, crack);
+  const label = plaque(marks, x, LINE - 34 - (thrown++ % 3) * 24, String(v), 9, 'middle');
+  gsap.from(label, { opacity: 0, duration: 0.25 });
+  if (secret == null) return;
+  if (v === secret) { await reveal(x); return; }
+  if (v < secret) { lo = Math.max(lo, v + 1); setPlaque(hint, 'PIÙ ALTO →'); } else { hi = Math.min(hi, v - 1); setPlaque(hint, '← PIÙ BASSO'); }
+  gsap.fromTo(hint, { opacity: 0 }, { opacity: 1, duration: 0.25, ease: 'steps(3)' });
+  await cover();
+}
+/* the block of ice breaks into pieces and the fish jumps out with the number */
+async function reveal(x) {
+  setPlaque(hint, 'INDOVINATO!'); gsap.to(hint, { opacity: 1, duration: 0.2 });
+  const glow = st.el('rect', { x: x - 8, y: LINE - 10, width: 16, height: 12, fill: C.y, 'shape-rendering': 'crispEdges' }, fx);
+  await gsap.to(glow, { opacity: 0.2, duration: 0.15, repeat: 3, yoyo: true });
+  glow.remove();
+  await gsap.to(cube, { x: 4, duration: 0.05, repeat: 5, yoyo: true, ease: 'steps(1)' });
+  for (let i = 0; i < 26; i++) {
+    const s = 6 + (i % 3) * 3, p = st.el('rect', { x: -s / 2, y: -s / 2, width: s, height: s, fill: i % 2 ? C.c : C.C, stroke: '#163e96', 'stroke-width': 1, 'shape-rendering': 'crispEdges' }, fx);
+    gsap.set(p, { x: MX + ((i * 37) % MW) - MW / 2, y: MY + 10 + ((i * 23) % 80) });
+    gsap.to(p, { x: `+=${Math.cos(i) * (70 + (i % 4) * 30)}`, y: 470, rotation: 90, duration: 1 + (i % 4) * 0.15, ease: 'power1.in', onComplete: () => p.remove() });
+  }
+  gsap.set(cube, { opacity: 0 });
+  const big = st.el('g', {}, fx), f = sprite(big, FISH, -32.5, -20, 5);
+  plaque(big, 0, -48, String(secret), 20, 'middle');
+  gsap.set(big, { x: MX, y: MY + 58 }); gsap.set(f, { scaleX: -1, transformOrigin: '50% 50%' });
+  burst(fx, MX, MY + 50, 30);
+  hop(thrower, 4); fans.forEach((p, i) => hop(p, 4, 0.1 + i * 0.12));
+  await gsap.to(big, { keyframes: [{ y: MY + 6, duration: 0.35, ease: 'power2.out' }, { y: MY + 40, duration: 0.3, ease: 'power2.in' }] });
+  gsap.to(big, { y: MY + 32, duration: 0.4, repeat: -1, yoyo: true, ease: 'steps(4)' });
+}
+
+export default {
+  name: 'La pesca nel ghiaccio',
+  description: 'Un campo di ghiaccio in pixel art: i numeri da 1 a 100 sono una fila di lastre di ghiaccio, e ogni tentativo è una palla di neve lanciata dal pinguino. La parte dove il segreto non può più essere si copre di neve, e quando la palla colpisce il segreto il grande blocco di ghiaccio si rompe e il pesce salta fuori con il numero.',
+  slots: {
+    segreto: { type: 'Integer', label: 'Il numero segreto' },
+    tentativo: { type: 'Integer', label: 'Il tentativo' },
+    tentativi: { type: 'Integer', label: 'Quanti tentativi', optional: true },
+  },
+  setup(stage) { st = stage; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
+  reset(stage, values) { gsap.globalTimeline.clear(); draw(); secret = values.segreto ?? null; count(values.tentativi || 0); },
+  async update(stage, events, values) {
+    // with the counter bound, a snowball for each attempt (also when the same number is tried again); otherwise for each new value
+    const counted = stage.bound.includes('tentativi');
+    for (const e of events) {
+      if (e.slot === 'segreto' && e.value != null) secret = e.value;
+      if (e.slot === 'tentativi' && e.kind !== 'vanish') { count(e.value); if (e.value > (e.old || 0) && values.tentativo != null) await shoot(values.tentativo); }
+      if (e.slot === 'tentativo' && !counted && (e.kind === 'value' || e.kind === 'appear') && e.value != null) await shoot(e.value);
+    }
+  },
+};

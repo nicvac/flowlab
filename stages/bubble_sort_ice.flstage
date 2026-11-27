@@ -1,0 +1,325 @@
+// FlowLab Stage — «La fila dei pinguini»: an ice field in pixel art (an original theme). Each value of the array is a pile
+// of ice blocks on a sled, as high as the value, with a penguin next to it. When two values are exchanged (also through a
+// third variable: t ← v[j], v[j] ← v[j + 1], v[j + 1] ← t) the two penguins push their piles and change places, one in
+// front of the other; two arrows show the two positions compared.
+export const bindings = {"fila":"Main.dati","j":"Ordina.j"};
+
+import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
+
+const PX = 3;                                   // one pixel of the sprites, in points of the stage
+const BASE = 326, LANE = 50, LEFT = 92, RIGHT = 708, SIDE = 30, STEP = 8;
+const FL = { x: 14, y: 66, w: 772, h: 370 };    // the ice field
+const FONT = '"Press Start 2P", ui-monospace, Menlo, Consolas, monospace';
+const C = {
+  k: '#0c1440', n: '#1d2b7a', N: '#3a4fb8', w: '#ffffff', W: '#cfe3ff', o: '#ff9b29', O: '#d96a12', r: '#ff4a5c', R: '#b8243c',
+  i: '#123a9c', d: '#1b2f7a', c: '#a9dcf7', C: '#e9f7ff',
+};
+/* the penguin, 14 × 16 pixels, seen from the side looking to the right: navy, white belly, red scarf */
+const HEAD = [
+  '....kkkkk.....',
+  '...knnnnnk....',
+  '..knnNNnnnk...',
+  '..knnnnnwwk...',
+  '..knnnnwkwkk..',
+  '..knnnnwwwook.',
+  '..knnnnwwwkOk.',
+  '.krrrrrrrrk...',
+  'krRrrrrrrrRk..',
+  'kRkknnwwwwwk..',
+];
+const FRAMES = {
+  stand: [...HEAD, 'kk.knNnwwwwwk.', '...knNnwwwwwk.', '...knNnwwwwwk.', '...knnnwwwwk..', '....kkkkkkk...', '...ooo..ooo...'],
+  walk1: [...HEAD, 'kk.knNnwwwwwk.', '...knNnwwwwwk.', '...knNnwwwwwk.', '...knnnwwwwk..', '....kkkkkkk...', '..oo.....ooo..'],
+  walk2: [...HEAD, 'kk.knNnwwwwwk.', '...knNnwwwwwk.', '...knNnwwwwwk.', '...knnnwwwwk..', '....kkkkkkk...', '....ooo.oo....'],
+  hop: [...HEAD, 'kNNNnnnwwwwwk.', '.kkknnnwwwwwk.', '...knnnwwwwwk.', '...knnnwwwwk..', '....kkkkkkk...', '....oo..oo....'],
+};
+const IGLOO = [
+  '.....kkkkkk.....',
+  '...kkwwwwwwkk...',
+  '..kwwwwwwwwwwk..',
+  '.kWWWWWWWWWWWWk.',
+  '.kwwwWwwwwWwwwk.',
+  'kWWWWWWkkWWWWWWk',
+  'kwwWwwkddkwwWwwk',
+  'kWWWWkddddkWWWWk',
+  'kwwwwkddddkwwwwk',
+  'kkkkkkddddkkkkkk',
+];
+let born = 0, st, units, marks, over, flakes, kids = [], vals = [], pending = null, arrows = null, curJ = null;
+
+/* pixels of a sprite as rectangles (one per run of the same colour in a row) */
+function sprite(parent, rows, ox, oy, px) {
+  const g = st.el('g', { 'shape-rendering': 'crispEdges' }, parent), u = px || PX;
+  rows.forEach((row, y) => {
+    let x = 0;
+    while (x < row.length) {
+      const c = row[x]; let n = 1;
+      while (x + n < row.length && row[x + n] === c) n++;
+      if (c !== '.') st.el('rect', { x: ox + x * u, y: oy + y * u, width: n * u, height: u, fill: C[c] }, g);
+      x += n;
+    }
+  });
+  return g;
+}
+const blocksOf = (v) => (v == null || v <= 0 ? 0 : Math.max(1, Math.min(20, Math.round(v / 5))));
+const pileH = (v) => blocksOf(v) * STEP + 5;
+const slotX = (i, n) => LEFT + (n <= 1 ? (RIGHT - LEFT) / 2 : (i * (RIGHT - LEFT)) / (n - 1));
+const pause = (t) => gsap.to({}, { duration: t });
+
+/* one block of ice in 3/4 view: the top face, the front with its shine, the outline */
+function iceBlock(parent, x, y, w, h, top) {
+  const g = st.el('g', { 'shape-rendering': 'crispEdges' }, parent);
+  st.el('rect', { x: x - 1, y: y - 1, width: w + 2, height: top + h + 2, fill: '#163e96' }, g);
+  st.el('rect', { x, y, width: w, height: top, fill: C.C }, g);
+  st.el('rect', { x, y: y + top, width: w, height: h, fill: C.c }, g);
+  st.el('rect', { x, y: y + top, width: w, height: 2, fill: '#7fc2ea' }, g);
+  st.el('rect', { x: x + 4, y: y + top + 3, width: 3, height: Math.max(2, h - 6), fill: '#ffffff' }, g);
+  st.el('rect', { x: x + 9, y: y + top + 3, width: 2, height: Math.max(2, h - 8), fill: '#ffffff', opacity: 0.7 }, g);
+  return g;
+}
+
+/* ------------------------------------ the world ------------------------------------ */
+function draw() {
+  st.clear();
+  const css = st.el('style');
+  css.textContent = '@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");';
+  const defs = st.el('defs');
+  // the floor: tiles of ice with diagonal stripes, like the old consoles
+  const pat = st.el('pattern', { id: 'ice', width: 64, height: 64, patternUnits: 'userSpaceOnUse', x: FL.x, y: FL.y }, defs);
+  for (const [tx, ty] of [[0, 0], [32, 0], [0, 32], [32, 32]]) {
+    const dark = (tx + ty) % 64 === 0;
+    st.el('rect', { x: tx, y: ty, width: 32, height: 32, fill: dark ? '#4a7fe3' : '#5389ea' }, pat);
+    st.el('polygon', { points: `${tx} ${ty + 18} ${tx + 18} ${ty} ${tx + 25} ${ty} ${tx} ${ty + 25}`, fill: '#6b9df3' }, pat);
+    st.el('polygon', { points: `${tx + 9} ${ty + 32} ${tx + 32} ${ty + 9} ${tx + 32} ${ty + 15} ${tx + 15} ${ty + 32}`, fill: '#6b9df3' }, pat);
+    st.el('rect', { x: tx, y: ty, width: 32, height: 2, fill: '#7eaaf7' }, pat);
+    st.el('rect', { x: tx, y: ty, width: 2, height: 32, fill: '#7eaaf7' }, pat);
+    st.el('rect', { x: tx + 30, y: ty, width: 2, height: 32, fill: '#2f5fc7' }, pat);
+    st.el('rect', { x: tx, y: ty + 30, width: 32, height: 2, fill: '#2f5fc7' }, pat);
+  }
+  const world = st.el('g', { 'shape-rendering': 'crispEdges' });
+  st.el('rect', { x: 0, y: 0, width: 800, height: 450, fill: '#0d2470' }, world);
+  // the wall around the field: bricks of dark ice
+  st.el('rect', { x: FL.x - 10, y: FL.y - 10, width: FL.w + 20, height: FL.h + 20, fill: '#1f4bc0' }, world);
+  for (let y = FL.y - 10, r = 0; y < FL.y + FL.h + 10; y += 10, r++) {
+    for (let x = FL.x - 10 + (r % 2) * 10; x < FL.x + FL.w + 10; x += 20) st.el('rect', { x, y, width: 2, height: 10, fill: '#163a9c' }, world);
+    st.el('rect', { x: FL.x - 10, y, width: FL.w + 20, height: 2, fill: '#163a9c' }, world);
+  }
+  st.el('rect', { x: FL.x, y: FL.y, width: FL.w, height: FL.h, fill: 'url(#ice)' }, world);
+  // a scalloped border of snow on the inside of the wall
+  for (let x = FL.x; x < FL.x + FL.w; x += 16) {
+    st.el('rect', { x: x + 2, y: FL.y, width: 12, height: 4, fill: '#ffffff' }, world);
+    st.el('rect', { x: x + 4, y: FL.y + 4, width: 8, height: 2, fill: '#cfe3ff' }, world);
+    st.el('rect', { x: x + 2, y: FL.y + FL.h - 4, width: 12, height: 4, fill: '#cfe3ff' }, world);
+  }
+  for (let y = FL.y; y < FL.y + FL.h; y += 16) {
+    st.el('rect', { x: FL.x, y: y + 2, width: 4, height: 12, fill: '#ffffff' }, world);
+    st.el('rect', { x: FL.x + FL.w - 4, y: y + 2, width: 4, height: 12, fill: '#cfe3ff' }, world);
+  }
+  // the snow bank on top, with pixel bumps
+  st.el('rect', { x: 0, y: 0, width: 800, height: 46, fill: '#eef6ff' }, world);
+  for (let x = 0, k = 0; x < 800; x += 24, k++) {
+    st.el('rect', { x, y: 44, width: 18, height: 6, fill: '#eef6ff' }, world);
+    st.el('rect', { x: x + 2, y: 50, width: 14, height: 3, fill: '#b9d3f6' }, world);
+    if (k % 4 === 1) { st.el('rect', { x: x + 4, y: 12 + (k % 3) * 8, width: 12, height: 4, fill: '#d6e8fb' }, world); st.el('rect', { x: x + 8, y: 8 + (k % 3) * 8, width: 6, height: 4, fill: '#ffffff' }, world); }
+  }
+  // the decorations in the corners: two igloos, cubes of ice and two diamond tiles
+  sprite(world, IGLOO, 24, 80, 2.5); sprite(world, IGLOO, 736, 80, 2.5);
+  iceBlock(world, 26, 396, 22, 14, 6); iceBlock(world, 752, 396, 22, 14, 6); iceBlock(world, 54, 396, 22, 14, 6);
+  for (const [x, y] of [[30, 118], [748, 118]]) {
+    st.el('rect', { x, y, width: 22, height: 22, fill: '#0c1440' }, world);
+    st.el('rect', { x: x + 2, y: y + 2, width: 18, height: 18, fill: '#2a5ad6' }, world);
+    st.el('polygon', { points: `${x + 11} ${y + 5} ${x + 17} ${y + 11} ${x + 11} ${y + 17} ${x + 5} ${y + 11}`, fill: '#ffffff' }, world);
+  }
+  // the title, in a box that follows the text (also when the pixel font arrives)
+  const title = st.el('g', {}, world);
+  const tb = st.el('rect', { x: 16, y: 10, width: 300, height: 30, fill: '#0c1440' }, title);
+  const tf = st.el('rect', { x: 19, y: 13, width: 294, height: 24, fill: '#2a5ad6' }, title);
+  const tt = st.el('text', { x: 30, y: 30, fill: '#ffffff', 'font-family': FONT, 'font-size': 13, 'font-weight': 700, text: 'LA FILA DEI PINGUINI' }, title);
+  const fit = () => { const w = tt.getComputedTextLength() + 28; tb.setAttribute('width', w + 6); tf.setAttribute('width', w); };
+  fit(); if (document.fonts) document.fonts.ready.then(fit);
+  marks = st.el('g');
+  units = st.el('g');
+  over = st.el('g');
+  // light snow falling over everything
+  flakes = st.el('g', { 'shape-rendering': 'crispEdges' });
+  for (let i = 0; i < 16; i++) {
+    const x = (i * 53 + 17) % 800, s = i % 3 ? 3 : 4, f = st.el('rect', { x: 0, y: 0, width: s, height: s, fill: '#ffffff', opacity: 0.85 }, flakes);
+    gsap.fromTo(f, { x, y: -10 - (i * 37) % 450 }, { x: x + 30, y: 460, duration: 9 + (i % 5) * 2, repeat: -1, ease: 'steps(60)', delay: -(i * 0.9) });
+  }
+  kids = []; vals = []; pending = null; arrows = null; curJ = null;
+}
+
+/* ------------------------------ the piles and the penguins ------------------------------ */
+/* a pile of ice on a sled with the plaque of its value, and its penguin; c.g moves (x, and y for the lanes), c.peng is the
+   penguin around the pile, c.body flips it to look left or right */
+function unit(v, i) {
+  const g = st.el('g', { class: 'kid', 'data-born': born++ }, units), pile = st.el('g', { 'shape-rendering': 'crispEdges' }, g), nb = blocksOf(v), top = BASE - pileH(v);
+  const t = String(v), w = 12 + t.length * 10;
+  const plate = st.el('g', {}, pile);
+  st.el('rect', { x: -w / 2 - 2, y: top - 26, width: w + 4, height: 20, fill: '#0c1440' }, plate);
+  st.el('rect', { x: -w / 2, y: top - 24, width: w, height: 16, fill: '#ffffff' }, plate);
+  st.el('text', { x: 0, y: top - 11, 'text-anchor': 'middle', fill: '#0c1440', 'font-family': FONT, 'font-size': 10, 'font-weight': 700, text: t }, plate);
+  st.el('rect', { x: -20, y: BASE + 2, width: 40, height: 5, fill: '#0c1440', opacity: 0.3 }, pile);
+  // the sled: two runners of wood, curled at the ends
+  st.el('rect', { x: -19, y: BASE - 2, width: 38, height: 4, fill: '#7a4a22' }, pile);
+  st.el('rect', { x: -21, y: BASE - 6, width: 3, height: 6, fill: '#7a4a22' }, pile);
+  st.el('rect', { x: 18, y: BASE - 6, width: 3, height: 6, fill: '#7a4a22' }, pile);
+  st.el('rect', { x: -17, y: BASE - 5, width: 34, height: 3, fill: '#b37a3e' }, pile);
+  const blocks = [];
+  for (let b = 0; b < nb; b++) blocks.push(iceBlock(pile, -15, BASE - 5 - (b + 1) * STEP, 30, STEP, 5));
+  const peng = st.el('g', {}, g), body = st.el('g', {}, peng), frames = {};
+  for (const [name, rows] of Object.entries(FRAMES)) { frames[name] = sprite(body, rows, -7 * PX, BASE + 8 - 16 * PX); frames[name].style.display = name === 'stand' ? '' : 'none'; }
+  const c = { g, pile, plate, blocks, peng, body, frames, v, top };
+  gsap.set(g, { x: slotX(i, vals.length), y: 0 }); gsap.set(peng, { x: SIDE, y: 0 }); face(c, -1);
+  return c;
+}
+function frame(c, name) { for (const [k, f] of Object.entries(c.frames)) f.style.display = k === name ? '' : 'none'; }
+/* the sprite looks right; mirrored it looks left */
+function face(c, dir) { c.body.setAttribute('transform', dir < 0 ? 'translate(0 0) scale(-1 1)' : ''); }
+function walk(c, on) {
+  if (c.wt) { c.wt.kill(); c.wt = null; }
+  if (!on) { frame(c, 'stand'); return; }
+  let s = 0; frame(c, 'walk1');
+  c.wt = gsap.to({}, { duration: 0.12, repeat: -1, onRepeat: () => frame(c, (s ^= 1) ? 'walk2' : 'walk1') });
+}
+function puff(x, y) {
+  for (let i = 0; i < 6; i++) {
+    const p = st.el('rect', { x: -3, y: -3, width: 6, height: 6, fill: '#ffffff', 'shape-rendering': 'crispEdges' }, marks);
+    gsap.set(p, { x, y });
+    gsap.to(p, { x: x + (i - 2.5) * 9, y: y - 4 - (i % 2) * 6, opacity: 0, duration: 0.45, ease: 'steps(5)', onComplete: () => p.remove() });
+  }
+}
+/* the penguin walks around the front of its pile, to the side sx */
+function around(c, sx) {
+  if (gsap.getProperty(c.peng, 'x') === sx) return pause(0.36);
+  face(c, sx < 0 ? -1 : 1);
+  return gsap.to(c.peng, { keyframes: [{ x: 0, y: 22, duration: 0.18, ease: 'none' }, { x: sx, y: 0, duration: 0.18, ease: 'none' }] });
+}
+/* the penguin pushes its pile to x: it goes behind the pile, moves to its lane, slides along, comes back to the line */
+async function push(c, x, lane) {
+  const x0 = gsap.getProperty(c.g, 'x'), dir = x >= x0 ? 1 : -1, d = Math.abs(x - x0), m = Math.min(26, d / 2);
+  walk(c, true);
+  await around(c, -dir * SIDE);
+  face(c, dir);
+  await gsap.to(c.g, { keyframes: [
+    { x: x0 + dir * m, y: lane, duration: 0.3, ease: 'none' },
+    { x: x - dir * m, duration: 0.2 + d / 360, ease: 'none' },
+    { x, y: 0, duration: 0.3, ease: 'none' },
+  ] });
+  puff(x + dir * 22, BASE + 2);
+  await around(c, SIDE);
+  walk(c, false); face(c, -1);
+}
+function lineUp(arr) {
+  st.clear(units); st.clear(marks); st.clear(over); arrows = null; born = 0;
+  vals = (arr || []).slice(); pending = null;
+  vals.forEach((_, i) => st.el('text', { x: slotX(i, vals.length), y: BASE + 40, 'text-anchor': 'middle', fill: '#ffffff', 'font-family': FONT, 'font-size': 9, text: `[${i}]` }, marks));
+  kids = vals.map((v, i) => (v == null ? null : unit(v, i)));
+}
+
+/* ---------------------------------- the changes ---------------------------------- */
+/* a new value: the blocks fall one on the other on the sled, then the penguin waddles in */
+async function arrive(i, v) {
+  const c = unit(v, i);
+  gsap.set(c.plate, { opacity: 0 }); gsap.set(c.peng, { y: 90, opacity: 0 });
+  await Promise.all(c.blocks.map((b, n) => gsap.from(b, { y: -260, duration: 0.3, delay: n * 0.04, ease: 'steps(6)' })));
+  gsap.to(c.plate, { opacity: 1, duration: 0.2 });
+  walk(c, true); face(c, -1);
+  await gsap.to(c.peng, { y: 0, opacity: 1, duration: 0.35, ease: 'none' });
+  walk(c, false); face(c, -1);
+  return c;
+}
+/* a value that goes away: the penguin pushes its pile out of the field, downwards */
+async function leave(c) {
+  if (!c) return;
+  walk(c, true);
+  await gsap.to(c.g, { y: 150, opacity: 0, duration: 0.5, ease: 'power1.in' });
+  if (c.wt) c.wt.kill();
+  c.g.remove();
+}
+/* the exchange: the two penguins push their piles and change places, the one going right passes in front */
+async function swap(i, k) {
+  hideArrows();
+  const a = kids[i], b = kids[k], n = vals.length, xa = slotX(k, n), xb = slotX(i, n);
+  const moves = [[a, xa], [b, xb]].filter((m) => m[0]);
+  for (const [c, x] of moves) { if (x > gsap.getProperty(c.g, 'x')) units.appendChild(c.g); else units.insertBefore(c.g, units.firstChild); }
+  await Promise.all(moves.map(([c, x]) => push(c, x, x > gsap.getProperty(c.g, 'x') ? LANE : -LANE)));
+  kids[i] = b; kids[k] = a;
+  spot(curJ);
+}
+/* the first copy of an exchange through a third variable: the two penguins hop with the flippers up, ready */
+async function ready(i, k) {
+  await Promise.all([kids[i], kids[k]].filter(Boolean).map((c, n) => gsap.to(c.peng, {
+    keyframes: [{ y: -14, duration: 0.15, ease: 'steps(3)' }, { y: 0, duration: 0.15, ease: 'steps(3)' }],
+    delay: n * 0.08, onStart: () => frame(c, 'hop'), onComplete: () => frame(c, 'stand'),
+  })));
+}
+/* a value copied from another position (not an exchange): the pile of position i goes away, a copy of the pile of k
+   comes out from behind it and is pushed here */
+async function copyFrom(i, k) {
+  hideArrows();
+  const old = kids[i], v = vals[i];
+  const c = unit(v, k);
+  units.insertBefore(c.g, units.firstChild);
+  gsap.set(c.g, { y: -LANE, opacity: 0 });
+  await Promise.all([leave(old), gsap.to(c.g, { opacity: 1, duration: 0.3 })]);
+  await push(c, slotX(i, vals.length), -LANE);
+  kids[i] = c;
+  spot(curJ);
+}
+async function settle() { if (!pending) return; const p = pending; pending = null; await copyFrom(p.i, p.k); }
+async function setAt(i, v) {
+  // the second half of an exchange: v[k] receives the old value of v[i]
+  if (pending) {
+    // the partner is the position that had the copied value (with repeated values it is not always the first one found)
+    if (i !== pending.i && v === pending.old && vals[i] === vals[pending.i]) { const p = pending; pending = null; vals[i] = v; await swap(p.i, i); return; }
+    await settle();
+  }
+  // where the value comes from: among the positions with the same value, the nearest one
+  let k = -1;
+  vals.forEach((x, idx) => { if (idx !== i && x === v && x != null && (k < 0 || Math.abs(idx - i) < Math.abs(k - i))) k = idx; });
+  const old = vals[i];
+  vals[i] = v;
+  if (v == null) { await leave(kids[i]); kids[i] = null; return; }
+  // (an element still at 0, the initial value of an array, is being filled: it is not the start of an exchange)
+  if (k >= 0 && kids[i] && old != null && old !== 0) { pending = { i, k, old }; await ready(i, k); return; }
+  if (kids[i]) await leave(kids[i]);
+  kids[i] = await arrive(i, v);
+  spot(curJ);
+}
+/* the two positions compared: two arrows that bounce above the plaques */
+/* (above the piles, and drawn again after every move, so they always stay on the tops of the piles at j and j + 1) */
+function hideArrows() { if (arrows) { arrows.remove(); arrows = null; } }
+function spot(j) {
+  hideArrows(); curJ = j;
+  const n = vals.length;
+  if (j == null || j < 0 || j + 1 >= n) return;
+  arrows = st.el("g", {}, over);
+  for (const i of [j, j + 1]) {
+    const c = kids[i]; if (!c) continue;
+    const a = sprite(arrows, ['kkkkkkk', 'koooook', '.kooOk.', '..kOk..', '...k...'], -10.5, 0);
+    a.setAttribute('class', 'arrow'); a.dataset.born = c.g.dataset.born;
+    gsap.set(a, { x: slotX(i, n), y: c.top - 48 });
+    gsap.to(a, { y: '-=8', duration: 0.3, repeat: -1, yoyo: true, ease: 'steps(3)' });
+  }
+}
+
+export default {
+  name: 'La fila dei pinguini',
+  description: 'Un campo di ghiaccio in pixel art: ogni valore dell\'array è una pila di blocchi di ghiaccio su una slitta, alta quanto il valore, con il suo pinguino. Quando due valori si scambiano (anche con una variabile di appoggio) i due pinguini spingono le loro pile e si scambiano di posto; le frecce indicano le due posizioni confrontate.',
+  slots: {
+    fila: { type: 'Integer[]', label: 'La fila (array di interi)' },
+    j: { type: 'Integer', label: 'Posizione confrontata (j)', optional: true },
+  },
+  setup(stage) { st = stage; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
+  reset(stage, values) { gsap.globalTimeline.clear(); draw(); if (values.fila) lineUp(values.fila); if (values.j != null) spot(values.j); },
+  async update(stage, events) {
+    for (const e of events) {
+      if (e.slot === 'fila') {
+        if (e.kind === 'appear' || e.kind === 'change') lineUp(e.after);
+        else if (e.kind === 'set') await setAt(e.index, e.value);
+        else if (e.kind === 'swap') { await settle(); [vals[e.index], vals[e.index2]] = [vals[e.index2], vals[e.index]]; await swap(e.index, e.index2); }
+      } else if (e.slot === 'j') spot(e.kind === 'vanish' ? null : e.value);
+    }
+  },
+};

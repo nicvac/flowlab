@@ -769,8 +769,8 @@ body.udragging .uml .umod { cursor: grabbing; }
 
 /* ---------- Auxiliary views ---------- */
 .zoombar .zsep { width: 1px; margin: 4px 3px; background: var(--line); }
-#viewAdd { position: relative; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px 0 6px; font-size: 12px; font-weight: 600; }
-#viewAdd svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+#viewAdd, #stageBtn { position: relative; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px 0 6px; font-size: 12px; font-weight: 600; }
+#viewAdd svg, #stageBtn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
 .auxwin { min-width: 320px; min-height: 180px; }
 .auxwin .fwin-head { padding: 3px 4px 3px 4px; gap: 4px; }
 /* grip on the left: the view can be dragged also from its top left corner */
@@ -842,3 +842,15 @@ body.mdragging, body.mdragging .uml .ubox { cursor: grabbing; }
 .uml .ubox.udrop .ubg { stroke: var(--accent); stroke-width: 2.5; }
 .uml .udropline { stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; pointer-events: none; }
 .uml { -webkit-user-select: none; user-select: none; }
+/* Stage: window with the animated scene (always detached) */
+.stagewin { min-width: 280px; min-height: 180px; }
+.stagewin .fwin-head { gap: 6px; }
+.stagewin .stage-ico svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; display: block; }
+.stagewin .stage-speedbox { display: inline-flex; align-items: center; gap: 4px; font: 600 11.5px var(--font-mono); color: var(--muted); }
+.stagewin .stage-speed { width: 84px; accent-color: var(--accent); }
+.stagewin .stage-speedval { min-width: 3.2em; text-align: right; }
+.stagewin .stage-body { position: relative; padding: 0; overflow: hidden; display: block; }
+.stagewin .stage-frame { display: block; width: 100%; height: 100%; border: 0; background: #fbfaf6; }
+.stagewin .stage-msg { position: absolute; left: 8px; right: 8px; bottom: 8px; padding: 6px 10px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); font-size: 12.5px; box-shadow: var(--shadow); }
+.stagewin .stage-msg.err { border-color: var(--err); color: var(--err); }
+.stagewin.moving .stage-frame, body.resizing .stage-frame { pointer-events: none; }

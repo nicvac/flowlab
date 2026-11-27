@@ -451,7 +451,8 @@
     if (link && link.from === 'code' && vget(V, 'sel') !== link.sel) link = null;
     const lk = link && link.from === 'code' ? link.ids : null;
     // during the cursor's trip the starting block stays lit
-    const litId = run.hold ? run.holdFrom : run.curId;
+    // during an animation of the stage the block that made it stays lit
+    const litId = run.stageHold || (run.hold ? run.holdFrom : run.curId);
     const on = run.state !== 'idle' && run.state !== 'done';
     for (const v of views) {
       if (!v.chart) continue;
@@ -2257,6 +2258,8 @@
     const prog = JSON.parse(JSON.stringify(st.prog));
     run.interp = new Interpreter(prog, env);
     run.gen = run.interp.run();
+    run.stageWait = null; run.stageNext = null; run.stageHold = null;
+    if (stageHook) stageHook.start(run.interp);
     // the Code tab, if in view, stays: it follows the running block
     if (!paneVisible('console') && !paneVisible('vars') && !paneVisible('code')) showPane('console');
     if (mode === 'run') { run.state = 'running'; setStatus('running', L('ui.running')); pump(); }
@@ -2276,16 +2279,21 @@
       break;
     }
     if (ev.type === 'stmt') {
+      const prevId = run.curId;
       run.steps++; run.curId = ev.stmt.id; run.curFrame = ev.frame;
       // path for the cursor: from the last block run in this same call
       run.trail = { from: ev.frame._last || null, to: ev.stmt.id, frame: ev.frame, branch: ev.frame._branch || null, step: run.steps, exc: ev.exc || null };
       ev.frame._last = ev.stmt.id;
       if (!run.mainFrame) run.mainFrame = ev.frame;
+      // Stage (only if a stage is open): the changes of its variables become an animation, and the program waits for it
+      if (stageHook) { const p = stageHook.step(ev.frame); if (p) { const w = p.then(() => { if (run.stageWait === w) { run.stageWait = null; if (!run.stageNext) run.stageHold = null; } }); run.stageWait = w; run.stageHold = prevId; decorate(); } }
       if (run.state === 'running' && (runTo || bpMarks.size)) {
         const why = stopHere(ev);
         if (why) {
           run.state = 'paused'; run.mode = 'step';
-          showCurrent(); setStatus('paused', why);
+          // with an animation of the stage the cursor stays on the block that made it until it ends
+          if (run.stageWait) afterStage(showCurrent); else showCurrent();
+          setStatus('paused', why);
           conWrite(why, true, 'sys');
           return null;
         }
@@ -2302,14 +2310,30 @@
     return ev;
   }
 
+  /* Stage: what to do when the animation of the stage ends. Only one thing waits (the last one asked replaces the others),
+     so a run never goes on twice and the steps asked during an animation do not pile up */
+  function afterStage(fn) {
+    const tok = { fn };
+    run.stageNext = tok;
+    run.stageWait.then(() => { if (run.stageNext === tok && !run.stageWait) { run.stageNext = null; run.stageHold = null; fn(); } });
+  }
   function pump() {
     run.timer = null;
     if (run.state !== 'running') return;
+    if (run.stageWait) { afterStage(pump); return; }
     const ms = run.fast ? 0 : SPEEDS[st.speed].ms; // «Run to here»: without animation
     const t0 = performance.now();
     while (run.state === 'running') {
       const ev = advance();
       if (!ev) return;
+      // an animation of the stage: the cursor stays on the block that changed the variables until the animation ends
+      if (run.stageWait) {
+        afterStage(() => {
+          showCurrent();
+          if (run.state === 'running') { if (ms > 0) run.timer = setTimeout(pump, ms); else pump(); }
+        });
+        return;
+      }
       if (ms > 0) { showCurrent(); run.timer = setTimeout(pump, ms); return; }
       if (performance.now() - t0 > 16) {
         setStatus('running', L('ui.running'));
@@ -2322,9 +2346,18 @@
 
   function stepOnce() {
     if (run.state === 'input') return;
+    // an animation of the stage still running: the step is not taken (otherwise the steps asked meanwhile would all run
+    // together at its end, without stopping on the blocks)
+    if (run.stageWait) return;
     run.state = 'paused'; run.mode = 'step';
     const ev = advance();
-    if (ev) { showCurrent(); setStatus('paused', L('ui.stepByStepPressStepTo')); }
+    if (!ev) return;
+    // the cursor stays on the block just run while the stage animates its changes, then goes to the next one
+    if (run.stageWait) {
+      setStatus('paused', L('stage.waitingForTheAnimation'));
+      afterStage(() => { if (run.state === 'paused') { showCurrent(); setStatus('paused', L('ui.stepByStepPressStepTo')); } });
+    }
+    else { showCurrent(); setStatus('paused', L('ui.stepByStepPressStepTo')); }
   }
 
   /* Step over: runs up to the next block of the same call (or of the one that called it),
@@ -2350,11 +2383,20 @@
   function pumpOver() {
     run.timer = null;
     if (run.state !== 'running') return;
+    if (run.stageWait) { afterStage(pumpOver); return; }
     const t0 = performance.now();
     while (run.state === 'running') {
       const ev = advance();
       if (!ev) return; // end, error, input or breakpoint
-      if (ev.frame.depth <= run.overDepth) {
+      const arrived = ev.frame.depth <= run.overDepth;
+      if (run.stageWait) {
+        if (arrived) { run.state = 'paused'; run.mode = 'step'; }
+        afterStage(() => {
+          if (arrived) { showCurrent(); setStatus('paused', L('ui.stepByStepPressStepTo')); } else if (run.state === 'running') { showCurrent(); pumpOver(); }
+        });
+        return;
+      }
+      if (arrived) {
         run.state = 'paused'; run.mode = 'step';
         showCurrent(); setStatus('paused', L('ui.stepByStepPressStepTo'));
         return;
@@ -2603,6 +2645,7 @@
   function stopRun() {
     if (!isRunning()) return;
     stopTimer(); runTo = null; run.fast = false;
+    run.stageWait = null; run.stageNext = null; run.stageHold = null; if (stageHook) stageHook.stop();
     try { run.gen.return(); } catch (e) { /* ignore */ }
     flushStreams();
     run.state = 'done';
@@ -2619,7 +2662,7 @@
   }
   function onStepBtn() {
     if (run.state === 'paused') { stepOnce(); return; }
-    if (run.state === 'running') { stopTimer(); run.state = 'paused'; run.mode = 'step'; showCurrent(); setStatus('paused', L('ui.paused')); return; }
+    if (run.state === 'running') { stopTimer(); run.state = 'paused'; run.mode = 'step'; if (run.stageWait) afterStage(showCurrent); else showCurrent(); setStatus('paused', L('ui.paused')); return; }
     if (run.state === 'input') return;
     run.errId = null;
     startRun('step');
@@ -2627,7 +2670,8 @@
   function onPauseBtn() {
     if (run.state !== 'running') return;
     stopTimer(); run.state = 'paused'; run.mode = 'step';
-    showCurrent(); setStatus('paused', L('ui.paused'));
+    if (run.stageWait) afterStage(showCurrent); else showCurrent();
+    setStatus('paused', L('ui.paused'));
   }
 
   /* ---- Variables ---- */
@@ -2779,7 +2823,8 @@
     const box = $('#codeOut'); if (!box || !paneVisible('code')) return;
     const rows = box.children; if (!rows.length) return;
     const focus = codeFocus();
-    const litId = run.hold ? run.holdFrom : run.curId;
+    // during an animation of the stage the block that made it stays lit
+    const litId = run.stageHold || (run.hold ? run.holdFrom : run.curId);
     const on = run.state !== 'idle' && run.state !== 'done' && litId;
     let firstLinked = -1, firstExec = -1;
     for (let i = 0; i < rows.length; i++) {
@@ -3986,6 +4031,7 @@
       { label: L('ui.copyTheLinkToThisProgram'), key: 'Ctrl+Shift+L', do: copyShareLink },
       '-',
       { label: L('ui.importAModule'), key: 'Ctrl+I', do: moduleDialog },
+      { label: L('stage.stageMenu'), do: () => stageMenu($('#stageBtn')) },
       '-',
       { label: L('ui.exportDiagramAsSvg'), key: 'Ctrl+Shift+G', do: exportSvgFile },
       { label: L('ui.exportDiagramAsPng'), key: 'Ctrl+Shift+E', do: exportPng },
@@ -4063,6 +4109,51 @@
   }
   function exportSvgFile() { download(safeName(st.prog.attrs.name) + '_' + (isUml() ? L('ui.classes') : safeName(fname(func()))) + '.svg', exportSvg(), 'image/svg+xml'); }
   function downloadCode() { download(safeName(st.prog.attrs.name) + '.' + CodeGen.LANGS[st.lang].ext, CodeGen.generate(st.prog, st.lang), 'text/plain'); }
+  /* ---- Stage: animated scenes that follow the variables (optional module, loaded only when a stage is opened) ---- */
+  let stageHook = null, stageMod = null;
+  const STAGE_ICON = '<svg viewBox="0 0 24 24"><path d="M3 4h18M5 4v13M19 4v13M3 17h18"/><path d="M5 4c2 4 5 5 7 5s5-1 7-5"/><circle cx="9.5" cy="13" r="1.6"/><circle cx="14.5" cy="13" r="1.6"/></svg>';
+  function stageModule() {
+    if (stageMod) return stageMod;
+    // the code of the stages becomes active only now (until now it is only text in the page)
+    const sc = document.createElement('script'); sc.textContent = STAGE_SRC; document.head.append(sc); sc.remove();
+    stageMod = window.FlowLabStage({
+      L, h, M, toast, openModal, store, ICON: STAGE_ICON,
+      prog: () => st.prog, interp: () => run.interp, winHost, nextZ: () => ++zTop,
+      setHook: (x) => {
+        stageHook = x; run.stageWait = null; run.stageHold = null;
+        // a stage opened during an execution starts from the values it finds
+        if (x && isRunning() && run.interp) x.start(run.interp);
+      },
+    });
+    return stageMod;
+  }
+  function openStage(text, name) { stageModule().open(text, name); }
+  function openStageFile() {
+    const inp = h('input', { type: 'file', accept: '.flstage,.js', hidden: true });
+    inp.addEventListener('change', () => { const f = inp.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => openStage(String(r.result), f.name); r.readAsText(f); });
+    document.body.append(inp); inp.click(); setTimeout(() => inp.remove(), 60000);
+  }
+  function openStageUrl() {
+    const u = field({ key: 'surl', label: L('stage.addressOfTheStage'), type: 'plain', placeholder: 'https://…/fila.flstage' }, '');
+    openModal({ title: L('stage.openAStageFromAnAddress'), body: h('div', { class: 'fields' }, u), okText: L('ui.open'), onOk: () => {
+      const a = u._get().trim(); if (!a) return L('stage.writeTheAddress');
+      fetchText(a).then(({ text }) => openStage(text, decodeURIComponent(a.split('/').pop() || 'stage.flstage'))).catch((e) => toast(L('stage.cannotDownload', { msg: e.message }), 'error'));
+      return true;
+    } });
+  }
+  function stageMenu(btn) {
+    const r = btn.getBoundingClientRect();
+    const B = (label, fn, tag) => h('button', { type: 'button', onclick: () => { closePop(); fn(); } }, h('span', null, label), tag ? h('span', { class: 'tag' }, tag) : null);
+    const box = h('div', { class: 'ctxmenu examples' }, h('div', { class: 'pophead' }, L('stage.stage')));
+    const lang = I18n.lang === 'it' ? 'it' : 'en';
+    for (const x of STAGE_LIB) {
+      const ex = Examples.list.find((e) => e.id === x.example);
+      box.append(B(x.title[lang] || x.title.en, () => openStage(x.text, x.id + '.flstage'), ex ? L('stage.forTheExample', { name: ex.title }) : ''));
+    }
+    box.append(h('hr'), B(L('stage.openAStageFile'), openStageFile), B(L('stage.openAStageFromAnAddress'), openStageUrl));
+    if (stageMod && stageMod.isOpen()) box.append(h('hr'), B(L('stage.bindTheVariables'), () => stageMod.bindDialog()), B(L('stage.saveTheStage'), () => stageMod.save()), B(L('stage.closeTheStage'), () => stageMod.close()));
+    openPop(r.left, r.bottom + 4, box);
+  }
   function examplesMenu(btn) {
     const r = btn.getBoundingClientRect();
     const box = h('div', { class: 'ctxmenu examples' }, h('div', { class: 'pophead' }, L('ui.examplePrograms')));
@@ -4257,6 +4348,7 @@
   function bindUi() {
     $('#fileBtn').addEventListener('click', (e) => fileMenu(e.currentTarget));
     $('#exBtn').addEventListener('click', (e) => examplesMenu(e.currentTarget));
+    $('#stageBtn').addEventListener('click', (e) => stageMenu(e.currentTarget));
     $('#modBtn').addEventListener('click', moduleDialog);
     $('#modToggle').addEventListener('click', toggleAllModules);
     $('#openBtn').addEventListener('click', openFile);
@@ -4400,7 +4492,7 @@
       try { const u = new URL(location.href); u.searchParams.delete('url'); u.searchParams.delete('fprg'); history.replaceState(null, '', u.href); } catch (e) { /* ignore */ }
     });
     // minimal API for the automatic tests
-    window.FlowLab = { get state() { return st; }, run, loadText, serialize: () => M.serializeFprg(st.prog), render, setTab, submitInput, setView, showUml, showFunc, openView, get views() { return views; }, focusView, openUrl, rawUrl, loadExample: (id) => { st.dirty = false; loadExample(id); } };
+    window.FlowLab = { openStage, get stage() { return stageMod; }, get state() { return st; }, run, loadText, serialize: () => M.serializeFprg(st.prog), render, setTab, submitInput, setView, showUml, showFunc, openView, get views() { return views; }, focusView, openUrl, rawUrl, loadExample: (id) => { st.dirty = false; loadExample(id); } };
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

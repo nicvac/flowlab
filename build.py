@@ -17,6 +17,10 @@ js = 'const EXAMPLES = ' + json.dumps(exs, ensure_ascii=False).replace('</', '<\
 langs = {f.stem: json.loads(f.read_text()) for f in sorted(pathlib.Path('languages').glob('*.json'))}
 js = 'const LANGUAGES = ' + json.dumps(langs, ensure_ascii=False).replace('</', '<\\/') + ';\n' + js
 js = 'const ModuleLibrary = ' + json.dumps(lib, ensure_ascii=False).replace('</', '<\\/') + ';\n' + js
+# Stage: its code (src/stage.js) and the stages of the examples (stages/) are only text in the page, run only when a stage is opened
+stage_dir = pathlib.Path('stages')
+stage_lib = [dict(e, text=(stage_dir/(e['id'] + '.flstage')).read_text()) for e in json.loads((stage_dir/'index.json').read_text())]
+js = 'const STAGE_SRC = ' + json.dumps((src/'stage.js').read_text(), ensure_ascii=False).replace('</', '<\\/') + ';\nconst STAGE_LIB = ' + json.dumps(stage_lib, ensure_ascii=False).replace('</', '<\\/') + ';\n' + js
 assert '</script' not in js
 css = (src/'style.css').read_text()
 body = (src/'body.html').read_text()

@@ -1,0 +1,332 @@
+// FlowLab Stage — «La fila dei ragazzi»: an array of integers as a row of people on a floating terrace, each as tall as its
+// value. They arrive hanging from a glowing lantern; when two values are exchanged (also through a third variable:
+// t ← v[j], v[j] ← v[j + 1], v[j + 1] ← t) the two people walk and change places; a light shows the two positions compared.
+export const bindings = {"fila":"Main.dati","j":"Ordina.j"};
+
+import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
+
+/* ---------- the look: flat vector illustration (periwinkle, indigo, lavender, night arches, sunset windows) ---------- */
+const FONT = 'Atkinson Hyperlegible, Avenir Next, Segoe UI, system-ui, sans-serif';
+const P = { ink: '#3c1fd6', ink2: '#2a1296', lav: '#d9ccff', lavF: '#b498ff', lavS: '#8f6cf0', cream: '#fff2d8', text: '#22146b', mint: '#3fd0b0' };
+let uid = 0;
+const font = (size, weight) => ({ 'font-family': FONT, 'font-size': size, 'font-weight': weight || 700 });
+/* gradients and filters used by all the drawings */
+function defs(st) {
+  const d = st.el('defs');
+  const lin = (id, stops, x2, y2) => { const g = st.el('linearGradient', { id, x1: 0, y1: 0, x2: x2 ?? 0, y2: y2 ?? 1 }, d); stops.forEach(([o, c, op]) => st.el('stop', { offset: o, 'stop-color': c, 'stop-opacity': op ?? 1 }, g)); };
+  lin('bg', [[0, '#7280f4'], [0.6, '#98a4ff'], [1, '#bcc3ff']]);
+  lin('night', [[0, '#1c0733'], [0.65, '#4e1a5c'], [1, '#9a3f78']]);
+  lin('sunset', [[0, '#ff4f4a'], [0.5, '#ff8f57'], [1, '#ffdca0']]);
+  lin('lavTop', [[0, '#efe8ff'], [1, '#d3c2ff']]);
+  lin('lavFront', [[0, '#bca3ff'], [1, '#9b7cf3']]);
+  lin('ink', [[0, '#5a3bff'], [1, '#3011c4']]);
+  lin('warm', [[0, '#ffb36b'], [1, '#ff5d4d']], 1, 0);
+  lin('mintG', [[0, '#7ff0d2'], [1, '#22a98c']], 1, 0);
+  lin('indigoG', [[0, '#7c68ff'], [1, '#3a1ed0']], 1, 0);
+  lin('tail', [[0, '#fff6dc', 0], [1, '#fff6dc', 1]], 1, 0);
+  const r = st.el('radialGradient', { id: 'glow' }, d);
+  st.el('stop', { offset: 0, 'stop-color': '#fffaf0' }, r); st.el('stop', { offset: 0.45, 'stop-color': '#ffeec4', 'stop-opacity': 0.75 }, r); st.el('stop', { offset: 1, 'stop-color': '#ffeec4', 'stop-opacity': 0 }, r);
+  const sh = st.el('filter', { id: 'soft', x: '-30%', y: '-30%', width: '160%', height: '160%' }, d);
+  st.el('feDropShadow', { dx: 0, dy: 8, stdDeviation: 7, 'flood-color': '#24107a', 'flood-opacity': 0.28 }, sh);
+  const bl = st.el('filter', { id: 'bloom', x: '-60%', y: '-60%', width: '220%', height: '220%' }, d);
+  st.el('feGaussianBlur', { stdDeviation: 5, result: 'b' }, bl);
+  const m = st.el('feMerge', {}, bl); st.el('feMergeNode', { in: 'b' }, m); st.el('feMergeNode', { in: 'SourceGraphic' }, m);
+  return d;
+}
+/* a four-pointed star */
+const star = (st, parent, x, y, r, fill) => st.el('path', { d: `M${x} ${y - r}Q${x} ${y} ${x + r} ${y}Q${x} ${y} ${x} ${y + r}Q${x} ${y} ${x - r} ${y}Q${x} ${y} ${x} ${y - r}Z`, fill: fill || P.cream }, parent);
+/* an arched window: a night with the moon and stars, or a sunset with hills and a spiky sun */
+function arch(st, parent, x, y, w, h, kind) {
+  const id = 'arch' + (++uid), g = st.el('g', {}, parent);
+  const path = `M${x} ${y + h}V${y + w / 2}A${w / 2} ${w / 2} 0 0 1 ${x + w} ${y + w / 2}V${y + h}Z`;
+  st.el('path', { d: path, fill: '#5d6cf2', transform: 'translate(7 5)' }, g);
+  const cp = st.el('clipPath', { id }, g); st.el('path', { d: path }, cp);
+  const inner = st.el('g', { 'clip-path': `url(#${id})` }, g);
+  if (kind === 'sunset') {
+    st.el('rect', { x, y, width: w, height: h, fill: 'url(#sunset)' }, inner);
+    const cx = x + w * 0.62, cy = y + h * 0.42, n = 14; let dd = '';
+    for (let i = 0; i < n * 2; i++) { const a = (Math.PI * i) / n, rr = i % 2 ? w * 0.2 : w * 0.3; dd += `${i ? 'L' : 'M'}${cx + Math.cos(a) * rr} ${cy + Math.sin(a) * rr}`; }
+    st.el('path', { d: dd + 'Z', fill: '#fff4e2' }, inner);
+    st.el('path', { d: `M${x} ${y + h * 0.75}Q${x + w * 0.3} ${y + h * 0.6} ${x + w * 0.55} ${y + h * 0.72}T${x + w} ${y + h * 0.66}V${y + h}H${x}Z`, fill: '#ffd09a' }, inner);
+    st.el('path', { d: `M${x} ${y + h * 0.86}Q${x + w * 0.4} ${y + h * 0.74} ${x + w} ${y + h * 0.84}V${y + h}H${x}Z`, fill: '#ff9d6e' }, inner);
+  } else {
+    st.el('rect', { x, y, width: w, height: h, fill: 'url(#night)' }, inner);
+    const mx = x + w * 0.55, my = y + h * 0.36, mr = w * 0.27;
+    st.el('circle', { cx: mx, cy: my, r: mr, fill: P.cream }, inner);
+    st.el('circle', { cx: mx - mr * 0.45, cy: my - mr * 0.25, r: mr * 0.9, fill: '#2a0b40' }, inner);
+    for (let i = 0; i < 6; i++) { const s = star(st, inner, x + w * (0.15 + ((i * 37) % 70) / 100), y + h * (0.12 + ((i * 53) % 80) / 100), i % 3 ? 2 : 4); s.classList.add('twinkle'); }
+    st.el('rect', { x, y: y + h * 0.78, width: w, height: h * 0.22, fill: '#6a2a8a', opacity: 0.6 }, inner);
+  }
+  st.el('path', { d: path, fill: 'none', stroke: '#4f5ff0', 'stroke-width': 6 }, g);
+  return g;
+}
+/* isometric block: front face at (x, y) w × h, top and right side going back by d */
+function block(st, parent, x, y, w, h, d, fills) {
+  const f = fills || {}, g = st.el('g', {}, parent), k = 0.55;
+  st.el('path', { d: `M${x} ${y}l${d} ${-d * k}h${w}l${-d} ${d * k}Z`, fill: f.top || 'url(#lavTop)' }, g);
+  st.el('rect', { x, y, width: w, height: h, fill: f.front || 'url(#lavFront)' }, g);
+  st.el('path', { d: `M${x + w} ${y}l${d} ${-d * k}v${h}l${-d} ${d * k}Z`, fill: f.side || P.lavS }, g);
+  return g;
+}
+/* the room: a wall in perspective, arched windows, steps, floating lights */
+function room(st, opts) {
+  const o = opts || {}, g = st.el('g');
+  st.el('rect', { x: 0, y: 0, width: 800, height: 450, fill: 'url(#bg)' }, g);
+  st.el('path', { d: 'M0 0H330L250 450H0Z', fill: '#8090ff', opacity: 0.45 }, g);
+  st.el('path', { d: 'M520 0H800V450H600Z', fill: '#aab3ff', opacity: 0.35 }, g);
+  const vx = 400, vy = -120;
+  for (let i = -6; i <= 14; i++) st.el('line', { x1: vx, y1: vy, x2: i * 70, y2: 450, stroke: '#ffffff', 'stroke-opacity': 0.12, 'stroke-width': 1 }, g);
+  for (const a of o.arches || []) arch(st, g, ...a);
+  for (const s of o.steps || []) { const [x, y, n, dir] = s; for (let i = 0; i < n; i++) block(st, g, x + i * 26 * (dir || 1), y - i * 14, 30, 12, 10); }
+  for (let i = 0; i < (o.lights ?? 7); i++) {
+    const x = 40 + ((i * 131) % 720), y = 30 + ((i * 89) % 180), c = st.el('g', {}, g);
+    st.el('circle', { cx: x, cy: y, r: 14, fill: 'url(#glow)' }, c);
+    st.el('path', { d: `M${x - 5} ${y - 3}L${x} ${y - 6}L${x + 5} ${y - 3}V${y + 3}L${x} ${y + 6}L${x - 5} ${y + 3}Z`, fill: P.cream }, c);
+    c.classList.add('float');
+  }
+  return g;
+}
+/* the little animations that always run (stars and floating lights); they are restarted with the room */
+function alive(gsap, root) {
+  root.querySelectorAll('.twinkle').forEach((s, i) => gsap.to(s, { opacity: 0.25, duration: 1.2 + (i % 4) * 0.4, repeat: -1, yoyo: true, ease: 'sine.inOut', delay: i * 0.17 }));
+  root.querySelectorAll('.float').forEach((s, i) => gsap.to(s, { y: -8, duration: 2.2 + (i % 3) * 0.5, repeat: -1, yoyo: true, ease: 'sine.inOut', delay: i * 0.3 }));
+}
+/* a white pill with a text (titles, labels) */
+function pill(st, parent, x, y, text, size, anchor) {
+  const g = st.el('g', {}, parent);
+  const t = st.el('text', Object.assign({ x: 0, y: 0, fill: P.text, 'dominant-baseline': 'central', text }, font(size || 15)), g);
+  const w = Math.max(30, t.getComputedTextLength() + 26), hh = (size || 15) + 14;
+  const bg = st.el('rect', { x: -13, y: -hh / 2, width: w, height: hh, rx: hh / 2, fill: '#ffffff', 'fill-opacity': 0.92, filter: 'url(#soft)' }, g);
+  g.insertBefore(bg, t);
+  g.setAttribute('transform', `translate(${anchor === 'middle' ? x - w / 2 + 13 : anchor === 'end' ? x - w + 13 : x} ${y})`);
+  g._text = t; g._bg = bg;
+  return g;
+}
+function setPill(g, text) { g._text.textContent = text; const w = Math.max(30, g._text.getComputedTextLength() + 26); g._bg.setAttribute('width', w); }
+/* a round medallion with a white ring (a number inside) */
+function medal(st, parent, r, text, fill) {
+  const g = st.el('g', {}, parent);
+  st.el('circle', { r: r * 1.5, fill: 'url(#glow)', opacity: 0.8 }, g);
+  st.el('circle', { r, fill: fill || '#a9b3ff', stroke: '#ffffff', 'stroke-width': Math.max(3, r * 0.12), filter: 'url(#soft)' }, g);
+  g._t = st.el('text', Object.assign({ x: 0, y: 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: '#ffffff', text: text ?? '' }, font(Math.round(r * 0.75))), g);
+  return g;
+}
+/* a person in the style of the illustration, seen three-quarters: an oversized coat with a stand-up collar, buttons, folds
+   and a lit edge, puffy sleeves with cuffs, wide trousers, shoes, the head with a swept tuft. The origin is between the
+   feet, h is the height; tone (0..1) moves the colour between indigo and violet. Legs and arms are groups (g._parts) so
+   the person can walk (walk()) */
+function person(st, parent, h, tone, badge) {
+  const g = st.el('g', {}, parent), E = (tag, a, p) => st.el(tag, a, p || g);
+  const hue = 248 + (tone || 0) * 30, C = (l, s) => `hsl(${hue} ${s ?? 86}% ${l}%)`;
+  const coat = C(54), coatD = C(36), coatDD = C(26), coatL = C(74, 90), pants = C(32, 72), pantsD = C(22, 72), shoe = '#170857', skin = '#eae4ff', skinD = '#cfc5f5', hair = '#22108a';
+  const hr = 11 + Math.min(5, h * 0.018);
+  const legs = Math.max(16, h * 0.36), hip = -legs, sh = -(h - hr * 2 - 3), cl = hip - sh; // shoulders (sh) to hips
+  const fx = (k) => sh + cl * k;
+  E('ellipse', { cx: 3, cy: 1, rx: 22, ry: 4.5, fill: '#1c0a66', opacity: 0.22 });
+  // back leg and shoe
+  const legB = E('g');
+  E('path', { d: `M-10 ${hip}C-11 ${hip * 0.6} -12 ${hip * 0.3} -12 -5L-3 -5C-3 ${hip * 0.3} -2 ${hip * 0.6} 0 ${hip}Z`, fill: pantsD }, legB);
+  E('path', { d: `M-14 0C-14 -5 -10 -7 -6 -7H-3C2 -7 5 -4 6 0Z`, fill: shoe }, legB);
+  // back arm, behind the coat
+  const armB = E('g');
+  E('path', { d: `M-12 ${fx(0.06)}C-22 ${fx(0.25)} -25 ${fx(0.5)} -22 ${fx(0.7)}L-12 ${fx(0.72)}C-14 ${fx(0.5)} -11 ${fx(0.3)} -5 ${fx(0.12)}Z`, fill: coatDD }, armB);
+  E('path', { d: `M-23 ${fx(0.66)}L-11 ${fx(0.68)}L-12 ${fx(0.78)}L-22 ${fx(0.77)}Z`, fill: coatD }, armB);
+  E('ellipse', { cx: -17, cy: fx(0.84), rx: 4.2, ry: 5, fill: skinD }, armB);
+  // front leg: wide trousers with a fold, and the shoe pointing forward
+  const legF = E('g');
+  E('path', { d: `M-1 ${hip}C0 ${hip * 0.6} 1 ${hip * 0.3} 0 -5L11 -5C11 ${hip * 0.3} 12 ${hip * 0.6} 11 ${hip}Z`, fill: pants }, legF);
+  E('path', { d: `M5 ${hip * 0.85}C6 ${hip * 0.5} 6 ${hip * 0.3} 5 -6`, stroke: pantsD, 'stroke-width': 1.2, fill: 'none', opacity: 0.7 }, legF);
+  E('path', { d: `M-2 0C-2 -5 2 -7 6 -7H10C16 -7 20 -4 21 0Z`, fill: shoe }, legF);
+  // the coat: wide, open at the bottom, darker on the right side, with the edge lit on the left
+  const body = `M-11 ${sh + 3}C-15 ${fx(0.35)} -19 ${fx(0.75)} -22 ${hip + 12}C-8 ${hip + 18} 8 ${hip + 18} 22 ${hip + 12}C19 ${fx(0.75)} 15 ${fx(0.35)} 12 ${sh + 3}C4 ${sh - 2} -4 ${sh - 2} -11 ${sh + 3}Z`;
+  E('path', { d: body, fill: coat });
+  E('path', { d: `M3 ${sh + 1}C8 ${fx(0.4)} 10 ${fx(0.8)} 9 ${hip + 16}C14 ${hip + 15} 18 ${hip + 14} 22 ${hip + 12}C19 ${fx(0.75)} 15 ${fx(0.35)} 12 ${sh + 3}C9 ${sh + 1} 6 ${sh} 3 ${sh + 1}Z`, fill: coatD, opacity: 0.55 });
+  E('path', { d: `M-11 ${sh + 5}C-15 ${fx(0.35)} -18 ${fx(0.72)} -21 ${hip + 11}`, stroke: coatL, 'stroke-width': 1.6, fill: 'none', 'stroke-linecap': 'round', opacity: 0.9 });
+  E('path', { d: `M2 ${sh + 6}C3 ${fx(0.45)} 4 ${fx(0.8)} 4 ${hip + 16}`, stroke: coatDD, 'stroke-width': 1.4, fill: 'none', opacity: 0.8 });
+  E('path', { d: `M-8 ${fx(0.62)}C-6 ${fx(0.72)} -7 ${fx(0.82)} -10 ${fx(0.92)} M12 ${fx(0.55)}C13 ${fx(0.7)} 12 ${fx(0.8)} 14 ${fx(0.9)}`, stroke: coatDD, 'stroke-width': 1.1, fill: 'none', opacity: 0.45 });
+  for (const k of [0.12, 0.27]) E('circle', { cx: 2.2 + k * 2, cy: fx(k), r: 1.9, fill: skin });
+  // the stand-up collar
+  E('path', { d: `M-8 ${sh + 1}C-3 ${sh + 5} 6 ${sh + 5} 10 ${sh + 1}L9 ${sh - 5}C5 ${sh - 2} -3 ${sh - 2} -7 ${sh - 5}Z`, fill: coatL });
+  E('path', { d: `M-8 ${sh + 1}C-3 ${sh + 5} 6 ${sh + 5} 10 ${sh + 1}`, stroke: coatD, 'stroke-width': 1, fill: 'none' });
+  // front arm: a puffy sleeve bent forward, with folds and a cuff
+  const armF = E('g');
+  E('path', { d: `M7 ${fx(0.05)}C18 ${fx(0.18)} 25 ${fx(0.42)} 24 ${fx(0.64)}L14 ${fx(0.68)}C15 ${fx(0.48)} 11 ${fx(0.3)} 3 ${fx(0.16)}Z`, fill: coat }, armF);
+  E('path', { d: `M12 ${fx(0.22)}C16 ${fx(0.3)} 18 ${fx(0.38)} 19 ${fx(0.46)} M15 ${fx(0.4)}C18 ${fx(0.47)} 19 ${fx(0.53)} 20 ${fx(0.58)}`, stroke: coatD, 'stroke-width': 1.2, fill: 'none', opacity: 0.8 }, armF);
+  E('path', { d: `M14 ${fx(0.64)}L25 ${fx(0.6)}L25 ${fx(0.72)}L15 ${fx(0.76)}Z`, fill: coatL }, armF);
+  E('ellipse', { cx: 21, cy: fx(0.82), rx: 4.4, ry: 5.2, fill: skin }, armF);
+  // neck, head, ear and the hair with the tuft
+  E('rect', { x: -2, y: sh - 7, width: 7, height: 8, rx: 2, fill: skinD });
+  const hy = sh - hr - 4;
+  E('circle', { cx: 2, cy: hy, r: hr, fill: skin });
+  E('path', { d: `M${2 + hr * 0.15} ${hy + hr * 0.95}A${hr} ${hr} 0 0 0 ${2 + hr} ${hy + hr * 0.1}`, stroke: skinD, 'stroke-width': hr * 0.18, fill: 'none', opacity: 0.6 });
+  E('ellipse', { cx: 2 - hr * 0.55, cy: hy + hr * 0.15, rx: hr * 0.16, ry: hr * 0.24, fill: skinD });
+  E('path', { d: `M${2 - hr * 1.02} ${hy + hr * 0.25}C${2 - hr * 1.15} ${hy - hr * 0.9} ${2 + hr * 0.2} ${hy - hr * 1.35} ${2 + hr * 0.95} ${hy - hr * 0.6}C${2 + hr * 1.5} ${hy - hr * 1.25} ${2 + hr * 0.55} ${hy - hr * 1.6} ${2 + hr * 0.1} ${hy - hr * 1.3}C${2 + hr * 0.75} ${hy - hr * 0.95} ${2 + hr * 0.6} ${hy - hr * 0.35} ${2 + hr * 0.05} ${hy - hr * 0.45}C${2 - hr * 0.35} ${hy - hr * 0.5} ${2 - hr * 0.55} ${hy - hr * 0.1} ${2 - hr * 0.62} ${hy + hr * 0.3}Z`, fill: hair });
+  E('path', { d: `M${2 - hr * 0.7} ${hy - hr * 0.6}C${2 - hr * 0.3} ${hy - hr * 1.05} ${2 + hr * 0.3} ${hy - hr * 1.1} ${2 + hr * 0.7} ${hy - hr * 0.8}`, stroke: '#4c33d6', 'stroke-width': 1.3, fill: 'none', opacity: 0.8 });
+  if (badge != null) {
+    const b = E('g', { transform: `translate(-4 ${fx(0.5)})` });
+    E('circle', { r: 11.5, fill: '#ffffff' }, b);
+    E('circle', { r: 11.5, fill: 'none', stroke: coatDD, 'stroke-width': 1, opacity: 0.4 }, b);
+    E('text', Object.assign({ x: 0, y: 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: P.ink2, text: String(badge) }, font(String(badge).length > 2 ? 9 : 11)), b);
+  }
+  g._parts = { legB, legF, armB, armF };
+  return g;
+}
+/* the person walks for a while: legs and arms swing; the returned timeline is stopped with stopWalk */
+function walk(gsap, fig, seconds) {
+  const p = fig && fig._parts; if (!p) return null;
+  const n = Math.max(2, Math.round((seconds || 0.8) / 0.2));
+  const tl = gsap.timeline({ repeat: n - 1, yoyo: true });
+  tl.to(p.legF, { rotation: 16, transformOrigin: '30% 0%', duration: 0.2, ease: 'sine.inOut' }, 0)
+    .to(p.legB, { rotation: -16, transformOrigin: '70% 0%', duration: 0.2, ease: 'sine.inOut' }, 0)
+    .to(p.armF, { rotation: -14, transformOrigin: '20% 5%', duration: 0.2, ease: 'sine.inOut' }, 0)
+    .to(p.armB, { rotation: 14, transformOrigin: '80% 5%', duration: 0.2, ease: 'sine.inOut' }, 0);
+  return tl;
+}
+function stopWalk(gsap, fig, tl) {
+  if (tl) tl.kill();
+  const p = fig && fig._parts; if (p) gsap.to([p.legF, p.legB, p.armF, p.armB], { rotation: 0, duration: 0.15 });
+}
+
+const FLOOR = 352, LEFT = 84, RIGHT = 600;
+let st, layer, spots, light, kids = [], vals = [], pending = null;
+const hOf = (v) => 70 + Math.max(0, Math.min(110, Number(v) || 0)) * 1.75;
+const toneOf = (v) => ((Number(v) || 0) % 10) / 10;
+const slotX = (i, n) => LEFT + (n <= 1 ? (RIGHT - LEFT) / 2 : (i * (RIGHT - LEFT)) / (n - 1));
+const widthK = (n) => Math.min(1.1, (RIGHT - LEFT) / Math.max(1, n - 1) / 52);
+
+function draw() {
+  st.clear(); uid = 0; defs(st);
+  room(st, { arches: [[22, 70, 74, 170, 'night'], [700, 46, 72, 160, 'sunset']], steps: [[650, 440, 5, 1]], lights: 6 });
+  const terrace = st.el('g', { filter: 'url(#soft)' });
+  block(st, terrace, 36, FLOOR, 610, 30, 26);
+  light = st.el('g', { opacity: 0 });
+  for (let i = 0; i < 2; i++) st.el('ellipse', { cx: 0, cy: FLOOR - 6, rx: 30, ry: 9, fill: '#fff4c8', filter: 'url(#bloom)' }, light);
+  spots = st.el('g'); layer = st.el('g');
+  pill(st, st.svg, 24, 26, 'La fila dei ragazzi', 15);
+  kids = []; vals = []; pending = null;
+  alive(gsap, st.svg);
+}
+function drawSpots(n) {
+  st.clear(spots);
+  for (let i = 0; i < n; i++) st.el('text', Object.assign({ x: slotX(i, n), y: FLOOR + 20, 'text-anchor': 'middle', fill: '#ffffff', 'fill-opacity': 0.9, text: `[${i}]` }, font(12, 700)), spots);
+}
+/* a person of value v: g (moved around) contains the drawing, narrowed when the row is long */
+function kid(v) {
+  const g = st.el('g', { class: 'kid' }, layer);
+  const inner = person(st, g, hOf(v), toneOf(v), v);
+  inner.setAttribute('transform', `scale(${widthK(vals.length)} 1)`);
+  g._v = v; g._fig = inner;
+  return g;
+}
+const place = (g, x, y) => gsap.set(g, { x, y: y ?? FLOOR - 6 });
+function lineUp(arr) {
+  layer.querySelectorAll(':scope > g').forEach((k) => k.remove());
+  vals = (arr || []).slice(); pending = null; drawSpots(vals.length);
+  kids = vals.map((v, i) => { if (v == null) return null; const g = kid(v); place(g, slotX(i, vals.length)); return g; });
+}
+/* a person comes down hanging from a glowing lantern */
+async function lantern(i, v) {
+  const x = slotX(i, vals.length), g = kid(v), h = hOf(v);
+  const lamp = st.el('g', {}, g);
+  st.el('line', { x1: 21, y1: -h * 0.55, x2: 21, y2: -h - 34, stroke: '#ffffff', 'stroke-width': 1.5 }, lamp);
+  st.el('circle', { cx: 21, cy: -h - 46, r: 22, fill: 'url(#glow)' }, lamp);
+  st.el('circle', { cx: 21, cy: -h - 46, r: 11, fill: P.cream, filter: 'url(#bloom)' }, lamp);
+  st.el('ellipse', { cx: 21, cy: -h - 46, rx: 22, ry: 7, fill: 'none', stroke: '#ffffff', 'stroke-width': 1.2, opacity: 0.8 }, lamp);
+  place(g, x + 50, -30);
+  await gsap.to(g, { x, y: FLOOR - 6, duration: 1.1, ease: 'sine.inOut' });
+  await gsap.to(lamp, { opacity: 0, y: -20, duration: 0.3 });
+  lamp.remove();
+  return g;
+}
+/* the person goes away through a portal that opens in the terrace */
+async function portal(g, i) {
+  if (!g) return;
+  const x = slotX(i, vals.length);
+  const p = st.el('ellipse', { cx: x, cy: FLOOR - 4, rx: 0, ry: 0, fill: 'url(#night)', stroke: '#ffffff', 'stroke-width': 2 });
+  layer.parentNode.insertBefore(p, layer);
+  await gsap.to(p, { attr: { rx: 30, ry: 8 }, duration: 0.25 });
+  await gsap.to(g, { y: FLOOR + 60, opacity: 0, duration: 0.45, ease: 'power2.in' });
+  g.remove();
+  await gsap.to(p, { attr: { rx: 0, ry: 0 }, duration: 0.2 }); p.remove();
+}
+/* walk from where the person is to x (in the lane dy: in front of or behind the others) */
+async function walkTo(g, x, dy, t) {
+  // the person turns towards where it goes, and at the end looks forward again
+  const k = widthK(vals.length), face = (d) => g._fig.setAttribute('transform', `scale(${d * k} 1)`);
+  face(x < gsap.getProperty(g, 'x') ? -1 : 1);
+  const tl = walk(gsap, g._fig, t);
+  await gsap.to(g, { keyframes: [{ y: FLOOR - 6 + (dy || 0), duration: 0.15 }, { x, duration: t - 0.3, ease: 'sine.inOut' }, { y: FLOOR - 6, duration: 0.15 }] });
+  stopWalk(gsap, g._fig, tl);
+  face(1);
+}
+/* the two people change places: one passes in front, the other behind */
+async function swap(i, k) {
+  const a = kids[i], b = kids[k], n = vals.length;
+  if (a) layer.appendChild(a); // a passes in front
+  await Promise.all([a && walkTo(a, slotX(k, n), 10, 1.1), b && (gsap.to(b, { opacity: 0.85, duration: 0.2 }), walkTo(b, slotX(i, n), -10, 1.1))].filter(Boolean));
+  if (b) gsap.to(b, { opacity: 1, duration: 0.2 });
+  kids[i] = b; kids[k] = a;
+}
+/* the first copy of an exchange through a third variable: the two look at each other and get ready */
+async function ready(i, k) {
+  const a = kids[i], b = kids[k];
+  await Promise.all([a, b].filter(Boolean).map((g, idx) => gsap.to(g, { keyframes: [{ y: FLOOR - 18, duration: 0.16, ease: 'power1.out' }, { y: FLOOR - 6, duration: 0.18, ease: 'bounce.out' }], delay: idx * 0.06 })));
+}
+/* a value copied from another position that was not an exchange: a copy of that person walks here */
+async function copyFrom(i, k) {
+  const old = kids[i], src = kids[k], v = vals[i];
+  if (old) gsap.to(old, { y: FLOOR + 40, opacity: 0, duration: 0.45, ease: 'power2.in', onComplete: () => old.remove() });
+  const g = kid(v); place(g, src ? gsap.getProperty(src, 'x') : slotX(k, vals.length)); gsap.set(g, { opacity: 0.55 });
+  gsap.to(g, { opacity: 1, duration: 0.6 });
+  await walkTo(g, slotX(i, vals.length), 10, 0.9);
+  kids[i] = g;
+}
+async function settle() { if (!pending) return; const p = pending; pending = null; await copyFrom(p.i, p.k); }
+async function setAt(i, v) {
+  // the second half of an exchange: v[k] receives the old value of v[i]
+  if (pending) {
+    // the partner is the position that had the copied value (with repeated values it is not always the first one found)
+    if (i !== pending.i && v === pending.old && vals[i] === vals[pending.i]) { const p = pending; pending = null; vals[i] = v; await swap(p.i, i); return; }
+    await settle();
+  }
+  // where the value comes from: among the positions with the same value, the nearest one
+  let k = -1;
+  vals.forEach((x, idx) => { if (idx !== i && x === v && x != null && (k < 0 || Math.abs(idx - i) < Math.abs(k - i))) k = idx; });
+  const old = vals[i];
+  vals[i] = v;
+  if (v == null) { await portal(kids[i], i); kids[i] = null; return; }
+  // a copy of another value of the row: perhaps the start of an exchange, it is decided at the next change
+  // (an element still at 0, the initial value of an array, is being filled: it is not the start of an exchange)
+  if (k >= 0 && kids[i] && old != null && old !== 0) { pending = { i, k, old }; await ready(i, k); return; }
+  const prev = kids[i];
+  if (prev) await portal(prev, i);
+  kids[i] = await lantern(i, v);
+}
+async function spot(j) {
+  const n = vals.length;
+  if (j == null || j < 0 || j + 1 >= n) { await gsap.to(light, { opacity: 0, duration: 0.2 }); return; }
+  const [e1, e2] = light.querySelectorAll('ellipse');
+  gsap.to(e1, { attr: { cx: slotX(j, n) }, duration: 0.25 });
+  gsap.to(e2, { attr: { cx: slotX(j + 1, n) }, duration: 0.25 });
+  await gsap.to(light, { opacity: 1, duration: 0.25 });
+}
+
+export default {
+  name: 'La fila dei ragazzi',
+  description: 'Ogni valore dell\'array è una persona alta quanto il valore, sulla terrazza: arrivano appese a una lanterna, e quando due valori si scambiano (anche con una variabile di appoggio) le due persone camminano e si scambiano di posto. La luce indica le due posizioni confrontate.',
+  slots: {
+    fila: { type: 'Integer[]', label: 'La fila (array di interi)' },
+    j: { type: 'Integer', label: 'Posizione confrontata (j)', optional: true },
+  },
+  setup(stage) { st = stage; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
+  reset(stage, values) { gsap.globalTimeline.clear(); draw(); if (values.fila) lineUp(values.fila); if (values.j != null) spot(values.j); },
+  async update(stage, events) {
+    for (const e of events) {
+      if (e.slot === 'fila') {
+        if (e.kind === 'appear' || e.kind === 'change') lineUp(e.after);
+        else if (e.kind === 'set') await setAt(e.index, e.value);
+        else if (e.kind === 'swap') { await settle(); [vals[e.index], vals[e.index2]] = [vals[e.index2], vals[e.index]]; await swap(e.index, e.index2); }
+      } else if (e.slot === 'j') await spot(e.kind === 'vanish' ? null : e.value);
+    }
+  },
+};

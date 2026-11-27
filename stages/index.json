@@ -1,0 +1,10 @@
+[
+  {"id": "bubble_sort", "example": "bubble_sort", "title": {"it": "La fila dei ragazzi", "en": "The row of kids"}},
+  {"id": "bubble_sort_ice", "example": "bubble_sort", "title": {"it": "La fila dei pinguini", "en": "The penguin row"}},
+  {"id": "guess_number", "example": "guess_number", "title": {"it": "Il tiro al bersaglio", "en": "Darts on the number line"}},
+  {"id": "guess_number_ice", "example": "guess_number", "title": {"it": "La pesca nel ghiaccio", "en": "Ice fishing"}},
+  {"id": "gcd", "example": "gcd", "title": {"it": "I bastoncini di Euclide", "en": "Euclid's sticks"}},
+  {"id": "gcd_ice", "example": "gcd", "title": {"it": "I blocchi di Euclide", "en": "Euclid's ice blocks"}},
+  {"id": "factorial", "example": "factorial", "title": {"it": "La torre delle chiamate", "en": "The tower of the calls"}},
+  {"id": "factorial_ice", "example": "factorial", "title": {"it": "La torre di ghiaccio", "en": "The ice tower"}}
+]

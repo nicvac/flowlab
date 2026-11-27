@@ -1,0 +1,295 @@
+// FlowLab Stage — «Il tiro al bersaglio»: the numbers from 1 to 100 are a bridge of floating blocks; each attempt is a
+// shooting star thrown by the person on the left. The part of the bridge where the secret cannot be goes dark, and when
+// the star hits the secret the medallion at the top opens and shows it.
+export const bindings = {"segreto":"Main.segreto","tentativo":"Main.tentativo","tentativi":"Main.tentativi"};
+
+import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
+
+/* ---------- the look: flat vector illustration (periwinkle, indigo, lavender, night arches, sunset windows) ---------- */
+const FONT = 'Atkinson Hyperlegible, Avenir Next, Segoe UI, system-ui, sans-serif';
+const P = { ink: '#3c1fd6', ink2: '#2a1296', lav: '#d9ccff', lavF: '#b498ff', lavS: '#8f6cf0', cream: '#fff2d8', text: '#22146b', mint: '#3fd0b0' };
+let uid = 0;
+const font = (size, weight) => ({ 'font-family': FONT, 'font-size': size, 'font-weight': weight || 700 });
+/* gradients and filters used by all the drawings */
+function defs(st) {
+  const d = st.el('defs');
+  const lin = (id, stops, x2, y2) => { const g = st.el('linearGradient', { id, x1: 0, y1: 0, x2: x2 ?? 0, y2: y2 ?? 1 }, d); stops.forEach(([o, c, op]) => st.el('stop', { offset: o, 'stop-color': c, 'stop-opacity': op ?? 1 }, g)); };
+  lin('bg', [[0, '#7280f4'], [0.6, '#98a4ff'], [1, '#bcc3ff']]);
+  lin('night', [[0, '#1c0733'], [0.65, '#4e1a5c'], [1, '#9a3f78']]);
+  lin('sunset', [[0, '#ff4f4a'], [0.5, '#ff8f57'], [1, '#ffdca0']]);
+  lin('lavTop', [[0, '#efe8ff'], [1, '#d3c2ff']]);
+  lin('lavFront', [[0, '#bca3ff'], [1, '#9b7cf3']]);
+  lin('ink', [[0, '#5a3bff'], [1, '#3011c4']]);
+  lin('warm', [[0, '#ffb36b'], [1, '#ff5d4d']], 1, 0);
+  lin('mintG', [[0, '#7ff0d2'], [1, '#22a98c']], 1, 0);
+  lin('indigoG', [[0, '#7c68ff'], [1, '#3a1ed0']], 1, 0);
+  lin('tail', [[0, '#fff6dc', 0], [1, '#fff6dc', 1]], 1, 0);
+  const r = st.el('radialGradient', { id: 'glow' }, d);
+  st.el('stop', { offset: 0, 'stop-color': '#fffaf0' }, r); st.el('stop', { offset: 0.45, 'stop-color': '#ffeec4', 'stop-opacity': 0.75 }, r); st.el('stop', { offset: 1, 'stop-color': '#ffeec4', 'stop-opacity': 0 }, r);
+  const sh = st.el('filter', { id: 'soft', x: '-30%', y: '-30%', width: '160%', height: '160%' }, d);
+  st.el('feDropShadow', { dx: 0, dy: 8, stdDeviation: 7, 'flood-color': '#24107a', 'flood-opacity': 0.28 }, sh);
+  const bl = st.el('filter', { id: 'bloom', x: '-60%', y: '-60%', width: '220%', height: '220%' }, d);
+  st.el('feGaussianBlur', { stdDeviation: 5, result: 'b' }, bl);
+  const m = st.el('feMerge', {}, bl); st.el('feMergeNode', { in: 'b' }, m); st.el('feMergeNode', { in: 'SourceGraphic' }, m);
+  return d;
+}
+/* a four-pointed star */
+const star = (st, parent, x, y, r, fill) => st.el('path', { d: `M${x} ${y - r}Q${x} ${y} ${x + r} ${y}Q${x} ${y} ${x} ${y + r}Q${x} ${y} ${x - r} ${y}Q${x} ${y} ${x} ${y - r}Z`, fill: fill || P.cream }, parent);
+/* an arched window: a night with the moon and stars, or a sunset with hills and a spiky sun */
+function arch(st, parent, x, y, w, h, kind) {
+  const id = 'arch' + (++uid), g = st.el('g', {}, parent);
+  const path = `M${x} ${y + h}V${y + w / 2}A${w / 2} ${w / 2} 0 0 1 ${x + w} ${y + w / 2}V${y + h}Z`;
+  st.el('path', { d: path, fill: '#5d6cf2', transform: 'translate(7 5)' }, g);
+  const cp = st.el('clipPath', { id }, g); st.el('path', { d: path }, cp);
+  const inner = st.el('g', { 'clip-path': `url(#${id})` }, g);
+  if (kind === 'sunset') {
+    st.el('rect', { x, y, width: w, height: h, fill: 'url(#sunset)' }, inner);
+    const cx = x + w * 0.62, cy = y + h * 0.42, n = 14; let dd = '';
+    for (let i = 0; i < n * 2; i++) { const a = (Math.PI * i) / n, rr = i % 2 ? w * 0.2 : w * 0.3; dd += `${i ? 'L' : 'M'}${cx + Math.cos(a) * rr} ${cy + Math.sin(a) * rr}`; }
+    st.el('path', { d: dd + 'Z', fill: '#fff4e2' }, inner);
+    st.el('path', { d: `M${x} ${y + h * 0.75}Q${x + w * 0.3} ${y + h * 0.6} ${x + w * 0.55} ${y + h * 0.72}T${x + w} ${y + h * 0.66}V${y + h}H${x}Z`, fill: '#ffd09a' }, inner);
+    st.el('path', { d: `M${x} ${y + h * 0.86}Q${x + w * 0.4} ${y + h * 0.74} ${x + w} ${y + h * 0.84}V${y + h}H${x}Z`, fill: '#ff9d6e' }, inner);
+  } else {
+    st.el('rect', { x, y, width: w, height: h, fill: 'url(#night)' }, inner);
+    const mx = x + w * 0.55, my = y + h * 0.36, mr = w * 0.27;
+    st.el('circle', { cx: mx, cy: my, r: mr, fill: P.cream }, inner);
+    st.el('circle', { cx: mx - mr * 0.45, cy: my - mr * 0.25, r: mr * 0.9, fill: '#2a0b40' }, inner);
+    for (let i = 0; i < 6; i++) { const s = star(st, inner, x + w * (0.15 + ((i * 37) % 70) / 100), y + h * (0.12 + ((i * 53) % 80) / 100), i % 3 ? 2 : 4); s.classList.add('twinkle'); }
+    st.el('rect', { x, y: y + h * 0.78, width: w, height: h * 0.22, fill: '#6a2a8a', opacity: 0.6 }, inner);
+  }
+  st.el('path', { d: path, fill: 'none', stroke: '#4f5ff0', 'stroke-width': 6 }, g);
+  return g;
+}
+/* isometric block: front face at (x, y) w × h, top and right side going back by d */
+function block(st, parent, x, y, w, h, d, fills) {
+  const f = fills || {}, g = st.el('g', {}, parent), k = 0.55;
+  st.el('path', { d: `M${x} ${y}l${d} ${-d * k}h${w}l${-d} ${d * k}Z`, fill: f.top || 'url(#lavTop)' }, g);
+  st.el('rect', { x, y, width: w, height: h, fill: f.front || 'url(#lavFront)' }, g);
+  st.el('path', { d: `M${x + w} ${y}l${d} ${-d * k}v${h}l${-d} ${d * k}Z`, fill: f.side || P.lavS }, g);
+  return g;
+}
+/* the room: a wall in perspective, arched windows, steps, floating lights */
+function room(st, opts) {
+  const o = opts || {}, g = st.el('g');
+  st.el('rect', { x: 0, y: 0, width: 800, height: 450, fill: 'url(#bg)' }, g);
+  st.el('path', { d: 'M0 0H330L250 450H0Z', fill: '#8090ff', opacity: 0.45 }, g);
+  st.el('path', { d: 'M520 0H800V450H600Z', fill: '#aab3ff', opacity: 0.35 }, g);
+  const vx = 400, vy = -120;
+  for (let i = -6; i <= 14; i++) st.el('line', { x1: vx, y1: vy, x2: i * 70, y2: 450, stroke: '#ffffff', 'stroke-opacity': 0.12, 'stroke-width': 1 }, g);
+  for (const a of o.arches || []) arch(st, g, ...a);
+  for (const s of o.steps || []) { const [x, y, n, dir] = s; for (let i = 0; i < n; i++) block(st, g, x + i * 26 * (dir || 1), y - i * 14, 30, 12, 10); }
+  for (let i = 0; i < (o.lights ?? 7); i++) {
+    const x = 40 + ((i * 131) % 720), y = 30 + ((i * 89) % 180), c = st.el('g', {}, g);
+    st.el('circle', { cx: x, cy: y, r: 14, fill: 'url(#glow)' }, c);
+    st.el('path', { d: `M${x - 5} ${y - 3}L${x} ${y - 6}L${x + 5} ${y - 3}V${y + 3}L${x} ${y + 6}L${x - 5} ${y + 3}Z`, fill: P.cream }, c);
+    c.classList.add('float');
+  }
+  return g;
+}
+/* the little animations that always run (stars and floating lights); they are restarted with the room */
+function alive(gsap, root) {
+  root.querySelectorAll('.twinkle').forEach((s, i) => gsap.to(s, { opacity: 0.25, duration: 1.2 + (i % 4) * 0.4, repeat: -1, yoyo: true, ease: 'sine.inOut', delay: i * 0.17 }));
+  root.querySelectorAll('.float').forEach((s, i) => gsap.to(s, { y: -8, duration: 2.2 + (i % 3) * 0.5, repeat: -1, yoyo: true, ease: 'sine.inOut', delay: i * 0.3 }));
+}
+/* a white pill with a text (titles, labels) */
+function pill(st, parent, x, y, text, size, anchor) {
+  const g = st.el('g', {}, parent);
+  const t = st.el('text', Object.assign({ x: 0, y: 0, fill: P.text, 'dominant-baseline': 'central', text }, font(size || 15)), g);
+  const w = Math.max(30, t.getComputedTextLength() + 26), hh = (size || 15) + 14;
+  const bg = st.el('rect', { x: -13, y: -hh / 2, width: w, height: hh, rx: hh / 2, fill: '#ffffff', 'fill-opacity': 0.92, filter: 'url(#soft)' }, g);
+  g.insertBefore(bg, t);
+  g.setAttribute('transform', `translate(${anchor === 'middle' ? x - w / 2 + 13 : anchor === 'end' ? x - w + 13 : x} ${y})`);
+  g._text = t; g._bg = bg;
+  return g;
+}
+function setPill(g, text) { g._text.textContent = text; const w = Math.max(30, g._text.getComputedTextLength() + 26); g._bg.setAttribute('width', w); }
+/* a round medallion with a white ring (a number inside) */
+function medal(st, parent, r, text, fill) {
+  const g = st.el('g', {}, parent);
+  st.el('circle', { r: r * 1.5, fill: 'url(#glow)', opacity: 0.8 }, g);
+  st.el('circle', { r, fill: fill || '#a9b3ff', stroke: '#ffffff', 'stroke-width': Math.max(3, r * 0.12), filter: 'url(#soft)' }, g);
+  g._t = st.el('text', Object.assign({ x: 0, y: 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: '#ffffff', text: text ?? '' }, font(Math.round(r * 0.75))), g);
+  return g;
+}
+/* a person in the style of the illustration, seen three-quarters: an oversized coat with a stand-up collar, buttons, folds
+   and a lit edge, puffy sleeves with cuffs, wide trousers, shoes, the head with a swept tuft. The origin is between the
+   feet, h is the height; tone (0..1) moves the colour between indigo and violet. Legs and arms are groups (g._parts) so
+   the person can walk (walk()) */
+function person(st, parent, h, tone, badge) {
+  const g = st.el('g', {}, parent), E = (tag, a, p) => st.el(tag, a, p || g);
+  const hue = 248 + (tone || 0) * 30, C = (l, s) => `hsl(${hue} ${s ?? 86}% ${l}%)`;
+  const coat = C(54), coatD = C(36), coatDD = C(26), coatL = C(74, 90), pants = C(32, 72), pantsD = C(22, 72), shoe = '#170857', skin = '#eae4ff', skinD = '#cfc5f5', hair = '#22108a';
+  const hr = 11 + Math.min(5, h * 0.018);
+  const legs = Math.max(16, h * 0.36), hip = -legs, sh = -(h - hr * 2 - 3), cl = hip - sh; // shoulders (sh) to hips
+  const fx = (k) => sh + cl * k;
+  E('ellipse', { cx: 3, cy: 1, rx: 22, ry: 4.5, fill: '#1c0a66', opacity: 0.22 });
+  // back leg and shoe
+  const legB = E('g');
+  E('path', { d: `M-10 ${hip}C-11 ${hip * 0.6} -12 ${hip * 0.3} -12 -5L-3 -5C-3 ${hip * 0.3} -2 ${hip * 0.6} 0 ${hip}Z`, fill: pantsD }, legB);
+  E('path', { d: `M-14 0C-14 -5 -10 -7 -6 -7H-3C2 -7 5 -4 6 0Z`, fill: shoe }, legB);
+  // back arm, behind the coat
+  const armB = E('g');
+  E('path', { d: `M-12 ${fx(0.06)}C-22 ${fx(0.25)} -25 ${fx(0.5)} -22 ${fx(0.7)}L-12 ${fx(0.72)}C-14 ${fx(0.5)} -11 ${fx(0.3)} -5 ${fx(0.12)}Z`, fill: coatDD }, armB);
+  E('path', { d: `M-23 ${fx(0.66)}L-11 ${fx(0.68)}L-12 ${fx(0.78)}L-22 ${fx(0.77)}Z`, fill: coatD }, armB);
+  E('ellipse', { cx: -17, cy: fx(0.84), rx: 4.2, ry: 5, fill: skinD }, armB);
+  // front leg: wide trousers with a fold, and the shoe pointing forward
+  const legF = E('g');
+  E('path', { d: `M-1 ${hip}C0 ${hip * 0.6} 1 ${hip * 0.3} 0 -5L11 -5C11 ${hip * 0.3} 12 ${hip * 0.6} 11 ${hip}Z`, fill: pants }, legF);
+  E('path', { d: `M5 ${hip * 0.85}C6 ${hip * 0.5} 6 ${hip * 0.3} 5 -6`, stroke: pantsD, 'stroke-width': 1.2, fill: 'none', opacity: 0.7 }, legF);
+  E('path', { d: `M-2 0C-2 -5 2 -7 6 -7H10C16 -7 20 -4 21 0Z`, fill: shoe }, legF);
+  // the coat: wide, open at the bottom, darker on the right side, with the edge lit on the left
+  const body = `M-11 ${sh + 3}C-15 ${fx(0.35)} -19 ${fx(0.75)} -22 ${hip + 12}C-8 ${hip + 18} 8 ${hip + 18} 22 ${hip + 12}C19 ${fx(0.75)} 15 ${fx(0.35)} 12 ${sh + 3}C4 ${sh - 2} -4 ${sh - 2} -11 ${sh + 3}Z`;
+  E('path', { d: body, fill: coat });
+  E('path', { d: `M3 ${sh + 1}C8 ${fx(0.4)} 10 ${fx(0.8)} 9 ${hip + 16}C14 ${hip + 15} 18 ${hip + 14} 22 ${hip + 12}C19 ${fx(0.75)} 15 ${fx(0.35)} 12 ${sh + 3}C9 ${sh + 1} 6 ${sh} 3 ${sh + 1}Z`, fill: coatD, opacity: 0.55 });
+  E('path', { d: `M-11 ${sh + 5}C-15 ${fx(0.35)} -18 ${fx(0.72)} -21 ${hip + 11}`, stroke: coatL, 'stroke-width': 1.6, fill: 'none', 'stroke-linecap': 'round', opacity: 0.9 });
+  E('path', { d: `M2 ${sh + 6}C3 ${fx(0.45)} 4 ${fx(0.8)} 4 ${hip + 16}`, stroke: coatDD, 'stroke-width': 1.4, fill: 'none', opacity: 0.8 });
+  E('path', { d: `M-8 ${fx(0.62)}C-6 ${fx(0.72)} -7 ${fx(0.82)} -10 ${fx(0.92)} M12 ${fx(0.55)}C13 ${fx(0.7)} 12 ${fx(0.8)} 14 ${fx(0.9)}`, stroke: coatDD, 'stroke-width': 1.1, fill: 'none', opacity: 0.45 });
+  for (const k of [0.12, 0.27]) E('circle', { cx: 2.2 + k * 2, cy: fx(k), r: 1.9, fill: skin });
+  // the stand-up collar
+  E('path', { d: `M-8 ${sh + 1}C-3 ${sh + 5} 6 ${sh + 5} 10 ${sh + 1}L9 ${sh - 5}C5 ${sh - 2} -3 ${sh - 2} -7 ${sh - 5}Z`, fill: coatL });
+  E('path', { d: `M-8 ${sh + 1}C-3 ${sh + 5} 6 ${sh + 5} 10 ${sh + 1}`, stroke: coatD, 'stroke-width': 1, fill: 'none' });
+  // front arm: a puffy sleeve bent forward, with folds and a cuff
+  const armF = E('g');
+  E('path', { d: `M7 ${fx(0.05)}C18 ${fx(0.18)} 25 ${fx(0.42)} 24 ${fx(0.64)}L14 ${fx(0.68)}C15 ${fx(0.48)} 11 ${fx(0.3)} 3 ${fx(0.16)}Z`, fill: coat }, armF);
+  E('path', { d: `M12 ${fx(0.22)}C16 ${fx(0.3)} 18 ${fx(0.38)} 19 ${fx(0.46)} M15 ${fx(0.4)}C18 ${fx(0.47)} 19 ${fx(0.53)} 20 ${fx(0.58)}`, stroke: coatD, 'stroke-width': 1.2, fill: 'none', opacity: 0.8 }, armF);
+  E('path', { d: `M14 ${fx(0.64)}L25 ${fx(0.6)}L25 ${fx(0.72)}L15 ${fx(0.76)}Z`, fill: coatL }, armF);
+  E('ellipse', { cx: 21, cy: fx(0.82), rx: 4.4, ry: 5.2, fill: skin }, armF);
+  // neck, head, ear and the hair with the tuft
+  E('rect', { x: -2, y: sh - 7, width: 7, height: 8, rx: 2, fill: skinD });
+  const hy = sh - hr - 4;
+  E('circle', { cx: 2, cy: hy, r: hr, fill: skin });
+  E('path', { d: `M${2 + hr * 0.15} ${hy + hr * 0.95}A${hr} ${hr} 0 0 0 ${2 + hr} ${hy + hr * 0.1}`, stroke: skinD, 'stroke-width': hr * 0.18, fill: 'none', opacity: 0.6 });
+  E('ellipse', { cx: 2 - hr * 0.55, cy: hy + hr * 0.15, rx: hr * 0.16, ry: hr * 0.24, fill: skinD });
+  E('path', { d: `M${2 - hr * 1.02} ${hy + hr * 0.25}C${2 - hr * 1.15} ${hy - hr * 0.9} ${2 + hr * 0.2} ${hy - hr * 1.35} ${2 + hr * 0.95} ${hy - hr * 0.6}C${2 + hr * 1.5} ${hy - hr * 1.25} ${2 + hr * 0.55} ${hy - hr * 1.6} ${2 + hr * 0.1} ${hy - hr * 1.3}C${2 + hr * 0.75} ${hy - hr * 0.95} ${2 + hr * 0.6} ${hy - hr * 0.35} ${2 + hr * 0.05} ${hy - hr * 0.45}C${2 - hr * 0.35} ${hy - hr * 0.5} ${2 - hr * 0.55} ${hy - hr * 0.1} ${2 - hr * 0.62} ${hy + hr * 0.3}Z`, fill: hair });
+  E('path', { d: `M${2 - hr * 0.7} ${hy - hr * 0.6}C${2 - hr * 0.3} ${hy - hr * 1.05} ${2 + hr * 0.3} ${hy - hr * 1.1} ${2 + hr * 0.7} ${hy - hr * 0.8}`, stroke: '#4c33d6', 'stroke-width': 1.3, fill: 'none', opacity: 0.8 });
+  if (badge != null) {
+    const b = E('g', { transform: `translate(-4 ${fx(0.5)})` });
+    E('circle', { r: 11.5, fill: '#ffffff' }, b);
+    E('circle', { r: 11.5, fill: 'none', stroke: coatDD, 'stroke-width': 1, opacity: 0.4 }, b);
+    E('text', Object.assign({ x: 0, y: 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: P.ink2, text: String(badge) }, font(String(badge).length > 2 ? 9 : 11)), b);
+  }
+  g._parts = { legB, legF, armB, armF };
+  return g;
+}
+/* the person walks for a while: legs and arms swing; the returned timeline is stopped with stopWalk */
+function walk(gsap, fig, seconds) {
+  const p = fig && fig._parts; if (!p) return null;
+  const n = Math.max(2, Math.round((seconds || 0.8) / 0.2));
+  const tl = gsap.timeline({ repeat: n - 1, yoyo: true });
+  tl.to(p.legF, { rotation: 16, transformOrigin: '30% 0%', duration: 0.2, ease: 'sine.inOut' }, 0)
+    .to(p.legB, { rotation: -16, transformOrigin: '70% 0%', duration: 0.2, ease: 'sine.inOut' }, 0)
+    .to(p.armF, { rotation: -14, transformOrigin: '20% 5%', duration: 0.2, ease: 'sine.inOut' }, 0)
+    .to(p.armB, { rotation: 14, transformOrigin: '80% 5%', duration: 0.2, ease: 'sine.inOut' }, 0);
+  return tl;
+}
+function stopWalk(gsap, fig, tl) {
+  if (tl) tl.kill();
+  const p = fig && fig._parts; if (p) gsap.to([p.legF, p.legB, p.armF, p.armB], { rotation: 0, duration: 0.15 });
+}
+
+const X0 = 110, X1 = 740, LINE = 318, MIN = 1, MAX = 100, MX = 425, MY = 128;
+let st, lo = MIN, hi = MAX, secret = null, shadeL, shadeR, counter, orb, fog, orbits, marks, hint, thrower, thrown = 0;
+const xOf = (v) => X0 + ((Math.max(MIN, Math.min(MAX, v)) - MIN) * (X1 - X0)) / (MAX - MIN);
+
+function draw() {
+  st.clear(); uid = 0; defs(st);
+  room(st, { arches: [[16, 50, 64, 150, 'sunset'], [722, 46, 62, 140, 'night']], lights: 5 });
+  // the bridge: ten blocks, with the notches and the numbers on the front
+  const bridge = st.el('g', { filter: 'url(#soft)' });
+  for (let i = 0; i < 10; i++) block(st, bridge, X0 - 8 + i * 64, LINE, 63, 22, 18);
+  for (let v = 0; v <= 100; v += 10) {
+    const x = xOf(Math.max(1, v));
+    st.el('rect', { x: x - 1, y: LINE + 3, width: 2, height: 7, fill: '#ffffff', opacity: 0.9 });
+    st.el('text', Object.assign({ x, y: LINE + 46, 'text-anchor': 'middle', fill: '#ffffff', text: String(Math.max(1, v)) }, font(12)));
+  }
+  shadeL = st.el('rect', { x: X0 - 8, y: LINE - 18, width: 0, height: 40, fill: 'url(#night)', opacity: 0.75 });
+  shadeR = st.el('rect', { x: X1 + 8, y: LINE - 18, width: 0, height: 40, fill: 'url(#night)', opacity: 0.75 });
+  marks = st.el('g');
+  // the medallion of the secret: a closed portal with orbits around
+  const m = st.el('g', { transform: `translate(${MX} ${MY})` });
+  st.el('circle', { r: 92, fill: 'url(#glow)', opacity: 0.7 }, m);
+  orbits = st.el('g', {}, m);
+  st.el('ellipse', { rx: 104, ry: 30, fill: 'none', stroke: '#ffffff', 'stroke-width': 1.6, opacity: 0.85, transform: 'rotate(-18)' }, orbits);
+  st.el('ellipse', { rx: 96, ry: 26, fill: 'none', stroke: '#ffffff', 'stroke-width': 1.2, opacity: 0.7, transform: 'rotate(32)' }, orbits);
+  st.el('circle', { r: 62, fill: '#ffffff', filter: 'url(#soft)' }, m);
+  orb = medal(st, m, 50, '', '#ffcf73');
+  fog = st.el('g', {}, m);
+  st.el('circle', { r: 55, fill: 'url(#night)' }, fog);
+  for (let i = 0; i < 7; i++) { const s = star(st, fog, ((i * 29) % 70) - 35, ((i * 47) % 60) - 30, i % 2 ? 2.5 : 4.5); s.classList.add('twinkle'); }
+  st.el('text', Object.assign({ x: 0, y: 4, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: P.cream, text: '?' }, font(44)), fog);
+  hint = pill(st, st.svg, MX + 128, MY - 6, '…', 16); gsap.set(hint, { opacity: 0 });
+  // the person that throws the stars, on a block on the left
+  const base = st.el('g', { filter: 'url(#soft)' }); block(st, base, 22, 392, 64, 24, 16);
+  thrower = person(st, st.svg, 132, 0.3); gsap.set(thrower, { x: 50, y: 390 });
+  counter = pill(st, st.svg, 24, 26, 'Il tiro al bersaglio · tentativi: 0', 15);
+  lo = MIN; hi = MAX; thrown = 0;
+  gsap.to(orbits, { rotation: 360, transformOrigin: '50% 50%', duration: 30, repeat: -1, ease: 'none' });
+  alive(gsap, st.svg);
+}
+function count(n) { setPill(counter, `Il tiro al bersaglio · tentativi: ${n ?? 0}`); }
+async function shade() {
+  await Promise.all([
+    gsap.to(shadeL, { attr: { width: lo > MIN ? xOf(lo) - X0 + 8 : 0 }, duration: 0.5 }),
+    gsap.to(shadeR, { attr: { x: hi < MAX ? xOf(hi) : X1 + 8, width: hi < MAX ? X1 + 8 - xOf(hi) : 0 }, duration: 0.5 }),
+  ]);
+}
+/* a shooting star from the hand of the person to the number on the bridge */
+async function shoot(v) {
+  const x = xOf(v), g = st.el('g'), rot = st.el('g', {}, g);
+  const tail = st.el('path', { d: 'M-60 0L0 -3L0 3Z', fill: 'url(#tail)' }, rot);
+  st.el('circle', { r: 12, fill: 'url(#glow)' }, rot);
+  star(st, rot, 0, 0, 8);
+  gsap.set(g, { x: 70, y: 300 });
+  gsap.to(thrower, { rotation: -8, transformOrigin: '50% 100%', duration: 0.15, yoyo: true, repeat: 1 });
+  const path = { t: 0 };
+  const sx = 70, sy = 300, cx = (sx + x) / 2, cy = 120, ex = x, ey = LINE - 22;
+  await gsap.to(path, { t: 1, duration: 0.85, ease: 'power1.inOut', onUpdate: () => {
+    const t = path.t, px = (1 - t) * (1 - t) * sx + 2 * (1 - t) * t * cx + t * t * ex, py = (1 - t) * (1 - t) * sy + 2 * (1 - t) * t * cy + t * t * ey;
+    const dx = 2 * (1 - t) * (cx - sx) + 2 * t * (ex - cx), dy = 2 * (1 - t) * (cy - sy) + 2 * t * (ey - cy);
+    gsap.set(g, { x: px, y: py }); rot.setAttribute('transform', `rotate(${(Math.atan2(dy, dx) * 180) / Math.PI})`);
+  } });
+  tail.remove();
+  rot.setAttribute('transform', 'scale(0.7)'); marks.append(g);
+  const label = pill(st, marks, x, LINE - 48 - (thrown++ % 3) * 26, String(v), 13, 'middle');
+  gsap.from(label, { opacity: 0, duration: 0.3 });
+  if (secret == null) return;
+  if (v === secret) { await reveal(x); return; }
+  if (v < secret) { lo = Math.max(lo, v + 1); setPill(hint, 'Più alto →'); } else { hi = Math.min(hi, v - 1); setPill(hint, '← Più basso'); }
+  gsap.fromTo(hint, { opacity: 0 }, { opacity: 1, duration: 0.3 });
+  await shade();
+}
+async function reveal(x) {
+  orb._t.textContent = String(secret);
+  setPill(hint, 'Indovinato!'); gsap.to(hint, { opacity: 1, duration: 0.3 });
+  const beam = st.el('line', { x1: x, y1: LINE - 22, x2: MX, y2: MY + 50, stroke: P.cream, 'stroke-width': 4, filter: 'url(#bloom)', opacity: 0 });
+  await gsap.to(beam, { opacity: 1, duration: 0.25 });
+  await gsap.to(fog, { scale: 0, opacity: 0, transformOrigin: '50% 50%', duration: 0.6, ease: 'back.in(1.6)' });
+  gsap.to(beam, { opacity: 0, duration: 0.4, onComplete: () => beam.remove() });
+  for (let i = 0; i < 22; i++) {
+    const s = star(st, st.svg, 0, 0, 4 + (i % 3) * 2, i % 2 ? P.cream : '#ffb36b');
+    gsap.set(s, { x: MX, y: MY });
+    gsap.to(s, { x: MX + Math.cos(i) * (120 + (i % 5) * 30), y: MY + Math.sin(i) * (80 + (i % 4) * 25), opacity: 0, rotation: 180, duration: 1.3, ease: 'power2.out', onComplete: () => s.remove() });
+  }
+  await gsap.fromTo(orb, { scale: 0.6, transformOrigin: '50% 50%' }, { scale: 1.15, duration: 0.5, ease: 'back.out(2)', yoyo: true, repeat: 1 });
+}
+
+export default {
+  name: 'Il tiro al bersaglio',
+  description: 'I numeri da 1 a 100 sono un ponte di blocchi; ogni tentativo è una stella cadente lanciata sul ponte. La parte dove il segreto non può più essere si oscura, e quando la stella colpisce il segreto il medaglione in alto si apre.',
+  slots: {
+    segreto: { type: 'Integer', label: 'Il numero segreto' },
+    tentativo: { type: 'Integer', label: 'Il tentativo' },
+    tentativi: { type: 'Integer', label: 'Quanti tentativi', optional: true },
+  },
+  setup(stage) { st = stage; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
+  reset(stage, values) { gsap.globalTimeline.clear(); draw(); secret = values.segreto ?? null; count(values.tentativi || 0); },
+  async update(stage, events, values) {
+    // with the counter bound, a star for each attempt (also when the same number is tried again); otherwise for each new value
+    const counted = stage.bound.includes('tentativi');
+    for (const e of events) {
+      if (e.slot === 'segreto' && e.value != null) secret = e.value;
+      if (e.slot === 'tentativi' && e.kind !== 'vanish') { count(e.value); if (e.value > (e.old || 0) && values.tentativo != null) await shoot(values.tentativo); }
+      if (e.slot === 'tentativo' && !counted && (e.kind === 'value' || e.kind === 'appear') && e.value != null) await shoot(e.value);
+    }
+  },
+};

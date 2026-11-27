@@ -1,0 +1,326 @@
+// FlowLab Stage — «I blocchi di Euclide»: an ice field in pixel art (an original theme). a, b and r are three bars of ice,
+// one block for each unit, each one with its penguin. The remainder r is what is left of a after laying b along it as
+// many times as it fits; then b takes the place of a and r that of b, until b is zero and a is the greatest common divisor.
+export const bindings = {"a":"Main.a","b":"Main.b","r":"Main.r"};
+
+import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
+
+let st;
+/* ---------------------------- the ice field in pixel art (the same for every stage) ---------------------------- */
+const PX = 3;                                   // one pixel of the sprites, in points of the stage
+const FL = { x: 14, y: 66, w: 772, h: 370 };    // the ice field
+const FONT = '"Press Start 2P", ui-monospace, Menlo, Consolas, monospace';
+const C = {
+  k: '#0c1440', n: '#1d2b7a', N: '#3a4fb8', w: '#ffffff', W: '#cfe3ff', o: '#ff9b29', O: '#d96a12', r: '#ff4a5c', R: '#b8243c',
+  i: '#123a9c', d: '#1b2f7a', c: '#a9dcf7', C: '#e9f7ff', y: '#ffd23f', Y: '#e0a21a', f: '#ff7a3d', F: '#c94f1f',
+};
+/* the penguin, 14 × 16 pixels, seen from the side looking to the right: navy, white belly, red scarf */
+const HEAD = [
+  '....kkkkk.....',
+  '...knnnnnk....',
+  '..knnNNnnnk...',
+  '..knnnnnwwk...',
+  '..knnnnwkwkk..',
+  '..knnnnwwwook.',
+  '..knnnnwwwkOk.',
+  '.krrrrrrrrk...',
+  'krRrrrrrrrRk..',
+  'kRkknnwwwwwk..',
+];
+const FRAMES = {
+  stand: [...HEAD, 'kk.knNnwwwwwk.', '...knNnwwwwwk.', '...knNnwwwwwk.', '...knnnwwwwk..', '....kkkkkkk...', '...ooo..ooo...'],
+  walk1: [...HEAD, 'kk.knNnwwwwwk.', '...knNnwwwwwk.', '...knNnwwwwwk.', '...knnnwwwwk..', '....kkkkkkk...', '..oo.....ooo..'],
+  walk2: [...HEAD, 'kk.knNnwwwwwk.', '...knNnwwwwwk.', '...knNnwwwwwk.', '...knnnwwwwk..', '....kkkkkkk...', '....ooo.oo....'],
+  hop: [...HEAD, 'kNNNnnnwwwwwk.', '.kkknnnwwwwwk.', '...knnnwwwwwk.', '...knnnwwwwk..', '....kkkkkkk...', '....oo..oo....'],
+};
+const IGLOO = [
+  '.....kkkkkk.....',
+  '...kkwwwwwwkk...',
+  '..kwwwwwwwwwwk..',
+  '.kWWWWWWWWWWWWk.',
+  '.kwwwWwwwwWwwwk.',
+  'kWWWWWWkkWWWWWWk',
+  'kwwWwwkddkwwWwwk',
+  'kWWWWkddddkWWWWk',
+  'kwwwwkddddkwwwwk',
+  'kkkkkkddddkkkkkk',
+];
+const ARROW = ['kkkkkkk', 'koooook', '.kooOk.', '..kOk..', '...k...'];
+const SNOWBALL = ['.kkk.', 'kwwWk', 'kwWWk', 'kWWWk', '.kkk.'];
+
+/* pixels of a sprite as rectangles (one per run of the same colour in a row) */
+function sprite(parent, rows, ox, oy, px) {
+  const g = st.el('g', { 'shape-rendering': 'crispEdges' }, parent), u = px || PX;
+  rows.forEach((row, y) => {
+    let x = 0;
+    while (x < row.length) {
+      const c = row[x]; let n = 1;
+      while (x + n < row.length && row[x + n] === c) n++;
+      if (c !== '.') st.el('rect', { x: ox + x * u, y: oy + y * u, width: n * u, height: u, fill: C[c] }, g);
+      x += n;
+    }
+  });
+  return g;
+}
+const pause = (t) => gsap.to({}, { duration: t });
+
+/* one block of ice in 3/4 view: the top face, the front with its shine, the outline */
+function iceBlock(parent, x, y, w, h, top) {
+  const g = st.el('g', { 'shape-rendering': 'crispEdges' }, parent);
+  st.el('rect', { x: x - 1, y: y - 1, width: w + 2, height: top + h + 2, fill: '#163e96' }, g);
+  st.el('rect', { x, y, width: w, height: top, fill: C.C }, g);
+  st.el('rect', { x, y: y + top, width: w, height: h, fill: C.c }, g);
+  st.el('rect', { x, y: y + top, width: w, height: 2, fill: '#7fc2ea' }, g);
+  st.el('rect', { x: x + 4, y: y + top + 3, width: 3, height: Math.max(2, h - 6), fill: '#ffffff' }, g);
+  st.el('rect', { x: x + 9, y: y + top + 3, width: 2, height: Math.max(2, h - 8), fill: '#ffffff', opacity: 0.7 }, g);
+  return g;
+}
+function diamond(parent, x, y) {
+  st.el('rect', { x, y, width: 22, height: 22, fill: '#0c1440' }, parent);
+  st.el('rect', { x: x + 2, y: y + 2, width: 18, height: 18, fill: '#2a5ad6' }, parent);
+  st.el('polygon', { points: `${x + 11} ${y + 5} ${x + 17} ${y + 11} ${x + 11} ${y + 17} ${x + 5} ${y + 11}`, fill: '#ffffff' }, parent);
+}
+
+/* a box of pixel text (white, navy border) that follows its text, also when the pixel font arrives; anchor: 'start' or 'middle' */
+function plaque(parent, x, y, text, size, anchor, colors) {
+  const g = st.el('g', { 'shape-rendering': 'crispEdges' }, parent), s = size || 10, col = colors || {};
+  const b = st.el('rect', { y: y - s / 2 - 7, height: s + 14, fill: col.border || '#0c1440' }, g);
+  const f = st.el('rect', { y: y - s / 2 - 5, height: s + 10, fill: col.fill || '#ffffff' }, g);
+  const t = st.el('text', { x, y: y + s / 2, fill: col.text || '#0c1440', 'font-family': FONT, 'font-size': s, 'font-weight': 700, 'text-anchor': anchor === 'middle' ? 'middle' : 'start', text: String(text) }, g);
+  g._t = t;
+  g._fit = () => {
+    const w = (t.getComputedTextLength() || String(t.textContent).length * s) + 12, x0 = anchor === 'middle' ? x - w / 2 : x - 6;
+    b.setAttribute('x', x0 - 2); b.setAttribute('width', w + 4); f.setAttribute('x', x0); f.setAttribute('width', w);
+  };
+  g._fit(); if (document.fonts) document.fonts.ready.then(g._fit);
+  return g;
+}
+function setPlaque(g, text) { g._t.textContent = String(text); g._fit(); }
+
+/* the field: wall, ice floor, snow bank with the title, the decorations (deco: igloos, cubes, diamonds as lists of [x, y]) */
+function field(title, deco) {
+  const d = Object.assign({ igloos: [[736, 80]], cubes: [[26, 396], [54, 396], [752, 396]], diamonds: [[748, 118]] }, deco || {});
+  st.clear();
+  const css = st.el('style');
+  css.textContent = '@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");';
+  const defs = st.el('defs');
+  // the floor: tiles of ice with diagonal stripes, like the old consoles
+  const pat = st.el('pattern', { id: 'ice', width: 64, height: 64, patternUnits: 'userSpaceOnUse', x: FL.x, y: FL.y }, defs);
+  for (const [tx, ty] of [[0, 0], [32, 0], [0, 32], [32, 32]]) {
+    const dark = (tx + ty) % 64 === 0;
+    st.el('rect', { x: tx, y: ty, width: 32, height: 32, fill: dark ? '#4a7fe3' : '#5389ea' }, pat);
+    st.el('polygon', { points: `${tx} ${ty + 18} ${tx + 18} ${ty} ${tx + 25} ${ty} ${tx} ${ty + 25}`, fill: '#6b9df3' }, pat);
+    st.el('polygon', { points: `${tx + 9} ${ty + 32} ${tx + 32} ${ty + 9} ${tx + 32} ${ty + 15} ${tx + 15} ${ty + 32}`, fill: '#6b9df3' }, pat);
+    st.el('rect', { x: tx, y: ty, width: 32, height: 2, fill: '#7eaaf7' }, pat);
+    st.el('rect', { x: tx, y: ty, width: 2, height: 32, fill: '#7eaaf7' }, pat);
+    st.el('rect', { x: tx + 30, y: ty, width: 2, height: 32, fill: '#2f5fc7' }, pat);
+    st.el('rect', { x: tx, y: ty + 30, width: 32, height: 2, fill: '#2f5fc7' }, pat);
+  }
+  const world = st.el('g', { 'shape-rendering': 'crispEdges' });
+  st.el('rect', { x: 0, y: 0, width: 800, height: 450, fill: '#0d2470' }, world);
+  // the wall around the field: bricks of dark ice
+  st.el('rect', { x: FL.x - 10, y: FL.y - 10, width: FL.w + 20, height: FL.h + 20, fill: '#1f4bc0' }, world);
+  for (let y = FL.y - 10, r = 0; y < FL.y + FL.h + 10; y += 10, r++) {
+    for (let x = FL.x - 10 + (r % 2) * 10; x < FL.x + FL.w + 10; x += 20) st.el('rect', { x, y, width: 2, height: 10, fill: '#163a9c' }, world);
+    st.el('rect', { x: FL.x - 10, y, width: FL.w + 20, height: 2, fill: '#163a9c' }, world);
+  }
+  st.el('rect', { x: FL.x, y: FL.y, width: FL.w, height: FL.h, fill: 'url(#ice)' }, world);
+  // a scalloped border of snow on the inside of the wall
+  for (let x = FL.x; x < FL.x + FL.w; x += 16) {
+    st.el('rect', { x: x + 2, y: FL.y, width: 12, height: 4, fill: '#ffffff' }, world);
+    st.el('rect', { x: x + 4, y: FL.y + 4, width: 8, height: 2, fill: '#cfe3ff' }, world);
+    st.el('rect', { x: x + 2, y: FL.y + FL.h - 4, width: 12, height: 4, fill: '#cfe3ff' }, world);
+  }
+  for (let y = FL.y; y < FL.y + FL.h; y += 16) {
+    st.el('rect', { x: FL.x, y: y + 2, width: 4, height: 12, fill: '#ffffff' }, world);
+    st.el('rect', { x: FL.x + FL.w - 4, y: y + 2, width: 4, height: 12, fill: '#cfe3ff' }, world);
+  }
+  // the snow bank on top, with pixel bumps
+  st.el('rect', { x: 0, y: 0, width: 800, height: 46, fill: '#eef6ff' }, world);
+  for (let x = 0, k = 0; x < 800; x += 24, k++) {
+    st.el('rect', { x, y: 44, width: 18, height: 6, fill: '#eef6ff' }, world);
+    st.el('rect', { x: x + 2, y: 50, width: 14, height: 3, fill: '#b9d3f6' }, world);
+    if (k % 4 === 1) { st.el('rect', { x: x + 4, y: 12 + (k % 3) * 8, width: 12, height: 4, fill: '#d6e8fb' }, world); st.el('rect', { x: x + 8, y: 8 + (k % 3) * 8, width: 6, height: 4, fill: '#ffffff' }, world); }
+  }
+  for (const [x, y] of d.igloos) sprite(world, IGLOO, x, y, 2.5);
+  for (const [x, y] of d.cubes) iceBlock(world, x, y, 22, 14, 6);
+  for (const [x, y] of d.diamonds) diamond(world, x, y);
+  // the title (it can change: setPlaque(head, …))
+  return plaque(world, 30, 25, title, 13, 'start', { fill: '#2a5ad6', text: '#ffffff' });
+}
+/* light snow falling over everything (call it last) */
+function snowfall() {
+  const flakes = st.el('g', { 'shape-rendering': 'crispEdges' });
+  for (let i = 0; i < 16; i++) {
+    const x = (i * 53 + 17) % 800, s = i % 3 ? 3 : 4, f = st.el('rect', { x: 0, y: 0, width: s, height: s, fill: '#ffffff', opacity: 0.85 }, flakes);
+    gsap.fromTo(f, { x, y: -10 - (i * 37) % 450 }, { x: x + 30, y: 460, duration: 9 + (i % 5) * 2, repeat: -1, ease: 'steps(60)', delay: -(i * 0.9) });
+  }
+  return flakes;
+}
+
+/* a penguin with its feet at (0, 0) of p.g; p.body flips it to look left or right */
+function penguin(parent, x, y, dir) {
+  const g = st.el('g', {}, parent), body = st.el('g', {}, g), frames = {};
+  for (const [name, rows] of Object.entries(FRAMES)) { frames[name] = sprite(body, rows, -7 * PX, -16 * PX); frames[name].style.display = name === 'stand' ? '' : 'none'; }
+  const p = { g, body, frames, wt: null };
+  gsap.set(g, { x, y }); face(p, dir || 1);
+  return p;
+}
+function frame(p, name) { for (const [k, f] of Object.entries(p.frames)) f.style.display = k === name ? '' : 'none'; }
+function face(p, dir) { p.body.setAttribute('transform', dir < 0 ? 'scale(-1 1)' : ''); }
+function walk(p, on) {
+  if (p.wt) { p.wt.kill(); p.wt = null; }
+  if (!on) { frame(p, 'stand'); return; }
+  let s = 0; frame(p, 'walk1');
+  p.wt = gsap.to({}, { duration: 0.12, repeat: -1, onRepeat: () => frame(p, (s ^= 1) ? 'walk2' : 'walk1') });
+}
+/* a hop with the flippers up (times: how many) */
+function hop(p, times, delay) {
+  return gsap.to(p.body, {
+    keyframes: [{ y: -14, duration: 0.15, ease: 'steps(3)' }, { y: 0, duration: 0.15, ease: 'steps(3)' }], repeat: (times || 1) - 1, delay: delay || 0,
+    onStart: () => frame(p, 'hop'), onComplete: () => frame(p, 'stand'),
+  });
+}
+function puff(parent, x, y, color) {
+  for (let i = 0; i < 6; i++) {
+    const p = st.el('rect', { x: -3, y: -3, width: 6, height: 6, fill: color || '#ffffff', 'shape-rendering': 'crispEdges' }, parent);
+    gsap.set(p, { x, y });
+    gsap.to(p, { x: x + (i - 2.5) * 9, y: y - 4 - (i % 2) * 6, opacity: 0, duration: 0.45, ease: 'steps(5)', onComplete: () => p.remove() });
+  }
+}
+/* pixel confetti of snow and gold from (x, y) */
+function burst(parent, x, y, n) {
+  for (let i = 0; i < (n || 24); i++) {
+    const s = 4 + (i % 3) * 2, p = st.el('rect', { x: -s / 2, y: -s / 2, width: s, height: s, fill: ['#ffffff', C.y, C.c, C.r][i % 4], 'shape-rendering': 'crispEdges' }, parent);
+    gsap.set(p, { x, y });
+    gsap.to(p, { x: x + Math.cos(i * 1.7) * (60 + (i % 5) * 24), y: y + Math.sin(i * 1.7) * (40 + (i % 4) * 18) - 20, opacity: 0, duration: 1.2, ease: 'steps(12)', onComplete: () => p.remove() });
+  }
+}
+/* a bouncing arrow pointing down at (x, y) */
+function arrowAt(parent, x, y) {
+  const a = sprite(parent, ARROW, -10.5, 0);
+  gsap.set(a, { x, y });
+  gsap.to(a, { y: y - 8, duration: 0.3, repeat: -1, yoyo: true, ease: 'steps(3)' });
+  return a;
+}
+
+const X0 = 128, ROW = { a: 140, b: 232, r: 324 }, TAG = { a: '#2a5ad6', b: '#e0364a', r: '#f08a1c' }, H = 26;
+let head, scale = 4, bars = {}, birds = {}, vals = { a: null, b: null, r: null }, marks, fx, finale;
+const W = (v) => Math.max(0, Number(v) || 0) * scale;
+
+/* a bar of ice whose length changes (b.len): the seams show the units (or every five units when they are small) */
+function bar(k) {
+  const g = st.el('g'), body = st.el('g', { 'shape-rendering': 'crispEdges' }, g); gsap.set(g, { x: X0, y: ROW[k] });
+  const lab = plaque(g, 14, H / 2, '', 11);
+  const b = { g, body, lab, len: 0, draw() {
+    st.clear(body);
+    const w = Math.round(b.len);
+    if (w > 0) {
+      // one block for each unit, or for every five units when the units are small
+      const unit = scale >= 9 ? scale : scale * 5;
+      st.el('rect', { x: -2, y: -2, width: w + 4, height: H + 4, fill: '#163e96' }, body);
+      for (let x = 0; x < w - 0.5; x += unit) {
+        const bw = Math.max(1, Math.min(unit, w - x) - (x + unit < w ? 2 : 0)), x0 = Math.round(x);
+        st.el('rect', { x: x0, y: 0, width: bw, height: 6, fill: C.C }, body);
+        st.el('rect', { x: x0, y: 6, width: bw, height: H - 6, fill: C.c }, body);
+        st.el('rect', { x: x0, y: 6, width: bw, height: 2, fill: '#7fc2ea' }, body);
+        if (bw > 8) st.el('rect', { x: x0 + 3, y: 10, width: 2, height: H - 16, fill: '#ffffff' }, body);
+      }
+    }
+    // the number after the end of the bar
+    lab.style.display = lab._t.textContent ? '' : 'none';
+    gsap.set(lab, { x: w + 6 });
+  } };
+  b.draw();
+  return b;
+}
+function draw() {
+  head = field('I BLOCCHI DI EUCLIDE', { igloos: [[24, 80], [736, 80]], cubes: [[724, 396], [752, 396]], diamonds: [[748, 118]] });
+  for (const k of ['a', 'b', 'r']) {
+    plaque(st.svg, 100, ROW[k] + H / 2, k, 12, 'middle', { fill: TAG[k], text: '#ffffff' });
+    birds[k] = penguin(st.svg, 54, ROW[k] + H + 6, 1);
+    bars[k] = bar(k);
+  }
+  marks = st.el('g');
+  fx = st.el('g');
+  finale = st.el('g');
+  snowfall();
+}
+function rescale() { scale = Math.min(14, 540 / Math.max(1, ...['a', 'b'].map((k) => Math.abs(Number(vals[k]) || 0)))); }
+function show(k, v) { vals[k] = v; setPlaque(bars[k].lab, v == null ? '' : String(v)); bars[k].draw(); }
+const grow = (k, v, t) => { const b = bars[k], to = W(v); return gsap.to(b, { len: to, duration: t ?? 0.5, ease: `steps(${Math.max(1, Math.min(12, Math.round(Math.abs(to - b.len) / 12)))})`, onUpdate: b.draw }); };
+/* a ← b, b ← r: a copy of the bar slides from its row to the other one, and the penguin there hops */
+async function move(from, to, v) {
+  const ghost = bars[from].g.cloneNode(true); fx.appendChild(ghost);
+  gsap.set(ghost, { x: X0, y: ROW[from] });
+  show(to, v); bars[to].len = 0; bars[to].draw();
+  await gsap.to(ghost, { keyframes: [{ x: X0 + 10, duration: 0.15, ease: 'steps(2)' }, { y: ROW[to], duration: 0.45, ease: 'steps(8)' }, { x: X0, duration: 0.15, ease: 'steps(2)' }] });
+  bars[to].len = W(v); bars[to].draw(); ghost.remove();
+  puff(fx, X0 - 4, ROW[to] + H);
+  await hop(birds[to]);
+}
+/* r ← a mod b: copies of b laid along a, what is left becomes r */
+async function remainder(v) {
+  st.clear(marks);
+  const a = Number(vals.a) || 0, b = Number(vals.b) || 0;
+  if (!(b > 0)) { show('r', v); await grow('r', v); return; }
+  const n = Math.floor(a / b);
+  for (let i = 0; i < Math.min(n, 30); i++) {
+    const p = st.el('g', { 'shape-rendering': 'crispEdges' }, marks), w = Math.max(4, W(b));
+    st.el('rect', { x: X0 + W(b) * i + 2, y: ROW.a - 6, width: w - 4, height: 4, fill: C.r }, p);
+    st.el('rect', { x: X0 + W(b) * i + 2, y: ROW.a + H + 2, width: w - 4, height: 4, fill: C.r }, p);
+    st.el('rect', { x: X0 + W(b) * i + 1, y: ROW.a - 6, width: 3, height: H + 12, fill: C.r }, p);
+    st.el('rect', { x: X0 + W(b) * (i + 1) - 4, y: ROW.a - 6, width: 3, height: H + 12, fill: C.r }, p);
+    gsap.set(p, { y: ROW.b - ROW.a });
+    await gsap.to(p, { y: 0, duration: Math.max(0.12, 0.32 - i * 0.02), ease: 'steps(5)' });
+  }
+  if (v > 0) {
+    const rest = st.el('rect', { x: X0 + W(b) * n, y: ROW.a - 8, width: Math.max(4, W(v)), height: H + 16, fill: 'none', stroke: C.y, 'stroke-width': 4, 'shape-rendering': 'crispEdges' }, marks);
+    gsap.from(rest, { opacity: 0, duration: 0.3, ease: 'steps(3)' });
+  }
+  await pause(0.35);
+  show('r', v); bars.r.len = W(v); bars.r.draw();
+  gsap.set(bars.r.g, { x: X0 + W(b) * n, y: ROW.a });
+  await gsap.to(bars.r.g, { keyframes: [{ y: ROW.r, duration: 0.5, ease: 'steps(8)' }, { x: X0, duration: 0.4, ease: 'steps(6)' }] });
+  hop(birds.r);
+  await gsap.to(marks, { opacity: 0, duration: 0.3, ease: 'steps(3)' }); st.clear(marks); gsap.set(marks, { opacity: 1 });
+}
+async function celebrate() {
+  st.clear(finale);
+  const p = plaque(finale, 400, 404, `MCD = ${vals.a}`, 16, 'middle', { fill: C.y });
+  burst(finale, 400, 404, 30);
+  for (const k of ['a', 'b', 'r']) hop(birds[k], 4, k === 'a' ? 0 : k === 'b' ? 0.1 : 0.2);
+  await gsap.from(p, { y: 30, opacity: 0, duration: 0.5, ease: 'steps(6)' });
+  await gsap.to(bars.a.g, { opacity: 0.35, duration: 0.2, yoyo: true, repeat: 3, ease: 'steps(1)' });
+}
+
+export default {
+  name: 'I blocchi di Euclide',
+  description: 'Un campo di ghiaccio in pixel art: a, b e r sono tre barre di blocchi di ghiaccio, un blocco per unità, ognuna con il suo pinguino. Il resto r è quello che avanza di a dopo averci appoggiato b quante più volte possibile; poi b prende il posto di a e r quello di b, finché b non è zero: allora a è il massimo comun divisore.',
+  slots: {
+    a: { type: 'Integer', label: 'Il primo numero (a)' },
+    b: { type: 'Integer', label: 'Il secondo numero (b)' },
+    r: { type: 'Integer', label: 'Il resto (r)' },
+  },
+  setup(stage) { st = stage; stage.onSpeed((s) => gsap.globalTimeline.timeScale(s)); draw(); },
+  reset(stage, values) {
+    gsap.globalTimeline.clear(); draw();
+    vals = { a: values.a, b: values.b, r: values.r }; rescale();
+    for (const k of ['a', 'b', 'r']) { bars[k].len = W(vals[k]); show(k, vals[k]); }
+  },
+  async update(stage, events) {
+    for (const e of events) {
+      if (e.kind === 'vanish' || e.value == null) continue;
+      if (e.slot === 'r') { await remainder(e.value); continue; }
+      const from = e.slot === 'a' && e.value === vals.b ? 'b' : e.slot === 'b' && e.value === vals.r ? 'r' : null;
+      if (from) await move(from, e.slot, e.value);
+      else {
+        // a number from the keyboard: the scale follows the longest bar
+        show(e.slot, e.value); rescale();
+        hop(birds[e.slot]);
+        await Promise.all(['a', 'b', 'r'].map((k) => grow(k, vals[k])));
+      }
+      if (e.slot === 'b' && e.value === 0) await celebrate();
+    }
+  },
+};
