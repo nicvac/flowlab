@@ -34,6 +34,7 @@
   --font-ui: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, "Liberation Mono", monospace;
   --side-w: 420px;
+  --side-h: 42vh;
   --r: 8px;
 }
 @media (prefers-color-scheme: dark) {
@@ -518,14 +519,19 @@ body.filedrag #canvasWrap { outline: 3px dashed var(--accent); outline-offset: -
   #stepBtn .lbl, #exBtn .lbl, #modBtn .lbl, #fileBtn .lbl { display: none; }
 }
 @media (max-width: 900px) {
-  body { overflow: auto; }
   .bar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
   .bar > * { flex: none; }
   .bar .grow { flex: 1 0 8px; }
-  #app { height: auto; min-height: 100%; }
-  main.work { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(420px, 62vh) auto; }
-  #grip { display: none; }
-  #side { border-top: 1px solid var(--line); min-height: 460px; }
+  /* the panel goes below the diagram, with the same divider as on the side: drag it to change the height, the
+     button hides and shows the panel (Ctrl+B) */
+  main.work { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(120px, 1fr) 6px min(var(--side-h), calc(100vh - 230px)); }
+  #grip { cursor: row-resize; border-left: 0; border-right: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  #sideToggle { width: 48px; height: 18px; }
+  #sideToggle svg { transform: rotate(90deg); }
+  body.side-hidden main.work { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(120px, 1fr) 6px 0; }
+  body.side-hidden #sideToggle svg { transform: rotate(-90deg); }
+  body.side-hidden #sideToggle { left: 50%; right: auto; top: auto; bottom: 3px; transform: translateX(-50%); }
+  body.side-empty main.work { grid-template-rows: minmax(0, 1fr); }
   .speed input { width: 70px; }
   .hint-add { display: none; }
   .tb .lbl { display: none; }
@@ -11570,6 +11576,12 @@ const ArrayView = (() => {
     $('#compactBtn').addEventListener('click', () => { focusView(MAIN); toggleCompact(); });
     $('#zoomVal').addEventListener('click', () => { focusView(MAIN); setZoom(1); });
     $('#tabs').addEventListener('keydown', (e) => {
+      if (below.matches) {
+        if (!['ArrowUp', 'ArrowDown'].includes(e.key) || document.body.classList.contains('side-hidden')) return;
+        e.preventDefault();
+        setSideH($('#side').getBoundingClientRect().height + (e.key === 'ArrowUp' ? 30 : -30));
+        return;
+      }
       if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
       const tabs = $$('#tabs [role=tab]'); const i = tabs.findIndex((t) => t.dataset.tab === st.tab);
       const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]; setTab(n.dataset.tab); n.focus();
@@ -11613,17 +11625,31 @@ const ArrayView = (() => {
     // panel divider
     const grip = $('#grip');
     const sideW = store.get('sideW', null); if (sideW) document.documentElement.style.setProperty('--side-w', sideW + 'px');
+    const sideH = store.get('sideH', null); if (sideH) document.documentElement.style.setProperty('--side-h', sideH + 'px');
+    // on narrow screens the panel is below the diagram: the divider is horizontal and changes the height of the panel
+    const below = matchMedia('(max-width: 900px)');
+    const orient = () => grip.setAttribute('aria-orientation', below.matches ? 'horizontal' : 'vertical');
+    orient(); below.addEventListener('change', orient);
+    const setSideH = (h) => { h = Math.round(Math.max(140, Math.min(window.innerHeight - 220, h))); document.documentElement.style.setProperty('--side-h', h + 'px'); store.set('sideH', h); };
     $('#sideToggle').addEventListener('pointerdown', (e) => e.stopPropagation());
     $('#sideToggle').addEventListener('click', (e) => { e.stopPropagation(); setSideHidden(!document.body.classList.contains('side-hidden')); });
     setSideHidden(!!store.get('sideHidden', false));
     grip.addEventListener('pointerdown', (e) => {
       if (document.body.classList.contains('side-hidden')) return;
       grip.setPointerCapture(e.pointerId);
-      const mv = (ev) => { const w = Math.max(280, Math.min(window.innerWidth - 320, window.innerWidth - ev.clientX)); document.documentElement.style.setProperty('--side-w', w + 'px'); store.set('sideW', w); };
+      const mv = below.matches
+        ? (ev) => setSideH(window.innerHeight - ev.clientY - 3)
+        : (ev) => { const w = Math.max(280, Math.min(window.innerWidth - 320, window.innerWidth - ev.clientX)); document.documentElement.style.setProperty('--side-w', w + 'px'); store.set('sideW', w); };
       const up = () => { grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); };
       grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up);
     });
     grip.addEventListener('keydown', (e) => {
+      if (below.matches) {
+        if (!['ArrowUp', 'ArrowDown'].includes(e.key) || document.body.classList.contains('side-hidden')) return;
+        e.preventDefault();
+        setSideH($('#side').getBoundingClientRect().height + (e.key === 'ArrowUp' ? 30 : -30));
+        return;
+      }
       if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
       const cur = $('#side').getBoundingClientRect().width; const w = Math.max(280, cur + (e.key === 'ArrowLeft' ? 30 : -30));
       document.documentElement.style.setProperty('--side-w', w + 'px'); store.set('sideW', w);

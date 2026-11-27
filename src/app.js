@@ -4290,6 +4290,12 @@
     $('#compactBtn').addEventListener('click', () => { focusView(MAIN); toggleCompact(); });
     $('#zoomVal').addEventListener('click', () => { focusView(MAIN); setZoom(1); });
     $('#tabs').addEventListener('keydown', (e) => {
+      if (below.matches) {
+        if (!['ArrowUp', 'ArrowDown'].includes(e.key) || document.body.classList.contains('side-hidden')) return;
+        e.preventDefault();
+        setSideH($('#side').getBoundingClientRect().height + (e.key === 'ArrowUp' ? 30 : -30));
+        return;
+      }
       if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
       const tabs = $$('#tabs [role=tab]'); const i = tabs.findIndex((t) => t.dataset.tab === st.tab);
       const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]; setTab(n.dataset.tab); n.focus();
@@ -4333,17 +4339,31 @@
     // panel divider
     const grip = $('#grip');
     const sideW = store.get('sideW', null); if (sideW) document.documentElement.style.setProperty('--side-w', sideW + 'px');
+    const sideH = store.get('sideH', null); if (sideH) document.documentElement.style.setProperty('--side-h', sideH + 'px');
+    // on narrow screens the panel is below the diagram: the divider is horizontal and changes the height of the panel
+    const below = matchMedia('(max-width: 900px)');
+    const orient = () => grip.setAttribute('aria-orientation', below.matches ? 'horizontal' : 'vertical');
+    orient(); below.addEventListener('change', orient);
+    const setSideH = (h) => { h = Math.round(Math.max(140, Math.min(window.innerHeight - 220, h))); document.documentElement.style.setProperty('--side-h', h + 'px'); store.set('sideH', h); };
     $('#sideToggle').addEventListener('pointerdown', (e) => e.stopPropagation());
     $('#sideToggle').addEventListener('click', (e) => { e.stopPropagation(); setSideHidden(!document.body.classList.contains('side-hidden')); });
     setSideHidden(!!store.get('sideHidden', false));
     grip.addEventListener('pointerdown', (e) => {
       if (document.body.classList.contains('side-hidden')) return;
       grip.setPointerCapture(e.pointerId);
-      const mv = (ev) => { const w = Math.max(280, Math.min(window.innerWidth - 320, window.innerWidth - ev.clientX)); document.documentElement.style.setProperty('--side-w', w + 'px'); store.set('sideW', w); };
+      const mv = below.matches
+        ? (ev) => setSideH(window.innerHeight - ev.clientY - 3)
+        : (ev) => { const w = Math.max(280, Math.min(window.innerWidth - 320, window.innerWidth - ev.clientX)); document.documentElement.style.setProperty('--side-w', w + 'px'); store.set('sideW', w); };
       const up = () => { grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); };
       grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up);
     });
     grip.addEventListener('keydown', (e) => {
+      if (below.matches) {
+        if (!['ArrowUp', 'ArrowDown'].includes(e.key) || document.body.classList.contains('side-hidden')) return;
+        e.preventDefault();
+        setSideH($('#side').getBoundingClientRect().height + (e.key === 'ArrowUp' ? 30 : -30));
+        return;
+      }
       if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
       const cur = $('#side').getBoundingClientRect().width; const w = Math.max(280, cur + (e.key === 'ArrowLeft' ? 30 : -30));
       document.documentElement.style.setProperty('--side-w', w + 'px'); store.set('sideW', w);
