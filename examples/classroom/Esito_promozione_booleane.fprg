@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Esito della promozione con variabili booleane"/>
+        <attribute name="authors" value="Nicola Vacca"/>
+        <attribute name="about" value="Dati percAssenze, assenzeIngiustificate, media (da leggere in input), calcola e visualizza l'esito della promozione."/>
+        <attribute name="saved" value="2026-11-28 10:00:00 AM"/>
+    </attributes>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Regola: si e' promossi con la media sufficiente e senza troppe assenze; chi supera il limite di assenze e' promosso solo se sono tutte giustificate."/>
+            <comment text="COSTANTI"/>
+            <declare name="MEDIA_MIN" type="Real" array="False" size="" flowlab-const="True"/>
+            <assign variable="MEDIA_MIN" expression="6"/>
+            <declare name="PERC_MAX_ASSENZE" type="Real" array="False" size="" flowlab-const="True"/>
+            <assign variable="PERC_MAX_ASSENZE" expression="25"/>
+            <comment text="INPUT"/>
+            <declare name="percAssenze" type="Real" array="False" size=""/>
+            <declare name="assenzeIngiustificate" type="Boolean" array="False" size=""/>
+            <declare name="media" type="Real" array="False" size=""/>
+            <comment text="LAVORO"/>
+            <declare name="mediaSufficiente" type="Boolean" array="False" size=""/>
+            <declare name="haTanteAssenze" type="Boolean" array="False" size=""/>
+            <declare name="assenzeGiustificate" type="Boolean" array="False" size=""/>
+            <declare name="promosso" type="Boolean" array="False" size=""/>
+            <comment text="OUTPUT"/>
+            <declare name="esito" type="String" array="False" size=""/>
+            <output expression="&quot;Percentuale assenze (0-100): &quot;" newline="True"/>
+            <input variable="percAssenze"/>
+            <output expression="&quot;Assenze ingiustificate (true/false): &quot;" newline="True"/>
+            <input variable="assenzeIngiustificate"/>
+            <output expression="&quot;Media (0-10): &quot;" newline="True"/>
+            <input variable="media"/>
+            <assign variable="mediaSufficiente" expression="media &gt;= MEDIA_MIN"/>
+            <assign variable="haTanteAssenze" expression="percAssenze &gt; PERC_MAX_ASSENZE"/>
+            <assign variable="assenzeGiustificate" expression="not(assenzeIngiustificate)"/>
+            <assign variable="promosso" expression="mediaSufficiente and (not(haTanteAssenze) or assenzeGiustificate)"/>
+            <if expression="promosso">
+                <then>
+                    <assign variable="esito" expression="&quot;Promosso&quot;"/>
+                </then>
+                <else>
+                    <assign variable="esito" expression="&quot;Non promosso&quot;"/>
+                </else>
+            </if>
+            <output expression="esito" newline="True"/>
+        </body>
+    </function>
+</flowgorithm>
