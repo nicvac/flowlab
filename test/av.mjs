@@ -4,7 +4,7 @@ const errs=[]; page.on('pageerror', e => errs.push(e.message));
 await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
 await page.evaluate(() => { localStorage.clear(); localStorage.setItem('flowlab:sideHidden', 'false'); });
 await page.reload(); await page.waitForTimeout(300);
-await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=0; s.dispatchEvent(new Event('input')); FlowLab.loadExample('matrices'); });
+await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=3; s.dispatchEvent(new Event('input')); FlowLab.loadExample('matrices'); });
 await page.click('.tabw[data-tab=vars] [role=tab]');
 // esegue passo-passo fino a dichiarare gli array
 for (let i = 0; i < 9; i++) { await page.click('#stepBtn'); await page.waitForTimeout(40); }
@@ -20,9 +20,9 @@ const v1 = await page.evaluate(() => { const w = document.querySelector('.avwin'
 console.log('scacchiera:', JSON.stringify(v1));
 await page.screenshot({ path: 'test/av1.png' });
 // passa al cubo: esecuzione continua fino a metà
-await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=3; s.dispatchEvent(new Event('input')); });
-const cuboBtn = await page.$$('#varsBody .avopen'); await cuboBtn[1].click(); await cuboBtn[2].click();
 await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=0; s.dispatchEvent(new Event('input')); });
+const cuboBtn = await page.$$('#varsBody .avopen'); await cuboBtn[1].click(); await cuboBtn[2].click();
+await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=3; s.dispatchEvent(new Event('input')); });
 await page.click('#runBtn'); await page.waitForTimeout(150); await page.click('#pauseBtn').catch(()=>{});
 await page.waitForTimeout(500);
 // ridimensiona e sposta le finestre per vederle tutte

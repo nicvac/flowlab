@@ -24,28 +24,12 @@ async function useStage(title) {
 }
 async function open(ex, title) {
   await page.evaluate((x) => FlowLab.loadExample(x), ex); await wait(200);
-  await page.evaluate(() => { const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); });
+  await page.evaluate(() => { const s = document.querySelector('#speed'); s.value = 3; s.dispatchEvent(new Event('input')); });
   await useStage(title); await wait(200);
   await page.locator('.stagewin .stage-speed').fill('7'); await page.locator('.stagewin .stage-speed').dispatchEvent('input');
 }
 const inputReady = () => page.waitForFunction(() => !document.querySelector('#conInput').disabled || /Fine del programma/.test(document.querySelector('#conOut').innerText), null, { timeout: 60000 });
 
-// guess the number: the test plays with a binary search
-await open('guess_number', 'Il tiro al bersaglio');
-await page.click('#runBtn');
-let lo = 1, hi = 100, g = 0, shots = 0;
-for (let k = 0; k < 10; k++) {
-  await inputReady();
-  if (/Indovinato/.test(await con())) break;
-  const text = await con();
-  if (/Più alto\s*$/.test(text.trim())) lo = g + 1; else if (/Più basso\s*$/.test(text.trim())) hi = g - 1;
-  g = Math.floor((lo + hi) / 2); shots++;
-  await page.fill('#conInput', String(g)); await page.keyboard.press('Enter'); await wait(200);
-}
-await page.waitForFunction(() => /Indovinato/.test(document.querySelector('#conOut').innerText), null, { timeout: 60000 }); await wait(2500);
-const darts = await frame().evaluate(() => [...document.querySelectorAll('text')].map((t) => t.textContent));
-ok(`bersaglio: ${shots} tiri, ${darts.filter((x) => /^Indovinato/.test(x)).length ? 'indovinato' : '?'} ${await msg()}`, darts.includes('Indovinato!') && !(await msg()));
-await page.screenshot({ path: 'test/stage_guess.png' });
 
 // recursive factorial: the pile of plates
 await open('factorial', 'La torre delle chiamate');

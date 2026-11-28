@@ -54,7 +54,7 @@ await page.mouse.move(sb.x + sb.width/2 + 20, sb.y + 40, { steps: 5 });
 await page.mouse.move(tb.x + tb.width/2, tb.y + tb.height/2, { steps: 8 }); await page.mouse.up();
 console.log('order after drag:', await page.evaluate(() => FlowLab.state.prog.functions[0].body.map(s => s.kind).join(',')));
 // errore di runtime: variabile non inizializzata
-await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=0; s.dispatchEvent(new Event('input')); });
+await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=3; s.dispatchEvent(new Event('input')); });
 await page.click('#tabs [data-tab=console]');
 await page.click('#runBtn'); await page.waitForTimeout(400);
 console.log('ERR OUT:', (await page.innerText('#conOut')).replace(/\n/g,' | '));

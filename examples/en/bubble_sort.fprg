@@ -13,10 +13,6 @@
             <bind slot="fila" variable="Main.data"/>
             <bind slot="j" variable="Sort.j"/>
         </stage>
-        <stage file="bubble_sort.flstage">
-            <bind slot="fila" variable="Main.data"/>
-            <bind slot="j" variable="Sort.j"/>
-        </stage>
     </flowlab-stages>
     <function name="Main" type="None" variable="">
         <parameters/>

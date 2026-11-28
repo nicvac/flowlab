@@ -4,7 +4,7 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ locale: 'it-IT', viewport: { width: 1440, height: 900 }, acceptDownloads: true });
 const errs = []; page.on('pageerror', (e) => errs.push(e.message));
 await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
-await page.evaluate(() => { localStorage.clear(); window.showSaveFilePicker = undefined; const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); });
+await page.evaluate(() => { localStorage.clear(); window.showSaveFilePicker = undefined; const s = document.querySelector('#speed'); s.value = 3; s.dispatchEvent(new Event('input')); });
 const wait = (ms = 120) => page.waitForTimeout(ms);
 const key = async (k) => { await page.keyboard.press(k); await wait(); };
 const title = () => page.locator('.modal h2').textContent().catch(() => null);

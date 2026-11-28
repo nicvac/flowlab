@@ -60,7 +60,7 @@ await page.evaluate(() => FlowLab.loadText(`<?xml version="1.0"?>
         </body>
     </function>
 </${ModelLib.FPRG_ROOT}>`, 'area.fprg'));
-await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=0; s.dispatchEvent(new Event('input')); });
+await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=3; s.dispatchEvent(new Event('input')); });
 await page.click('#runBtn'); await page.waitForTimeout(300);
 console.log('state', await page.evaluate(() => FlowLab.run.state));
 await page.click('#runBtn'); await page.waitForTimeout(300);

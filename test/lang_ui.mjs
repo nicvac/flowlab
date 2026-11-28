@@ -18,7 +18,7 @@ ok('suggerimento: ' + await page.locator('.hint-add').textContent(), /Click an a
 const inputs = { grade_average: ['2', '7', '8'], even_odd: ['7'], times_table: ['3'], gcd: ['12', '18'], guess_number: [], factorial: ['5'] };
 const ids = await page.evaluate(() => Examples.list.map((e) => e.id));
 for (const id of ids) {
-  await page.evaluate((x) => { const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); FlowLab.loadExample(x); }, id); await wait(150);
+  await page.evaluate((x) => { const s = document.querySelector('#speed'); s.value = 3; s.dispatchEvent(new Event('input')); FlowLab.loadExample(x); }, id); await wait(150);
   if (id === 'indovina') { await page.evaluate(() => { Math.random = () => 0.41; }); }
   await page.click('#runBtn'); await wait(250);
   for (const v of id === 'guess_number' ? ['42'] : inputs[id] || []) { await page.evaluate((x) => FlowLab.submitInput(x), v); await wait(120); }

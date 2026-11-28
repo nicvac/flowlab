@@ -10,7 +10,7 @@ for (let i = 0; i < 4; i++) {
   console.log(`passo ${i + 1}: subito=${during} a metà=${mid} all'arrivo=${after}`);
 }
 // velocità Media in esecuzione continua
-await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=2; s.dispatchEvent(new Event('input')); });
+await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=1; s.dispatchEvent(new Event('input')); });
 await page.click('#stopBtn'); await page.click('#runBtn'); await page.waitForTimeout(120);
 console.log('esecuzione Media, a metà tragitto:', await lit()); await page.waitForTimeout(220); console.log('dopo arrivo:', await lit());
 console.log('ERR', errs); await browser.close();

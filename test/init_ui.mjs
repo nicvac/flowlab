@@ -5,7 +5,7 @@ const page = await browser.newPage({ locale: 'it-IT', viewport: { width: 1366, h
 const errs = []; page.on('pageerror', (e) => errs.push(e.message));
 await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
 const wait = (ms = 120) => page.waitForTimeout(ms);
-await page.evaluate(() => { localStorage.clear(); const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); FlowLab.loadText('<?xml version="1.0"?><flowgorithm fileversion="4.2"><attributes><attribute name="name" value="Prova"/></attributes><function name="Main" type="None" variable=""><parameters/><body/></function></flowgorithm>', 'p.fprg'); });
+await page.evaluate(() => { localStorage.clear(); const s = document.querySelector('#speed'); s.value = 3; s.dispatchEvent(new Event('input')); FlowLab.loadText('<?xml version="1.0"?><flowgorithm fileversion="4.2"><attributes><attribute name="name" value="Prova"/></attributes><function name="Main" type="None" variable=""><parameters/><body/></function></flowgorithm>', 'p.fprg'); });
 await wait(200);
 await page.click('#chart .ins >> nth=0'); await page.click('#pop .insbtn[title="Dichiara"]'); await wait(80);
 console.log('campo visibile:', await page.isVisible('#f_init'));

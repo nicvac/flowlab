@@ -2,7 +2,7 @@ import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
 const browser = await chromium.launch(); const page = await browser.newPage({ locale: 'it-IT', viewport: { width: 1366, height: 860 } });
 const errs=[]; page.on('pageerror', e => errs.push(e.message));
 await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
-await page.evaluate(() => { localStorage.clear(); const s=document.querySelector('#speed'); s.value=0; s.dispatchEvent(new Event('input')); FlowLab.loadExample('min_max'); });
+await page.evaluate(() => { localStorage.clear(); const s=document.querySelector('#speed'); s.value=3; s.dispatchEvent(new Event('input')); FlowLab.loadExample('min_max'); });
 await page.click('#runBtn'); await page.waitForTimeout(400);
 console.log((await page.innerText('#conOut')).split('\n').slice(1, 4).join(' | '));
 // salvataggio e riapertura

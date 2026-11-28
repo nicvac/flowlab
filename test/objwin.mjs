@@ -5,7 +5,7 @@ const page = await browser.newPage({ locale: 'it-IT', viewport: { width: 1440, h
 const errs = []; page.on('pageerror', (e) => errs.push(e.message));
 await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
 const wait = (ms = 150) => page.waitForTimeout(ms);
-await page.evaluate(() => { localStorage.clear(); const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); FlowLab.loadExample('shapes'); FlowLab.setTab('vars'); });
+await page.evaluate(() => { localStorage.clear(); const s = document.querySelector('#speed'); s.value = 3; s.dispatchEvent(new Event('input')); FlowLab.loadExample('shapes'); FlowLab.setTab('vars'); });
 await wait(200);
 // passo passo fino a dentro aggiungi, poi a fine programma
 for (let i = 0; i < 400 && (await page.evaluate(() => FlowLab.run.state)) !== 'done'; i++) {

@@ -5,7 +5,7 @@ const page = await browser.newPage({ locale: 'it-IT', viewport: { width: 1366, h
 const errs = [];
 page.on('pageerror', e => errs.push('PAGEERR ' + e.message));
 await page.goto(url); await page.waitForTimeout(300);
-await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=0; s.dispatchEvent(new Event('input')); });
+await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=3; s.dispatchEvent(new Event('input')); });
 const cases = { parita: ['7'], tabellina: ['6'], mcd: ['84','36'], indovina: ['50','25','75','12','88','37','63','6','94','1','100','45','55','30','70','20','80','10','90','5','95','15','85','35','65','40','60'], media: ['0'] };
 for (const [id, inputs] of Object.entries(cases)) {
   await page.evaluate((id) => FlowLab.loadExample(id), id);

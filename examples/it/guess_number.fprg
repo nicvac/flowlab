@@ -14,11 +14,6 @@
             <bind slot="tentativo" variable="Main.tentativo"/>
             <bind slot="tentativi" variable="Main.tentativi"/>
         </stage>
-        <stage file="guess_number.flstage">
-            <bind slot="segreto" variable="Main.segreto"/>
-            <bind slot="tentativo" variable="Main.tentativo"/>
-            <bind slot="tentativi" variable="Main.tentativi"/>
-        </stage>
         <stage file="guess_number_neon.flstage">
             <bind slot="segreto" variable="Main.segreto"/>
             <bind slot="tentativo" variable="Main.tentativo"/>

@@ -14,7 +14,7 @@ await page.evaluate(() => { localStorage.clear(); localStorage.setItem('flowlab.
 const wait = (ms = 150) => page.waitForTimeout(ms);
 const ok = (name, cond) => console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`);
 const random = () => page.evaluate(() => { let n = 0; const s = [0.5, 0.2, 0.9, 0.1, 0.7, 0.3, 0.6, 0.4]; Math.random = () => s[n++ % s.length]; });
-const speed = (v) => page.evaluate((x) => { const s = document.querySelector('#speed'); s.value = x; s.dispatchEvent(new Event('input')); }, v);
+const speed = (v) => page.evaluate((x) => { const s = document.querySelector('#speed'); s.value = 3 - x; s.dispatchEvent(new Event('input')); }, v);
 /* a stage of the example (linked to it): chosen in the title bar of its window and expanded */
 async function useStage(title) {
   await page.waitForSelector('.stagewin');

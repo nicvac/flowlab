@@ -95,6 +95,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 select.fsel { height: 32px; border-radius: 7px; border: 1px solid var(--line); background: var(--paper); padding: 0 8px; max-width: 220px; }
 .speed { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .speed input { width: 86px; accent-color: var(--accent); }
+/* the ends of the sliders of speed (also in the window of the stage): slow on the left, fast on the right */
+.spd-ico { display: inline-grid; place-items: center; color: var(--muted); }
+.spd-ico svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .speed output { min-width: 62px; color: var(--ink); }
 
 main.work { display: grid; grid-template-columns: minmax(0, 1fr) 6px var(--side-w); min-height: 0; }

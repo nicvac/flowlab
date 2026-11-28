@@ -4,7 +4,7 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ locale: 'it-IT', viewport: { width: 1440, height: 900 } });
 const errs = []; page.on('pageerror', (e) => errs.push(e.message));
 await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
-await page.evaluate(() => { localStorage.clear(); const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); });
+await page.evaluate(() => { localStorage.clear(); const s = document.querySelector('#speed'); s.value = 3; s.dispatchEvent(new Event('input')); });
 const ok = (name, cond) => console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`);
 const out = async () => (await page.innerText('#conOut')).split('\n').filter((l) => l && !/^(▶|■)/.test(l)).join(' | ');
 await page.evaluate(() => { const S = ModelLib.makeStmt, p = FlowLab.state.prog; p.functions[0].body = [S('declare', { name: 'a, b', type: 'Boolean' }), S('assign', { variable: 'a', expression: 'true' }), S('assign', { variable: 'b', expression: 'false' }), S('output', { expression: 'a xor b' }), S('output', { expression: 'a xor not b' }), S('output', { expression: '6 xor 3' }), S('output', { expression: '1 xor b' })]; FlowLab.render(); });

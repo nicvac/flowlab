@@ -317,7 +317,7 @@ window.FlowLabStage = (host) => {
   function build() {
     let si = +(host.store.get('stageSpeed', 3)); if (!(si >= 0 && si < SPEEDS.length)) si = 3;
     const speedLbl = h('span', { class: 'stage-speedval' }, SPEEDS[si] + '×');
-    const speed = h('input', { type: 'range', min: 0, max: SPEEDS.length - 1, step: 1, value: si, class: 'stage-speed', 'aria-label': L('stage.speedOfTheAnimations'), title: L('stage.speedOfTheAnimations') });
+    const speed = h('input', { type: 'range', min: 0, max: SPEEDS.length - 1, step: 1, value: si, class: 'stage-speed', 'aria-label': L('stage.speedOfTheAnimations'), title: L('stage.speedOfTheAnimationsRightFaster') });
     speed.addEventListener('input', () => { const v = SPEEDS[+speed.value]; speedLbl.textContent = v + '×'; host.store.set('stageSpeed', +speed.value); if (cur) { cur.speed = v; send({ type: 'speed', value: v }); } });
     const btn = (lbl, icon, fn, cls) => h('button', { class: 'iconbtn' + (cls ? ' ' + cls : ''), type: 'button', title: lbl, 'aria-label': lbl, html: icon, onclick: fn });
     const sel = h('select', { class: 'stage-sel', 'aria-label': L('stage.activeStage') });
@@ -327,7 +327,7 @@ window.FlowLabStage = (host) => {
     const body = h('div', { class: 'fwin-body stage-body' }, msg);
     win = h('div', { class: 'fwin stagewin', role: 'dialog', 'aria-label': L('stage.stage') },
       h('div', { class: 'fwin-head' }, h('span', { class: 'stage-ico', 'aria-hidden': 'true', html: host.ICON }), sel, h('span', { class: 'grow' }),
-        h('span', { class: 'stage-speedbox stage-live' }, speed, speedLbl),
+        h('span', { class: 'stage-speedbox stage-live' }, h('span', { class: 'spd-ico', title: L('ui.slow'), html: host.ICON_SLOW }), speed, h('span', { class: 'spd-ico', title: L('ui.fast'), html: host.ICON_FAST }), speedLbl),
         btn(L('stage.bindTheVariables'), ICONS.bind, () => bindDialog(), 'stage-live'),
         btn(L('stage.saveTheStage'), ICONS.save, () => save(), 'stage-live'),
         btn(L('stage.unlinkTheStage'), ICONS.unlink, () => unlink()),

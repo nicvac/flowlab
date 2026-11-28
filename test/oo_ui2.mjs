@@ -5,7 +5,7 @@ const page = await browser.newPage({ locale: 'it-IT', viewport: { width: 1366, h
 const errs = [];
 page.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));
 await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
-await page.evaluate(() => { localStorage.clear(); const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); });
+await page.evaluate(() => { localStorage.clear(); const s = document.querySelector('#speed'); s.value = 3; s.dispatchEvent(new Event('input')); });
 const wait = (ms = 120) => page.waitForTimeout(ms);
 const out = async () => (await page.innerText('#conOut')).split('\n').slice(1, -1).join(' | ');
 const head = (name) => page.locator(`.ubox:has(.uname:text-is("${name}")) .uhit.head`);

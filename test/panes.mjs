@@ -18,7 +18,7 @@ await page.mouse.move(hb.x + 40, hb.y + 10); await page.mouse.down(); await page
 const pos = await page.$eval('.fwin[data-win=console]', w => [w.offsetLeft, w.offsetTop]);
 console.log('console spostata a', pos);
 // esegue un programma con input nella console flottante
-await page.evaluate(() => { FlowLab.loadExample('even_odd'); const s=document.querySelector('#speed'); s.value=0; s.dispatchEvent(new Event('input')); });
+await page.evaluate(() => { FlowLab.loadExample('even_odd'); const s=document.querySelector('#speed'); s.value=3; s.dispatchEvent(new Event('input')); });
 await page.click('#runBtn'); await page.waitForSelector('#conInput:not([disabled])'); await page.fill('#conInput','12'); await page.press('#conInput','Enter'); await page.waitForTimeout(200);
 console.log('output:', (await page.innerText('#conOut')).replace(/\n/g,' / '));
 console.log('vars visibili:', await page.isVisible('#varsBody table'));

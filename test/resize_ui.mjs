@@ -15,7 +15,7 @@ for (const [name, sel, open] of [
   ['console', '.fwin[data-win=console]', async () => { await page.click('.tabw[data-tab=console] .detach'); }],
   ['array', '.avwin', async () => {
     await page.evaluate(() => FlowLab.loadExample('bubble_sort')); await page.waitForTimeout(150);
-    await page.evaluate(() => { const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); });
+    await page.evaluate(() => { const s = document.querySelector('#speed'); s.value = 3; s.dispatchEvent(new Event('input')); });
     await page.click('#stepBtn'); for (let i = 0; i < 9; i++) { await page.click('#stepBtn'); await page.waitForTimeout(40); }
     await page.click('.tabw[data-tab=vars] [role=tab]'); await page.waitForTimeout(300);
     await page.locator('#varsBody .avopen').first().click(); await page.waitForTimeout(200);

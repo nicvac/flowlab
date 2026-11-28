@@ -18,7 +18,7 @@ async function session(lang) {
 const texts = (page) => page.frames().find((f) => f !== page.mainFrame() && f.url() === 'about:srcdoc').evaluate(() => [...document.querySelectorAll('text')].map((t) => t.textContent).filter((x) => /[A-Za-z!]/.test(x)));
 async function play(page, ex, i, inputs) {
   await page.evaluate((x) => { FlowLab.state.dirty = false; FlowLab.loadExample(x); }, ex); await page.waitForTimeout(300);
-  await page.evaluate(() => { const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); });
+  await page.evaluate(() => { const s = document.querySelector('#speed'); s.value = 3; s.dispatchEvent(new Event('input')); });
   const names = await page.$$eval('.stagewin .stage-sel option', (o) => o.map((x) => x.textContent));
   await page.selectOption('.stagewin .stage-sel', String(i)); await page.waitForTimeout(100);
   if (await page.evaluate(() => document.querySelector('.stagewin').classList.contains('min'))) await page.click('.stagewin .minbtn');
@@ -38,14 +38,10 @@ async function play(page, ex, i, inputs) {
 // English
 let page = await session('en');
 let r = await play(page, 'bubble_sort', 0, []);
-ok('en, bubble sort: ' + r.names.join(' / ') + ' · ' + r.texts.filter((x) => !/^\[/.test(x)).join(' | '), r.names.join('|') === 'The penguin row|The row of kids' && r.texts.includes('THE PENGUIN ROW'));
-r = await play(page, 'bubble_sort', 1, []);
-ok('en, the row of kids: ' + r.texts.join(' | '), r.texts.includes('The row of kids'));
+ok('en, bubble sort: ' + r.names.join(' / ') + ' · ' + r.texts.filter((x) => !/^\[/.test(x)).join(' | '), r.names.join('|') === 'The penguin row' && r.texts.includes('THE PENGUIN ROW'));
 r = await play(page, 'guess_number', 0, []);
-ok('en, guess: ' + r.names.join(' / ') + ' · ' + r.texts.join(' | '), r.names.join('|') === 'Ice fishing|Darts on the number line|Neon Bay nights' && r.texts.includes('GUESSED!') && r.texts.some((x) => /^ICE FISHING · ATTEMPTS: \d+$/.test(x)));
+ok('en, guess: ' + r.names.join(' / ') + ' · ' + r.texts.join(' | '), r.names.join('|') === 'Ice fishing|Neon Bay nights' && r.texts.includes('GUESSED!') && r.texts.some((x) => /^ICE FISHING · ATTEMPTS: \d+$/.test(x)));
 r = await play(page, 'guess_number', 1, []);
-ok('en, darts: ' + r.texts.join(' | '), r.texts.includes('Guessed!') && r.texts.some((x) => /^Darts on the number line · attempts: \d+$/.test(x)));
-r = await play(page, 'guess_number', 2, []);
 ok('en, Neon Bay: ' + r.texts.join(' | '), r.texts.includes('GUESSED!') && r.texts.some((x) => /^ATTEMPTS: \d+$/.test(x)));
 r = await play(page, 'gcd', 0, ['84', '36']);
 ok('en, gcd: ' + r.names.join(' / ') + ' · ' + r.texts.join(' | '), r.names.join('|') === "Euclid's ice blocks|Euclid's sticks" && r.texts.includes('GCD = 12') && r.texts.includes("EUCLID'S ICE BLOCKS"));

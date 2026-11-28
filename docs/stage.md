@@ -1,6 +1,6 @@
 # FlowLab Stage — format of the `.flstage` files
 
-A **stage** is an animated scene that follows the variables of a FlowLab program while it runs: a row of kids for an
+A **stage** is an animated scene that follows the variables of a FlowLab program while it runs: a row of penguins for an
 array being sorted, a tower of blocks for the recursive calls, two sticks for Euclid's algorithm. The program and the
 stage are separate files: the stage says which variables it needs (its **slots**), and the program names its stages and
 says which of its variables each slot follows. The stage file knows nothing of the program.
@@ -67,14 +67,14 @@ import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
 
 /* the texts in the language of FlowLab (stage.lang): Italian and English; any other language takes English */
 const TEXTS = {
-  it: { title: 'La fila dei ragazzi' },
-  en: { title: 'The row of kids' },
+  it: { title: 'La fila dei pinguini' },
+  en: { title: 'The penguin row' },
 };
 let T = TEXTS.en;
 let st; // the stage, kept by setup
 
 export default {
-  name: { it: 'La fila dei ragazzi', en: 'The row of kids' },
+  name: { it: 'La fila dei pinguini', en: 'The penguin row' },
   description: { it: 'Cosa mostra lo stage, per chi aggancia le variabili.', en: 'What the stage shows, for the person who binds the variables.' },
   slots: {
     fila: { type: 'Integer[]', label: { it: 'La fila (array di interi)', en: 'The row (array of integers)' } },
@@ -141,7 +141,7 @@ depending on the kind:
 Notes:
 - In the methods of the modules (`ArrayList.add`, `Stack.pop`…) only the result is seen: `l.add(0, 3)` is one
   `insert`, not the steps of the method. A plain array changes one element per block: an exchange made with a third
-  variable (`t ← v[j]`, `v[j] ← v[j + 1]`, `v[j + 1] ← t`) arrives as two `set` (and the change of `t`, if it is bound). A stage can recognise it: after `set(i)` with a value that is also at position `k`, wait; if the next event is `set(k)` with the old value of `i`, it was an exchange (this is what «La fila dei ragazzi» and «La fila dei pinguini» do). With repeated values the same value can be at several positions: the partner is the position of the second `set` (the one that had the copied value), not the first position found with that value.
+  variable (`t ← v[j]`, `v[j] ← v[j + 1]`, `v[j + 1] ← t`) arrives as two `set` (and the change of `t`, if it is bound). A stage can recognise it: after `set(i)` with a value that is also at position `k`, wait; if the next event is `set(k)` with the old value of `i`, it was an exchange (this is what «La fila dei pinguini» does). With repeated values the same value can be at several positions: the partner is the position of the second `set` (the one that had the copied value), not the first position found with that value.
 - An array that is filled for the first time arrives as `appear` (all `null`) and then one `set` per element.
 - Values: numbers, strings, booleans, `null` for an element without a value, arrays for arrays and lists.
 

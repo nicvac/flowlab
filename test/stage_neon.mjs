@@ -12,8 +12,8 @@ if (fs.existsSync(GSAP)) await page.route('https://cdn.jsdelivr.net/npm/gsap@3.1
 await page.goto('file://' + process.cwd() + '/dist/FlowLab.html'); await page.waitForTimeout(300);
 await page.evaluate(() => localStorage.clear()); await page.reload(); await page.waitForTimeout(400);
 await page.evaluate(() => FlowLab.loadExample('guess_number')); await page.waitForTimeout(300);
-await page.evaluate(() => { Math.random = () => 0.36; const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); });
-await page.selectOption('.stagewin .stage-sel', '2'); await page.waitForTimeout(100); await page.click('.stagewin .minbtn');
+await page.evaluate(() => { Math.random = () => 0.36; const s = document.querySelector('#speed'); s.value = 3; s.dispatchEvent(new Event('input')); });
+await page.selectOption('.stagewin .stage-sel', '1'); await page.waitForTimeout(100); await page.click('.stagewin .minbtn');
 await page.waitForFunction(() => FlowLab.stage.info() && FlowLab.stage.info().ready);
 const fr = () => page.frames().find((f) => f.url() === 'about:srcdoc');
 const ok = (n, c) => console.log((c ? 'ok   ' : 'FAIL ') + n);

@@ -4248,6 +4248,9 @@
      A program can name stages (prog.stages): .flstage files in the same folder as the .fprg (only the name is saved) or
      at a web address. Without stages nothing of the module is loaded and the execution has no hook. */
   let stageHook = null, stageMod = null;
+  // the ends of the sliders of speed: slow on the left, fast on the right
+  const ICON_SLOW = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15.5c0-4 3.2-7 7-7s7 3 7 7z"/><path d="M7.2 11.5l3.8 4M14.8 11.5L11 15.5M11 8.5v7"/><path d="M18 15.5h1.8a1.8 1.8 0 0 0 1.7-2.3l-.3-.9a1.5 1.5 0 0 0-2.1-.9L18 12M6 15.5v2.5M15.5 15.5v2.5M3 15.5l-1 1"/></svg>';
+  const ICON_FAST = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18c0-4 3-7 7.5-7 1.8 0 3 .5 4 1.3"/><path d="M16.5 12.3c1.5-.3 3 .4 3.5 1.7.4 1-.3 2-1.3 2H17M12.5 11C12 8 12.5 4.5 14 3.5c1 1.5.8 4.5-.3 7.7M15 11.2c.8-2.7 2.5-5.4 4-5.7.4 1.8-1 4.5-2.8 6.4"/><path d="M5 18h10.5a2.5 2.5 0 0 0 2.5-2M8 18l-1.5 2M13 18l1 2M5 18c-1.3 0-2-.8-2-1.8"/><circle cx="18" cy="13.6" r=".5"/></svg>';
   const STAGE_ICON = '<svg viewBox="0 0 24 24"><path d="M3 4h18M5 4v13M19 4v13M3 17h18"/><path d="M5 4c2 4 5 5 7 5s5-1 7-5"/><circle cx="9.5" cy="13" r="1.6"/><circle cx="14.5" cy="13" r="1.6"/></svg>';
   // the texts of the stage files chosen in this session (by name); the stages of the examples are in the page
   const stageTexts = new Map();
@@ -4257,7 +4260,7 @@
     // the code of the stages becomes active only now (until now it is only text in the page)
     const sc = document.createElement('script'); sc.textContent = STAGE_SRC; document.head.append(sc); sc.remove();
     stageMod = window.FlowLabStage({
-      L, h, M, toast, openModal, store, ICON: STAGE_ICON, ICON_MIN, lang: I18n.lang,
+      L, h, M, toast, openModal, store, ICON: STAGE_ICON, ICON_MIN, ICON_SLOW, ICON_FAST, lang: I18n.lang,
       prog: () => st.prog, interp: () => run.interp, winHost, nextZ: () => ++zTop,
       area: () => $('#canvasWrap').getBoundingClientRect(),
       stages: () => st.prog.stages || null,
@@ -4591,8 +4594,10 @@
     $('#pauseBtn').addEventListener('click', onPauseBtn);
     $('#stopBtn').addEventListener('click', stopRun);
     const sp = $('#speed');
-    sp.value = st.speed; $('#speedVal').textContent = SPEEDS[st.speed].label;
-    sp.addEventListener('input', () => { st.speed = +sp.value; store.set('speed', st.speed); $('#speedVal').textContent = SPEEDS[st.speed].label; });
+    // to the right faster (as the slider of the stages): the slider shows SPEEDS from the slowest to the instant one
+    const toPos = (i) => SPEEDS.length - 1 - i;
+    sp.value = toPos(st.speed); $('#speedVal').textContent = SPEEDS[st.speed].label;
+    sp.addEventListener('input', () => { st.speed = toPos(+sp.value); store.set('speed', st.speed); $('#speedVal').textContent = SPEEDS[st.speed].label; });
     $('#zoomIn').addEventListener('click', () => { focusView(MAIN); zoomAt(MAIN, st.zoom * 1.15); });
     $('#zoomOut').addEventListener('click', () => { focusView(MAIN); zoomAt(MAIN, st.zoom / 1.15); });
     $('#panBtn').addEventListener('click', () => setHand(!handTool));

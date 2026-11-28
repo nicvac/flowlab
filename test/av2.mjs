@@ -7,7 +7,7 @@ await page.reload(); await page.waitForTimeout(300);
 // 1D lungo: 200 elementi riempiti uno alla volta
 await page.evaluate(() => { const S = ModelLib.makeStmt; const p = ModelLib.newProgram(); p.attrs.name = 'Striscia';
   p.functions[0].body = [S('declare', { name: 'v', type: 'Integer', array: true, size: '200' }), S('declare', { name: 'i', type: 'Integer' }), S('for', { variable: 'i', start: '0', end: '199', body: [S('assign', { variable: 'v[i]', expression: 'i * i' })] })];
-  FlowLab.loadText(ModelLib.serializeFprg(p), 's.fprg'); const s=document.querySelector('#speed'); s.value=3; s.dispatchEvent(new Event('input')); });
+  FlowLab.loadText(ModelLib.serializeFprg(p), 's.fprg'); const s=document.querySelector('#speed'); s.value=0; s.dispatchEvent(new Event('input')); });
 await page.click('.tabw[data-tab=vars] [role=tab]');
 for (let i = 0; i < 4; i++) { await page.click('#stepBtn'); await page.waitForTimeout(30); }
 await page.waitForTimeout(600);
@@ -23,7 +23,7 @@ await page.evaluate(() => { document.querySelector('.avwin').style.width = '1100
 console.log('celle visibili dopo allargamento:', await page.$$eval('.avwin .av-c', c => c.length));
 // matrici: tavola e cubo aperti a programma finito
 await page.click('#stopBtn').catch(() => {});
-await page.evaluate(() => { document.querySelectorAll('.avwin').forEach((w) => w.remove()); FlowLab.loadExample('matrices'); const s=document.querySelector('#speed'); s.value=0; s.dispatchEvent(new Event('input')); });
+await page.evaluate(() => { document.querySelectorAll('.avwin').forEach((w) => w.remove()); FlowLab.loadExample('matrices'); const s=document.querySelector('#speed'); s.value=3; s.dispatchEvent(new Event('input')); });
 await page.click('#runBtn'); await page.waitForTimeout(800);
 const btns = await page.$$('#varsBody .avopen'); for (const b of btns) await b.click();
 await page.evaluate(() => { const ws = [...document.querySelectorAll('.avwin')]; const pos = [[20, 60, 520, 380], [560, 60, 560, 400], [560, 480, 620, 390]]; ws.forEach((w, i) => { const p = pos[i]; Object.assign(w.style, { left: p[0] + 'px', top: p[1] + 'px', width: p[2] + 'px', height: p[3] + 'px' }); }); });

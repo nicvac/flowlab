@@ -7,7 +7,7 @@ const errs = [];
 page.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));
 page.on('console', (m) => { if (m.type() === 'error') errs.push('CONSOLE ' + m.text()); });
 await page.goto(url); await page.waitForTimeout(400);
-await page.evaluate(() => { localStorage.clear(); const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); });
+await page.evaluate(() => { localStorage.clear(); const s = document.querySelector('#speed'); s.value = 3; s.dispatchEvent(new Event('input')); });
 const say = (...a) => console.log(...a);
 const wait = (ms = 120) => page.waitForTimeout(ms);
 

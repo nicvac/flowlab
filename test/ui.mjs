@@ -11,7 +11,7 @@ await page.screenshot({ path: 'test/shot1.png' });
 // run media example with inputs
 await page.evaluate(() => { localStorage.clear(); FlowLab.loadExample('grade_average'); });
 await page.selectOption('#speed', { index: 0 }).catch(()=>{});
-await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=0; s.dispatchEvent(new Event('input')); });
+await page.evaluate(() => { const s=document.querySelector('#speed'); s.value=3; s.dispatchEvent(new Event('input')); });
 await page.click('#runBtn');
 for (const v of ['3','7','5.5','8']) { await page.waitForSelector('#conInput:not([disabled])'); await page.fill('#conInput', v); await page.press('#conInput','Enter'); }
 await page.waitForTimeout(300);

@@ -30,7 +30,7 @@ const choose = async (title) => { const i = (await win()).opts.indexOf(title); a
 const expand = async () => { if ((await win()).min) await page.click('.stagewin .minbtn'); await wait(100); };
 const fast = async () => { await page.locator('.stagewin .stage-speed').fill('7'); await page.locator('.stagewin .stage-speed').dispatchEvent('input'); };
 const runToEnd = async (re) => { const t0 = Date.now(); await page.click('#runBtn'); await page.waitForFunction((r) => new RegExp(r).test(document.querySelector('#conOut').innerText), re, { timeout: 120000 }); return Date.now() - t0; };
-const speed0 = () => page.evaluate(() => { const s = document.querySelector('#speed'); s.value = 0; s.dispatchEvent(new Event('input')); });
+const speed0 = () => page.evaluate(() => { const s = document.querySelector('#speed'); s.value = 3; s.dispatchEvent(new Event('input')); });
 const fprgStages = () => page.evaluate(() => (FlowLab.serialize().match(/<flowlab-stages[\s\S]*?<\/flowlab-stages>/) || [''])[0]);
 
 ok('modulo non caricato all\'avvio (programma senza stage)', await page.evaluate(() => typeof window.FlowLabStage === 'undefined' && !FlowLab.stage && !document.querySelector('.stagewin')));
@@ -43,11 +43,11 @@ await page.keyboard.press('Escape'); await page.mouse.click(600, 600); await pag
 // an example with its stages: the window is there, collapsed: nothing loaded, the program runs as without stages
 await page.evaluate(() => FlowLab.loadExample('bubble_sort')); await wait(300);
 let w = await win();
-ok(`esempio con i suoi stage: ${w.opts.join(' / ')}, ridotta, senza iframe`, w.min && !w.iframe && w.opts.join('|') === 'La fila dei pinguini|La fila dei ragazzi' && !(await page.evaluate(() => FlowLab.stage.isOpen())));
+ok(`esempio con i suoi stage: ${w.opts.join(' / ')}, ridotta, senza iframe`, w.min && !w.iframe && w.opts.join('|') === 'La fila dei pinguini' && !(await page.evaluate(() => FlowLab.stage.isOpen())));
 await speed0();
 const tNo = await runToEnd('Dopo');
 // the other stage, expanded: it follows the variables with the bindings of the program
-await choose('La fila dei ragazzi'); await expand();
+await choose('La fila dei pinguini'); await expand();
 await ready(); await wait(300);
 const info = await page.evaluate(() => FlowLab.stage.info());
 ok('stage pronto, agganci del programma: ' + JSON.stringify(info.bindings), info.ready && info.bindings.fila === 'Main.dati' && info.bindings.j === 'Ordina.j' && (await page.locator('.modal').count()) === 0);
@@ -63,14 +63,14 @@ ok(`tempo con lo stage ridotto ${tNo} ms, aperto ${tYes} ms`, tYes > tNo + 2000)
 await wait(600);
 const kids = await stageFrame().evaluate(() => [...document.querySelectorAll('.kid')].filter((k) => +getComputedStyle(k).opacity > 0.5 && k.getCTM().f < 400).map((k) => [k.getCTM().e, +k.querySelector('text').textContent]).sort((a, b) => a[0] - b[0]).map((x) => x[1]));
 const sorted = (await out()).split('|').find((l) => /Dopo/.test(l)).replace(/Dopo:\s*/, '').trim().split(/\s+/).map(Number);
-ok('i ragazzi in fila ordinati come l\'array: ' + kids.join(',') + ' / ' + sorted.join(','), kids.join(',') === sorted.join(','));
+ok('i pinguini in fila ordinati come l\'array: ' + kids.join(',') + ' / ' + sorted.join(','), kids.join(',') === sorted.join(','));
 // collapsed again: unloaded
 await page.click('.stagewin .minbtn'); await wait(150);
 const tAfter = await runToEnd('Dopo');
 ok(`ridotto: niente iframe, tempo ${tAfter} ms`, tAfter < tNo + 1500 && !(await win()).iframe && !(await page.evaluate(() => FlowLab.stage.isOpen())));
 // the .fprg: names, bindings, active, collapsed; an edit and Undo do not touch the stages
 let x = await fprgStages();
-ok('salvato nel .fprg: attivo 1, ridotto, i nomi e gli agganci', /active="1" collapsed="True"/.test(x) && /<stage file="bubble_sort_ice.flstage">/.test(x) && /<stage file="bubble_sort.flstage">/.test(x) && /<bind slot="fila" variable="Main.dati"\/>/.test(x) && !/export/.test(x));
+ok('salvato nel .fprg: attivo 0, ridotto, il nome e gli agganci', /active="0" collapsed="True"/.test(x) && /<stage file="bubble_sort_ice.flstage">/.test(x) && !/<stage file="bubble_sort.flstage">/.test(x) && /<bind slot="fila" variable="Main.dati"\/>/.test(x) && !/export/.test(x));
 await page.keyboard.press('Control+z'); await wait(100);
 ok('Annulla non tocca gli stage', (await fprgStages()) === x);
 
@@ -78,29 +78,27 @@ ok('Annulla non tocca gli stage', (await fprgStages()) === x);
 const xml = await page.evaluate(() => FlowLab.serialize());
 await page.evaluate((t) => { FlowLab.state.dirty = false; FlowLab.loadText(t, 'ordina.fprg'); }, xml); await wait(300);
 w = await win();
-ok(`aperto da file: stessi stage, il ragazzi attivo, ridotto (${w.opts.join(' / ')})`, w.min && w.sel === '1' && w.opts.length === 2);
+ok(`aperto da file: stesso stage, ridotto (${w.opts.join(' / ')})`, w.min && w.sel === '0' && w.opts.length === 1);
 await expand(); await wait(300);
 w = await win();
-ok('il file non c\'è: ' + w.missing.replace(/\n+/g, ' '), /Non trovo il file bubble_sort\.flstage/.test(w.missing) && /stessa cartella/.test(w.missing));
+ok('il file non c\'è: ' + w.missing.replace(/\n+/g, ' '), /Non trovo il file bubble_sort_ice\.flstage/.test(w.missing) && /stessa cartella/.test(w.missing));
 const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('.stagewin .stage-missing button')]);
-await fc.setFiles(['examples/it/bubble_sort.flstage', 'examples/it/bubble_sort_ice.flstage']);
+await fc.setFiles(['examples/it/bubble_sort_ice.flstage']);
 await ready(); await wait(200);
-ok('scelti i file: lo stage parte (' + (await page.evaluate(() => FlowLab.stage.info().name)) + ')', (await page.evaluate(() => FlowLab.stage.info().name)) === 'La fila dei ragazzi');
-await choose('La fila dei pinguini'); await ready();
-ok('e anche l\'altro, scelto insieme', (await page.evaluate(() => FlowLab.stage.info().name)) === 'La fila dei pinguini');
+ok('scelti i file: lo stage parte (' + (await page.evaluate(() => FlowLab.stage.info().name)) + ')', (await page.evaluate(() => FlowLab.stage.info().name)) === 'La fila dei pinguini');
 
 // a program and its stages opened together (Open with several files)
 fs.mkdirSync('test/out', { recursive: true });
 fs.writeFileSync('test/out/ordina.fprg', xml.replace('collapsed="True"', 'collapsed="False"'));
 await page.evaluate(() => { FlowLab.state.dirty = false; location.hash = ''; }); await page.reload(); await page.waitForTimeout(500);
 await page.evaluate(() => localStorage.removeItem('flowlab.stageCache'));
-await page.setInputFiles('#fileInput', ['test/out/ordina.fprg', 'examples/it/bubble_sort.flstage', 'examples/it/bubble_sort_ice.flstage']);
+await page.setInputFiles('#fileInput', ['test/out/ordina.fprg', 'examples/it/bubble_sort_ice.flstage']);
 await ready(); await wait(200);
-ok('aperti insieme programma e stage: parte subito ' + (await page.evaluate(() => FlowLab.stage.info().name)), (await page.evaluate(() => FlowLab.stage.info().name)) === 'La fila dei ragazzi' && !(await win()).missing);
+ok('aperti insieme programma e stage: parte subito ' + (await page.evaluate(() => FlowLab.stage.info().name)), (await page.evaluate(() => FlowLab.stage.info().name)) === 'La fila dei pinguini' && !(await win()).missing);
 
 // reloading the page: the program comes back (saved automatically) and its stages too (a copy kept by the browser)
 await page.reload(); await page.waitForTimeout(500); await expand(); await ready();
-ok('ricaricata la pagina: programma e stage di nuovo lì (' + (await page.evaluate(() => FlowLab.stage.info().name)) + ')', (await page.evaluate(() => FlowLab.stage.info().name)) === 'La fila dei ragazzi');
+ok('ricaricata la pagina: programma e stage di nuovo lì (' + (await page.evaluate(() => FlowLab.stage.info().name)) + ')', (await page.evaluate(() => FlowLab.stage.info().name)) === 'La fila dei pinguini');
 // from a web address: the stages next to the program are downloaded
 await page.evaluate(() => { FlowLab.state.dirty = false; }); await page.evaluate(() => FlowLab.openUrl('https://scuola.example/prog/ordina.fprg'));
 await wait(300); await expand(); await ready();
@@ -112,7 +110,7 @@ await page.click('#fileBtn'); await wait(100); await page.click('#pop button:has
 const items = await page.$$eval('#pop .ctxmenu button', (bs) => bs.map((b) => b.textContent));
 ok('menu File › Stage: ' + items.join(' | '), items.some((t) => /Collega file di stage/.test(t)) && items.some((t) => /indirizzo web/.test(t)) && items.some((t) => /Mostra lo stage/.test(t)) && items.some((t) => /Scollega/.test(t)));
 const [fc2] = await Promise.all([page.waitForEvent('filechooser'), page.click('#pop button:has-text("Collega file di stage")')]);
-await fc2.setFiles(['examples/it/bubble_sort.flstage']);
+await fc2.setFiles(['examples/it/bubble_sort_ice.flstage']);
 await ready(); await wait(300);
 ok('dialogo degli agganci: ' + await page.locator('.modal h2').textContent().catch(() => '—'), /variabili/.test(await page.locator('.modal h2').textContent().catch(() => '')) && /nessuna variabile di questo tipo/.test(await page.locator('.modal').innerText()));
 await page.click('.modal footer .btn:not(.primary)'); await wait(100);
@@ -121,7 +119,7 @@ ok(`collegato al programma come terzo stage, attivo: ${w.opts.join(' / ')}`, w.o
 // unlinked: back to the two of the example
 await page.click('.stagewin button[aria-label="Scollega lo stage dal programma"]'); await wait(300);
 w = await win();
-ok(`scollegato: ${w.opts.join(' / ')}`, w.opts.length === 2 && !/bubble_sort\.flstage/.test(await fprgStages()));
+ok(`scollegato: ${w.opts.join(' / ')}`, w.opts.length === 2 && !/bubble_sort_ice\.flstage/.test(await fprgStages()));
 // the right stage for gcd: the input from the keyboard, the sticks move
 await choose('I bastoncini di Euclide'); await expand(); await ready(); await wait(300); await fast();
 await page.click('#runBtn'); await wait(300);
