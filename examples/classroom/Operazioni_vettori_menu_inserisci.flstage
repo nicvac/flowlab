@@ -1,0 +1,424 @@
+// FlowLab Stage — «Inserimento in un vettore»: i vettori V e W disegnati in verticale, come alla lavagna. Si vede
+// inserisciElemento lavorare passo per passo: la copia degli elementi prima di idx (W[i] = V[i]), il nuovo elemento in
+// W[idx], lo slittamento degli altri (W[i + 1] = V[i]) e la ricopiatura di W in V. Le frecce i e i + 1 seguono il ciclo.
+export const bindings = {"V":"inserisciElemento.V","W":"inserisciElemento.W","i":"inserisciElemento.i","idx":"inserisciElemento.idx","N":"inserisciElemento.N","N2":"inserisciElemento.N2","e":"inserisciElemento.e"};
+
+import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js';
+
+/* the texts in the language of FlowLab (stage.lang): Italian and English; any other language takes English */
+const TEXTS = {
+  it: {
+    title: 'inserisciElemento(V, N, e, idx)',
+    wait: 'In attesa della chiamata a inserisciElemento…',
+    noW: 'W non è ancora dichiarato',
+    cells: (n) => `(${n} celle)`,
+    vars: 'Variabili',
+    legendOver: ['cella sovrallocata', '(non ancora in uso)'],
+    legendIdx: ['W[idx]: il posto', 'del nuovo elemento'],
+    phases: {
+      start: ['N2 = N + 1', 'W avrà un posto in più degli N elementi di V'],
+      copy1: ['W[i] = V[i]', '1) Copio in W gli elementi che stanno prima di idx'],
+      new: ['W[idx] = e', '2) Metto il nuovo elemento e nel posto idx'],
+      shift: ['W[i + 1] = V[i]', '3) Gli elementi da idx in poi slittano di una posizione'],
+      back: ['V[i] = W[i]', '4) Ricopio W in V: ora V ha N + 1 elementi in uso'],
+      done: ['✓ fine', 'e è stato inserito in posizione idx: V ha un elemento in più'],
+    },
+  },
+  en: {
+    title: 'inserisciElemento(V, N, e, idx)',
+    wait: 'Waiting for a call to inserisciElemento…',
+    noW: 'W is not declared yet',
+    cells: (n) => `(${n} cells)`,
+    vars: 'Variables',
+    legendOver: ['over-allocated cell', '(not in use yet)'],
+    legendIdx: ['W[idx]: the place', 'of the new element'],
+    phases: {
+      start: ['N2 = N + 1', 'W will have one place more than the N elements of V'],
+      copy1: ['W[i] = V[i]', '1) Copy into W the elements before idx'],
+      new: ['W[idx] = e', '2) Put the new element e in place idx'],
+      shift: ['W[i + 1] = V[i]', '3) The elements from idx on move down one place'],
+      back: ['V[i] = W[i]', '4) Copy W back into V: now V has N + 1 elements in use'],
+      done: ['✓ done', 'e was inserted at position idx: V has one more element'],
+    },
+  },
+};
+let T = TEXTS.en;
+let st; // the stage, kept by setup
+
+/* --------------------------- the look: a drawing on a white board --------------------------- */
+const FONT = '"Patrick Hand", "Comic Sans MS", "Segoe Print", cursive';
+const INK = '#222222', MUTED = '#8a8a8a';
+const C_I = '#1565c0';     // i: blue
+const C_I1 = '#e65100';    // i + 1: orange
+const C_IDX = '#2e7d32', C_IDX_BG = '#e3f3e4'; // idx: green
+const C_E = '#7b1fa2';     // the new element e: purple
+const C_RED = '#c62828';   // over-allocated cells
+
+/* where things are */
+const V_X = 150, W_X = 430, CW = 80;  // the two columns of cells (left edge, width)
+const TOP = 86, BOTTOM = 440;         // the rows of the cells
+const PX = 652;                       // the panel of the variables
+
+/* ------------------------------------ the state ------------------------------------ */
+const S = { V: null, W: null, i: null, idx: null, N: null, N2: null, e: null }; // the values as the stage knows them
+let phase = 'start';   // start | copy1 | new | shift | back | done : the part of inserisciElemento that is running
+let ended = false;     // the function has returned
+let nUsed = null;      // cells of V in use (null: take N)
+let lastWrite = null;  // the last cell written ('W3', 'V5'): to see copies that did not change the value
+let L = { h: 30, fs: 18, fi: 12 };    // the size of the rows
+let cells = { V: [], W: [] };
+let P = { V: null, W: null };         // the two pointers
+let PY = { e: 120 };                  // where the line of e is, in the panel
+let prevPanel = {}, prevCode = null;
+let colV, colW, ptrs, dyn, fx;        // the layers
+
+const copyOf = (v) => (Array.isArray(v) ? v.slice() : v);
+const fmt = (v) => (v == null ? '' : String(v));
+const usedV = () => (nUsed != null ? nUsed : S.N != null ? S.N : S.V ? S.V.length : 0);
+const yc = (k) => TOP + (k + 0.5) * L.h;              // the middle of row k
+const center = (name, k) => [(name === 'V' ? V_X : W_X) + CW / 2, yc(k)];
+const edge = (name, k) => (name === 'V' ? [V_X + CW + 36, yc(k)] : [W_X - 62, yc(k)]); // where the copy arrows start and end
+const phaseColor = (p) => ({ copy1: C_I, new: C_E, shift: C_I1, back: C_I, done: C_IDX }[p] || INK);
+
+function layout() {
+  const nV = S.V ? S.V.length : 0, nW = S.W ? S.W.length : 0;
+  const rows = Math.max(6, nV, nW + 1, (S.N || 0) + 2);
+  const h = Math.min(36, (BOTTOM - TOP) / rows);
+  L = { rows, h, fs: Math.max(10, Math.min(19, h * 0.6)), fi: Math.max(9, Math.min(14, h * 0.42)) };
+}
+
+/* ------------------------------------ static drawing ------------------------------------ */
+function drawBoard() {
+  st.clear();
+  const css = st.el('style');
+  css.textContent = '@import url("https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"); text { font-family: ' + FONT + '; }';
+  const defs = st.el('defs');
+  // a little wobble on the lines, as if drawn by hand
+  const f = st.el('filter', { id: 'rough', x: '-5%', y: '-5%', width: '110%', height: '110%' }, defs);
+  st.el('feTurbulence', { type: 'fractalNoise', baseFrequency: 0.035, numOctaves: 2, seed: 7, result: 'n' }, f);
+  st.el('feDisplacementMap', { in: 'SourceGraphic', in2: 'n', scale: 2.2 }, f);
+  // the light red hatching of the over-allocated cells
+  const hp = st.el('pattern', { id: 'hatch', width: 8, height: 8, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
+  st.el('rect', { width: 8, height: 8, fill: '#fff7f7' }, hp);
+  st.el('line', { x1: 0, y1: 0, x2: 0, y2: 8, stroke: C_RED, 'stroke-width': 1.3, opacity: 0.35 }, hp);
+
+  st.el('rect', { x: 0, y: 0, width: 800, height: 450, fill: '#ffffff' });
+  st.el('text', { x: 18, y: 30, 'font-size': 23, fill: INK, text: T.title });
+  st.el('line', { x1: 18, y1: 37, x2: 318, y2: 37, stroke: INK, 'stroke-width': 1.5, filter: 'url(#rough)' });
+
+  // the panel of the variables, with the legend at the bottom
+  st.el('rect', { x: PX - 10, y: 80, width: 152, height: 360, rx: 8, fill: 'none', stroke: '#b5b5b5', 'stroke-width': 1.5, filter: 'url(#rough)' });
+  st.el('text', { x: PX + 2, y: 102, 'font-size': 17, fill: MUTED, text: T.vars });
+  const lg = st.el('g', { 'font-size': 13 });
+  st.el('rect', { x: PX, y: 312, width: 20, height: 16, fill: 'url(#hatch)', stroke: C_RED, 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }, lg);
+  st.el('text', { x: PX + 27, y: 319, fill: C_RED, text: T.legendOver[0] }, lg);
+  st.el('text', { x: PX + 27, y: 333, fill: C_RED, text: T.legendOver[1] }, lg);
+  st.el('rect', { x: PX, y: 348, width: 20, height: 16, fill: C_IDX_BG, stroke: C_IDX, 'stroke-width': 2.2 }, lg);
+  st.el('text', { x: PX + 27, y: 355, fill: C_IDX, text: T.legendIdx[0] }, lg);
+  st.el('text', { x: PX + 27, y: 369, fill: C_IDX, text: T.legendIdx[1] }, lg);
+  for (const [y, color, label] of [[392, C_I, 'i'], [414, C_I1, 'i + 1']]) {
+    st.el('line', { x1: PX, y1: y, x2: PX + 20, y2: y, stroke: color, 'stroke-width': 2.4, 'stroke-linecap': 'round' }, lg);
+    st.el('polyline', { points: `${PX + 13},${y - 5} ${PX + 20},${y} ${PX + 13},${y + 5}`, fill: 'none', stroke: color, 'stroke-width': 2.4, 'stroke-linecap': 'round' }, lg);
+    st.el('text', { x: PX + 27, y: y + 5, fill: color, 'font-size': 15, text: label }, lg);
+  }
+
+  colV = st.el('g'); colW = st.el('g'); dyn = st.el('g'); ptrs = st.el('g'); fx = st.el('g');
+}
+
+/* ------------------------------------ the cells ------------------------------------ */
+function makeCell(parent, x, k, v) {
+  const g = st.el('g', {}, parent), y = TOP + k * L.h;
+  const back = st.el('rect', { x, y, width: CW, height: L.h, fill: '#ffffff' }, g);
+  const box = st.el('rect', { x, y, width: CW, height: L.h, fill: 'none', 'stroke-linejoin': 'round', filter: 'url(#rough)' }, g);
+  const txt = st.el('text', { x: x + CW / 2, y: yc(k), 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': L.fs, text: fmt(v) }, g);
+  return { g, back, box, txt, x, y, k };
+}
+/* normal: black; over: red, dashed and hatched (a place of V not in use); idx: green (the place of the new element in W) */
+function styleCell(c, kind) {
+  c.kind = kind;
+  c.back.setAttribute('fill', kind === 'over' ? 'url(#hatch)' : kind === 'idx' ? C_IDX_BG : '#ffffff');
+  c.box.setAttribute('stroke', kind === 'over' ? C_RED : kind === 'idx' ? C_IDX : INK);
+  c.box.setAttribute('stroke-width', kind === 'idx' ? 3 : kind === 'over' ? 1.8 : 2);
+  if (kind === 'over') c.box.setAttribute('stroke-dasharray', '6 4'); else c.box.removeAttribute('stroke-dasharray');
+  c.txt.setAttribute('fill', kind === 'over' ? C_RED : INK);
+}
+
+function drawColumn(name) {
+  const layer = name === 'V' ? colV : colW, arr = S[name], x0 = name === 'V' ? V_X : W_X;
+  st.clear(layer); gsap.set(layer, { opacity: 1 });
+  cells[name] = [];
+  if (!arr) {
+    if (name === 'V') st.el('text', { x: 300, y: 250, 'text-anchor': 'middle', 'font-size': 20, fill: MUTED, text: T.wait }, layer);
+    else if (S.V && !ended) st.el('text', { x: x0 + CW / 2, y: TOP + 30, 'text-anchor': 'middle', 'font-size': 15, fill: MUTED, text: T.noW }, layer);
+    return;
+  }
+  const used = usedV();
+  arr.forEach((v, k) => {
+    const c = makeCell(layer, x0, k, v);
+    styleCell(c, name === 'V' ? (k >= used ? 'over' : 'normal') : k === S.idx ? 'idx' : 'normal');
+    cells[name].push(c);
+    // the index of the cell: on the right of V, on the left of W (they face each other)
+    st.el('text', {
+      x: name === 'V' ? x0 + CW + 8 : x0 - 8, y: yc(k), 'text-anchor': name === 'V' ? 'start' : 'end', 'dominant-baseline': 'central',
+      'font-size': L.fi, fill: name === 'V' && k >= used ? C_RED : MUTED, text: `[${k}]`,
+    }, layer);
+  });
+  // the green and red cells on top, so their borders are not covered by the neighbours
+  cells[name].filter((c) => c.kind !== 'normal').forEach((c) => layer.appendChild(c.g));
+  if (name === 'W' && S.idx != null && S.idx >= 0 && S.idx < arr.length) {
+    st.el('text', { x: x0 - 36, y: yc(S.idx), 'text-anchor': 'end', 'dominant-baseline': 'central', 'font-size': Math.max(12, L.fi + 2), 'font-weight': 700, fill: C_IDX, text: 'idx' }, layer);
+  }
+}
+
+/* ------------------------------------ the pointers i and i + 1 ------------------------------------ */
+function pointer(side) {
+  const g = st.el('g', {}, ptrs), stroke = st.el('g', { filter: 'url(#rough)' }, g);
+  const left = side === 'left';
+  const x1 = left ? V_X - 46 : W_X + CW + 48, x2 = left ? V_X - 6 : W_X + CW + 6, d = left ? -1 : 1;
+  const line = st.el('line', { x1, y1: 0, x2, y2: 0, 'stroke-width': 2.6, 'stroke-linecap': 'round' }, stroke);
+  const head = st.el('polyline', { points: `${x2 + d * 10},-6 ${x2},0 ${x2 + d * 10},6`, fill: 'none', 'stroke-width': 2.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, stroke);
+  const txt = st.el('text', { x: left ? V_X - 52 : W_X + CW + 54, y: 0, 'text-anchor': left ? 'end' : 'start', 'dominant-baseline': 'central', 'font-size': 19, 'font-weight': 700 }, g);
+  return { g, line, head, txt };
+}
+function paint(p, color) { p.line.setAttribute('stroke', color); p.head.setAttribute('stroke', color); p.txt.setAttribute('fill', color); }
+
+function drawPointers() {
+  st.clear(ptrs); gsap.set(ptrs, { opacity: 1 });
+  P = { V: null, W: null };
+  if (S.i == null) return;
+  if (S.V) P.V = pointer('left');
+  if (S.W && phase !== 'done') P.W = pointer('right');
+  placePointers(false);
+}
+/* V is pointed by i; W by i (copy of the first part, copy back) or by i + 1 (while the elements move down) */
+function placePointers(animate) {
+  const needV = !!S.V && S.i != null, needW = !!S.W && S.i != null && phase !== 'done';
+  if (needV !== !!P.V || needW !== !!P.W) { drawPointers(); return Promise.resolve(); }
+  const moves = [];
+  if (P.V) moves.push([P.V, S.i, `i = ${S.i}`, C_I]);
+  if (P.W) {
+    const plus = phase === 'shift';
+    moves.push([P.W, plus ? S.i + 1 : S.i, plus ? `i + 1 = ${S.i + 1}` : `i = ${S.i}`, plus ? C_I1 : C_I]);
+  }
+  return Promise.all(moves.map(([p, row, label, color]) => {
+    p.txt.textContent = label; paint(p, color);
+    const y = Math.min(yc(row), 446);
+    if (!animate) { gsap.set(p.g, { y }); return null; }
+    return gsap.to(p.g, { y, duration: 0.45, ease: 'power2.inOut' });
+  }));
+}
+
+/* ------------------------------ headers, instruction, panel ------------------------------ */
+function drawDyn() {
+  st.clear(dyn);
+  for (const name of ['V', 'W']) {
+    if (!S[name]) continue;
+    const x = (name === 'V' ? V_X : W_X) + CW / 2;
+    st.el('text', { x: x - 6, y: 72, 'text-anchor': 'end', 'font-size': 26, 'font-weight': 700, fill: INK, 'dominant-baseline': 'central', text: name }, dyn);
+    st.el('text', { x: x + 2, y: 74, 'text-anchor': 'start', 'font-size': 14, fill: MUTED, 'dominant-baseline': 'central', text: T.cells(S[name].length) }, dyn);
+  }
+  // the instruction that is working now, in a box, and what it is for
+  const [code, desc] = !S.V && !ended ? ['', T.wait] : T.phases[ended ? 'done' : phase];
+  const color = phaseColor(ended ? 'done' : phase);
+  if (code) {
+    const box = st.el('rect', { x: 345, y: 10, width: 160, height: 32, rx: 6, fill: '#ffffff', stroke: color, 'stroke-width': 2, filter: 'url(#rough)' }, dyn);
+    const t = st.el('text', { x: 357, y: 27, 'font-size': 22, fill: color, 'dominant-baseline': 'central', 'font-weight': 700, text: code }, dyn);
+    const fit = () => { try { box.setAttribute('width', t.getComputedTextLength() + 24); } catch (_) { /* not drawn yet */ } };
+    fit(); if (document.fonts) document.fonts.ready.then(fit);
+    if (prevCode !== null && prevCode !== code) gsap.fromTo([box, t], { opacity: 0.2 }, { opacity: 1, duration: 0.35 });
+  }
+  prevCode = code;
+  st.el('text', { x: 18, y: 56, 'font-size': 15, fill: MUTED, text: S.V || ended ? desc : '' }, dyn);
+
+  // the variables, each with its colour; a value that changed jumps a little
+  const rows = [['N', S.N, INK], ['N2', S.N2, INK], ['e', S.e, C_E], ['idx', S.idx, C_IDX], ['i', S.i, C_I]];
+  if (phase === 'shift' && S.i != null) rows.push(['i + 1', S.i + 1, C_I1]);
+  rows.forEach(([name, v, color], n) => {
+    const y = 132 + n * 28;
+    if (name === 'e') PY.e = y;
+    const t = st.el('text', { x: PX + 4, y, 'font-size': 20, 'dominant-baseline': 'central' }, dyn);
+    st.el('tspan', { fill: color, 'font-weight': 700, text: name }, t);
+    st.el('tspan', { fill: INK, text: ` = ${v == null ? '–' : v}` }, t);
+    if (prevPanel[name] !== undefined && prevPanel[name] !== v) gsap.fromTo(t, { scale: 1.3, transformOrigin: '0% 50%' }, { scale: 1, duration: 0.35, ease: 'back.out(2)' });
+  });
+  prevPanel = Object.fromEntries(rows.map(([name, v]) => [name, v]));
+  if (!rows.some(([name]) => name === 'i + 1')) delete prevPanel['i + 1'];
+}
+
+function drawAll() { layout(); drawColumn('V'); drawColumn('W'); drawPointers(); drawDyn(); st.clear(fx); }
+
+/* ------------------------------------ the animations ------------------------------------ */
+const bendOf = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2 - 16 - Math.abs(q[1] - p[1]) * 0.1];
+
+/* an arrow is drawn from a1 to a2, then the value flies from g1 to g2 along the same kind of curve */
+async function fly(a1, a2, g1, g2, value, color) {
+  const c = bendOf(a1, a2);
+  const arrow = st.el('g', { filter: 'url(#rough)' }, fx);
+  const path = st.el('path', { d: `M${a1[0]} ${a1[1]} Q${c[0]} ${c[1]} ${a2[0]} ${a2[1]}`, fill: 'none', stroke: color, 'stroke-width': 2.2, 'stroke-linecap': 'round' }, arrow);
+  const len = path.getTotalLength();
+  const tip = path.getPointAtLength(len), tail = path.getPointAtLength(Math.max(0, len - 10));
+  const ang = Math.atan2(tip.y - tail.y, tip.x - tail.x);
+  const wing = (a) => `${tip.x - 11 * Math.cos(ang + a)},${tip.y - 11 * Math.sin(ang + a)}`;
+  const head = st.el('polyline', { points: `${wing(0.5)} ${tip.x},${tip.y} ${wing(-0.5)}`, fill: 'none', stroke: color, 'stroke-width': 2.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: 0 }, arrow);
+  path.style.strokeDasharray = len; path.style.strokeDashoffset = len;
+  await gsap.to(path, { strokeDashoffset: 0, duration: 0.35, ease: 'power1.inOut' });
+  head.setAttribute('opacity', 1);
+  const gc = bendOf(g1, g2), o = { t: 0 };
+  const ghost = st.el('text', { x: g1[0], y: g1[1], 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': L.fs + 4, 'font-weight': 700, fill: color, text: fmt(value) }, fx);
+  await gsap.to(o, {
+    t: 1, duration: 0.55, ease: 'power1.inOut',
+    onUpdate: () => {
+      const t = o.t, u = 1 - t;
+      ghost.setAttribute('x', u * u * g1[0] + 2 * u * t * gc[0] + t * t * g2[0]);
+      ghost.setAttribute('y', u * u * g1[1] + 2 * u * t * gc[1] + t * t * g2[1]);
+    },
+  });
+  ghost.remove();
+  gsap.to(arrow, { opacity: 0, duration: 0.35, onComplete: () => arrow.remove() });
+}
+
+/* the value lands in the cell: it is written, it jumps, the cell flashes; a cell of V beyond N comes into use */
+async function land(name, k, v, color) {
+  if (S[name]) S[name][k] = v;
+  const c = cells[name][k];
+  if (!c) return;
+  c.txt.textContent = fmt(v);
+  if (name === 'V' && k >= usedV()) {
+    nUsed = k + 1;
+    styleCell(c, 'normal');
+    colV.querySelectorAll('text').forEach((t) => { if (t.textContent === `[${k}]`) t.setAttribute('fill', MUTED); });
+  }
+  const flash = st.el('rect', { x: c.x, y: c.y, width: CW, height: L.h, fill: color, opacity: 0.25 }, fx);
+  gsap.to(flash, { opacity: 0, duration: 0.45, onComplete: () => flash.remove() });
+  await gsap.fromTo(c.txt, { scale: 1.7, transformOrigin: '50% 50%' }, { scale: 1, duration: 0.3, ease: 'back.out(2)' });
+}
+
+/* from[k1] is copied into to[k2] */
+async function copy(from, k1, to, k2, v, color) {
+  if (cells[from][k1] && cells[to][k2]) await fly(edge(from, k1), edge(to, k2), center(from, k1), center(to, k2), v, color);
+  await land(to, k2, v, color);
+}
+
+function setPhase(p) { if (phase !== p) { phase = p; drawDyn(); } }
+/* the first loop is over when i reaches idx: the next instruction puts e in W[idx] */
+function refreshPhase() {
+  if (phase === 'copy1' && S.W && S.i != null && S.idx != null && S.i === S.idx) setPhase('new');
+}
+function guessPhase() {
+  if (!S.V) return 'start';
+  if (!S.W) return 'start';
+  const w = S.W, idx = S.idx;
+  if (idx == null || w[idx] == null) return S.i != null && S.i === idx ? 'new' : 'copy1';
+  if (w.some((x) => x == null)) return 'shift';
+  return S.i != null && S.N != null && S.i >= S.N ? 'shift' : 'back';
+}
+
+async function setW(j, v) {
+  if (!S.W || !cells.W[j]) { if (S.W) S.W[j] = v; drawAll(); return; }
+  if (j === S.idx && (phase === 'start' || phase === 'copy1' || phase === 'new')) {
+    setPhase('new');
+    const from = [PX + 52, PY.e];
+    await fly([PX - 14, PY.e], [W_X + CW + 12, yc(j)], from, center('W', j), v, C_E);
+    await land('W', j, v, C_E);
+    setPhase('shift');
+    await placePointers(true);          // the pointer of W becomes i + 1
+  } else if (phase === 'shift') {
+    await copy('V', j - 1, 'W', j, v, C_I1);
+  } else {
+    await copy('V', j, 'W', j, v, C_I);
+  }
+  lastWrite = 'W' + j;
+}
+
+async function setV(j, v) {
+  if (!S.V || !cells.V[j]) { if (S.V) S.V[j] = v; drawAll(); return; }
+  if (phase !== 'back') { setPhase('back'); await placePointers(true); }
+  if (S.W && cells.W[j]) await copy('W', j, 'V', j, v, C_I); else await land('V', j, v, C_I);
+  lastWrite = 'V' + j;
+}
+
+/* a copy that wrote the same value is not an event (V[i] = W[i] with V[i] already equal): it is shown when i moves on */
+async function ensureCopy(k) {
+  let m = null;
+  if (phase === 'copy1' || phase === 'new') m = ['V', k, 'W', k, C_I];
+  else if (phase === 'shift') m = ['V', k, 'W', k + 1, C_I1];
+  else if (phase === 'back') m = ['W', k, 'V', k, C_I];
+  if (!m) return;
+  const [from, k1, to, k2, color] = m;
+  if (lastWrite === to + k2 || !S[from] || !S[to] || k1 < 0 || k1 >= S[from].length || k2 >= S[to].length) return;
+  await copy(from, k1, to, k2, S[from][k1], color);
+  lastWrite = to + k2;
+}
+
+async function moveI(old, nw) {
+  if (old != null && nw === old + 1) await ensureCopy(old);
+  S.i = nw;
+  if (phase === 'shift' && old != null && nw != null && nw < old) phase = 'back'; // i = 0: the copy back starts
+  refreshPhase();
+  drawDyn();
+  await placePointers(true);
+}
+
+/* ------------------------------------ the scene ------------------------------------ */
+export default {
+  name: { it: 'Inserimento in un vettore', en: 'Insertion into an array' },
+  description: {
+    it: "I vettori V e W in verticale, come alla lavagna: le celle sovrallocate di V sono rosse e tratteggiate, la cella W[idx] è verde. Le frecce i e i + 1 seguono i cicli di inserisciElemento e i valori volano da un vettore all'altro.",
+    en: 'The arrays V and W drawn upright, as on a board: the over-allocated cells of V are red and dashed, the cell W[idx] is green. The arrows i and i + 1 follow the loops of inserisciElemento and the values fly from one array to the other.',
+  },
+  slots: {
+    V: { type: 'Integer[]', label: { it: 'Il vettore V (sovrallocato)', en: 'The array V (over-allocated)' } },
+    W: { type: 'Integer[]', label: { it: 'Il vettore di appoggio W', en: 'The helper array W' } },
+    i: { type: 'Integer', label: { it: 'Indice dei cicli (i)', en: 'Index of the loops (i)' } },
+    idx: { type: 'Integer', label: { it: 'Posizione di inserimento (idx)', en: 'Insert position (idx)' } },
+    N: { type: 'Integer', label: { it: 'Elementi in uso di V (N)', en: 'Elements in use in V (N)' }, optional: true },
+    N2: { type: 'Integer', label: { it: 'Nuova dimensione (N2)', en: 'New size (N2)' }, optional: true },
+    e: { type: 'Integer', label: { it: 'Elemento da inserire (e)', en: 'Element to insert (e)' }, optional: true },
+  },
+  setup(stage) {
+    st = stage; T = TEXTS[stage.lang] || TEXTS.en;
+    stage.onSpeed((s) => gsap.globalTimeline.timeScale(s));
+    drawBoard();
+  },
+  reset(stage, values) {
+    gsap.globalTimeline.clear();
+    for (const k of Object.keys(S)) S[k] = copyOf(values[k] ?? null);
+    ended = false; lastWrite = null; nUsed = null; prevPanel = {}; prevCode = null;
+    phase = guessPhase();
+    drawAll();
+  },
+  async update(stage, events) {
+    let dirty = false;
+    const flush = () => { if (dirty) { drawAll(); dirty = false; } };
+    for (const e of events) {
+      const s = e.slot;
+      if (e.kind === 'vanish') {
+        flush();
+        if (s === 'W') { await gsap.to(colW, { opacity: 0, duration: 0.4 }); S.W = null; cells.W = []; st.clear(colW); gsap.set(colW, { opacity: 1 }); }
+        if (s === 'V' || s === 'W') { ended = true; phase = 'done'; }
+        if (s === 'i') { await gsap.to(ptrs, { opacity: 0, duration: 0.3 }); S.i = null; }
+        drawPointers(); drawDyn();
+        continue;
+      }
+      if (s === 'V' || s === 'W') {
+        if (e.kind === 'set') { flush(); await (s === 'V' ? setV(e.index, e.value) : setW(e.index, e.value)); continue; }
+        if (e.kind === 'appear' && s === 'V') { ended = false; phase = 'start'; lastWrite = null; nUsed = null; }
+        if (e.kind === 'appear' && s === 'W') { phase = 'copy1'; lastWrite = null; }
+        S[s] = copyOf(e.kind === 'appear' ? e.value : e.after); // appear, change and the others: draw again
+        if (s === 'W') refreshPhase();
+        dirty = true;
+      } else if (s === 'i') {
+        if (e.kind === 'value' && S.i != null) { flush(); await moveI(e.old, e.value); continue; }
+        S.i = e.kind === 'value' ? e.value : e.kind === 'appear' ? e.value : e.after;
+        refreshPhase();
+        dirty = true;
+      } else {
+        S[s] = e.kind === 'value' || e.kind === 'appear' ? e.value : e.after;
+        if (s === 'N') nUsed = null;
+        if (s === 'N' || s === 'idx') dirty = true; else drawDyn();
+      }
+    }
+    flush();
+  },
+  stop() { gsap.globalTimeline.getChildren(true, true, false).forEach((t) => t.progress(1)); },
+};

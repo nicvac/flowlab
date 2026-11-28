@@ -1,0 +1,131 @@
+<?xml version="1.0"?>
+<flowgorithm fileversion="4.2">
+    <attributes>
+        <attribute name="name" value="Operazioni fondamentali sui vettori"/>
+        <attribute name="authors" value="Nicola Vacca"/>
+        <attribute name="about" value="Vettore di N elementi (sovrallocato 2N) con menu: visualizza, inserisci elemento in una posizione, esci. Funzioni azzeraVettore, visualizzaVettore, inserisciElemento."/>
+        <attribute name="saved" value="2026-11-28 07:40:28 PM"/>
+        <attribute name="created" value="Zmxvd2xhYjticm93c2VyOzIwMjYtMTEtMjggMDM6MTc6MjYgUE07MQ=="/>
+        <attribute name="edited" value="Zmxvd2xhYjticm93c2VyOzIwMjYtMTEtMjggMDc6NDA6MjggUE07MQ=="/>
+    </attributes>
+    <flowlab-stages active="0" collapsed="False">
+        <stage file="Operazioni_vettori_menu_inserisci.flstage">
+            <bind slot="V" variable="inserisciElemento.V"/>
+            <bind slot="W" variable="inserisciElemento.W"/>
+            <bind slot="i" variable="inserisciElemento.i"/>
+            <bind slot="idx" variable="inserisciElemento.idx"/>
+            <bind slot="N" variable="inserisciElemento.N"/>
+            <bind slot="N2" variable="inserisciElemento.N2"/>
+            <bind slot="e" variable="inserisciElemento.e"/>
+        </stage>
+    </flowlab-stages>
+    <function name="Main" type="None" variable="">
+        <parameters/>
+        <body>
+            <comment text="Operazioni fondamentali sui vettori: il vettore V ha N elementi ed e' sovrallocato (2 * N) per permettere gli inserimenti. dim e' il numero di elementi attualmente in uso."/>
+            <comment text="INPUT"/>
+            <declare name="N" type="Integer" array="False" size=""/>
+            <declare name="scelta" type="String" array="False" size=""/>
+            <declare name="e" type="Integer" array="False" size=""/>
+            <declare name="idx" type="Integer" array="False" size=""/>
+            <comment text="LAVORO"/>
+            <output expression="&quot;Numero di elementi N: &quot;" newline="True"/>
+            <input variable="N"/>
+            <declare name="V" type="Integer" array="True" size="Max(10, N*2)"/>
+            <call expression="azzeraVettore(V, N)"/>
+            <do expression="scelta != &quot;X&quot;">
+                <output expression="&quot;Scegli un'opzione:&#10;V: Visualizza vettore&#10;I: Inserisci elemento&#10;X: Esci&quot;" newline="True"/>
+                <input variable="scelta"/>
+                <if expression="scelta == &quot;V&quot;">
+                    <then>
+                        <call expression="visualizzaVettore(V, N)"/>
+                    </then>
+                    <else/>
+                </if>
+                <if expression="scelta == &quot;I&quot;">
+                    <then>
+                        <output expression="&quot;Elemento da inserire: &quot;" newline="True"/>
+                        <input variable="e"/>
+                        <output expression="&quot;Posizione (da 0 a &quot; &amp; N &amp; &quot;): &quot;" newline="True"/>
+                        <input variable="idx"/>
+                        <if expression="idx &lt; 0 or idx &gt; N">
+                            <then>
+                                <output expression="&quot;Posizione non valida&quot;" newline="True"/>
+                            </then>
+                            <else>
+                                <assign variable="N" expression="inserisciElemento(V, N, e, idx)"/>
+                            </else>
+                        </if>
+                    </then>
+                    <else/>
+                </if>
+            </do>
+            <output expression="&quot;Arrivederci&quot;" newline="True"/>
+        </body>
+    </function>
+    <function name="azzeraVettore" type="None" variable="">
+        <parameters>
+            <parameter name="V" type="Integer" array="True"/>
+            <parameter name="N" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Azzera i primi N elementi di V"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; N">
+                <assign variable="V[i]" expression="0"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="visualizzaVettore" type="None" variable="">
+        <parameters>
+            <parameter name="V" type="Integer" array="True"/>
+            <parameter name="N" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Visualizza i primi N elementi di V, uno per riga"/>
+            <declare name="i" type="Integer" array="False" size=""/>
+            <assign variable="i" expression="0"/>
+            <while expression="i &lt; N">
+                <output expression="&quot;V[&quot; &amp; i &amp; &quot;] = &quot; &amp; V[i]" newline="True"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+    <function name="inserisciElemento" type="Integer" variable="N2">
+        <parameters>
+            <parameter name="V" type="Integer" array="True"/>
+            <parameter name="N" type="Integer" array="False"/>
+            <parameter name="e" type="Integer" array="False"/>
+            <parameter name="idx" type="Integer" array="False"/>
+        </parameters>
+        <body>
+            <comment text="Inserisce l'elemento e in posizione idx e restituisce la nuova dimensione. Copia V in un vettore W, lasciando il posto in idx, poi ricopia W in V"/>
+            <declare name="N2" type="Integer" array="False" size="" flowlab-init="True"/>
+            <assign variable="N2" expression="N+1"/>
+            <declare name="W" type="Integer" array="True" size="N2"/>
+            <declare name="i" type="Integer" array="False" size="" flowlab-init="True"/>
+            <assign variable="i" expression="0"/>
+            <comment text="Elementi prima della posizione idx: W[i] = V[i]"/>
+            <while expression="i &lt; idx">
+                <assign variable="W[i]" expression="V[i]"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+            <comment text="Nuovo elemento"/>
+            <assign variable="W[idx]" expression="e"/>
+            <comment text="Elementi da idx in poi: slittano di una posizione, W[i + 1] = V[i]"/>
+            <assign variable="i" expression="idx"/>
+            <while expression="i &lt; N">
+                <assign variable="W[i + 1]" expression="V[i]"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+            <comment text="Ricopia W in V (N + 1 elementi)"/>
+            <assign variable="i" expression="idx"/>
+            <while expression="i &lt; N2">
+                <assign variable="V[i]" expression="W[i]"/>
+                <assign variable="i" expression="i + 1"/>
+            </while>
+        </body>
+    </function>
+</flowgorithm>
