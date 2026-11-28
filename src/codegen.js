@@ -533,11 +533,11 @@ function buildScope(prog, func) {
   if (!ooMode) for (const f of prog.functions) funcs.set(f.name.toLowerCase(), { type: f.type, rets: _CM.rets(f), f, name: f.name });
   // methods with the name of a built-in function are called only with obj.name() or this.name()
   // (the types of the methods inherited from a generic parent class are written with the Generic Types of this class)
-  else { const cm = _CM.chainMap(prog, cls); for (const k of _CM.chainOf(prog, cls)) for (const f of _CM.membersOf(prog, k)) if (!f.ctor && !funcs.has(f.name.toLowerCase()) && !_CE.BUILTINS[f.name.toLowerCase()]) { const m = k === cls ? null : cm.get(k.id); funcs.set(f.name.toLowerCase(), { type: m ? _CM.substT(f.type, m) : f.type, rets: m ? _CM.rets(f).map((r) => ({ ...r, type: _CM.substT(r.type, m) })) : _CM.rets(f), f, name: f.name, owner: k }); } }
+  else { const cm = _CM.chainMap(prog, cls); for (const k of _CM.chainOf(prog, cls)) for (const f of _CM.membersOf(prog, k)) if (!f.ctor && !funcs.has(f.name.toLowerCase()) && !hardBuiltin(f.name)) { const m = k === cls ? null : cm.get(k.id); funcs.set(f.name.toLowerCase(), { type: m ? _CM.substT(f.type, m) : f.type, rets: m ? _CM.rets(f).map((r) => ({ ...r, type: _CM.substT(r.type, m) })) : _CM.rets(f), f, name: f.name, owner: k }); } }
   // the functions of the modules with only functions: callable from every class (in the code they are static methods of a class of the module)
   if (ooMode) for (const f of prog.functions) {
     const k = f.cls ? _CM.classOf(prog, f) : null, low = f.name.toLowerCase();
-    if (((f.module && !f.cls) || (k && k.fmodule)) && !funcs.has(low) && !_CE.BUILTINS[low]) funcs.set(low, { type: f.type, rets: _CM.rets(f), f, name: f.name, owner: k });
+    if (((f.module && !f.cls) || (k && k.fmodule)) && !funcs.has(low) && !hardBuiltin(low)) funcs.set(low, { type: f.type, rets: _CM.rets(f), f, name: f.name, owner: k });
   }
   const sc = { vars, funcs, func, prog, cls, ooMode };
   if (ooMode) ooScope(prog, sc);
@@ -654,7 +654,11 @@ function dispatchCond(f, group, n, test) {
 /* --------------------------- Languages ----------------------------------- */
 const LANGS = {};
 
-function escStr(s, q) { return q + s.replace(/\\/g, '\\\\').replace(new RegExp(q, 'g'), '\\' + q) + q; }
+/* the name of a built-in function that a function of the program cannot replace (the soft ones it can) */
+const hardBuiltin = (name) => { const b = _CE.BUILTINS[String(name).toLowerCase()]; return !!b && !b.soft; };
+function escStr(s, q) { return q + s.replace(/\\/g, '\\\\').replace(new RegExp(q, 'g'), '\\' + q).replace(/\n/g, '\\n').replace(/\t/g, '\\t').replace(/\r/g, '\\r') + q; }
+/* Min(a, b, c) as nested calls of a function of two arguments: f(a, f(b, c)) */
+const nest2 = (f, xs) => (xs.length <= 2 ? `${f}(${xs.join(', ')})` : `${f}(${xs[0]}, ${nest2(f, xs.slice(1))})`);
 
 const idxBrackets = (nm, ix) => nm + ix.map((i) => `[${i}]`).join('');
 const idxComma = (nm, ix) => `${nm}[${ix.join(', ')}]`;
@@ -911,7 +915,7 @@ LANGS.pseudo = {
   generate(prog) {
     const TIPO = { Integer: PS('type.Integer'), Real: PS('type.Real'), String: PS('type.String'), Boolean: PS('type.Boolean') };
     const L = {
-      idx: idxComma, str: (s) => '"' + s + '"', T: PS('true'), F: PS('false'), pi: 'π', not: 'NOT ', notPrec: P.un, or: 'OR', and: 'AND', mod: 'MOD', pow: '^',
+      idx: idxComma, str: (s) => escStr(s, '"'), T: PS('true'), F: PS('false'), pi: 'π', not: 'NOT ', notPrec: P.un, or: 'OR', and: 'AND', mod: 'MOD', pow: '^',
       rel: { '==': '=', '!=': '≠', '<': '<', '<=': '≤', '>': '>', '>=': '≥' },
       call: (n, sc, pr) => ({ s: `${_CE.BUILTIN_NAMES[n.name.toLowerCase()] && !sc.funcs.has(n.name.toLowerCase()) ? _CE.BUILTIN_NAMES[n.name.toLowerCase()] : fname(n.name, sc)}(${n.args.map((a) => pr(a, sc).s).join(', ')})`, p: P.atom }),
       nul: PS('null'), self: PS('this'), newObj: (c, a) => PS('new', { cls: c, args: a }), superCtor: (a) => `SUPER(${a})`, superMethod: (m, a) => `SUPER.${m}(${a})`,
@@ -1051,6 +1055,11 @@ LANGS.python = {
           case 'arccosh': return M('acosh'); case 'arcsinh': return M('asinh'); case 'arctanh': return M('atanh');
           case 'ln': case 'log': return M('log');
           case 'int': return { s: `int(${A(0)})`, p: P.atom };
+          case 'min': case 'max': return { s: `${low}(${a.map((x) => x.s).join(', ')})`, p: P.atom };
+          case 'pow': if (_CE.inferType(n, sc) === 'Integer') return { s: `${a[0].p <= P.pow ? '(' + A(0) + ')' : A(0)} ** ${a[1].p < P.pow ? '(' + A(1) + ')' : A(1)}`, p: P.pow };
+            used.add('math'); return { s: `math.pow(${A(0)}, ${A(1)})`, p: P.atom };
+          case 'round': used.add('math'); return { s: `math.floor(${A(0)} + 0.5)`, p: P.atom };
+          case 'floor': case 'ceil': used.add('math'); return { s: `math.${low}(${A(0)})`, p: P.atom };
           case 'sgn': return { s: `((${A(0)} > 0) - (${A(0)} < 0))`, p: P.atom };
           case 'random': used.add('random'); return { s: `random.randrange(${A(0)})`, p: P.atom };
           case 'len': return { s: `len(${A(0)})`, p: P.atom };
@@ -1553,6 +1562,16 @@ LANGS.cpp = cFamily({
     switch (low) {
       case 'int': return { s: `(int) ${At(0)}`, p: P.un };
       case 'sgn': return `((${A(0)} > 0) - (${A(0)} < 0))`;
+      case 'min': case 'max': {
+        // std::min wants arguments of the same type: min<double> when Integer and Real are mixed
+        used.add('algorithm');
+        const ts = new Set(n.args.map((x) => _CE.inferType(x, sc)));
+        const f = low + (ts.size > 1 ? '<double>' : '');
+        return a.length > 2 ? `${f}({${a.map((x) => x.s).join(', ')}})` : `${f}(${A(0)}, ${A(1)})`;
+      }
+      case 'pow': return _CE.inferType(n, sc) === 'Integer' ? { s: `(int) pow(${A(0)}, ${A(1)})`, p: P.un } : `pow(${A(0)}, ${A(1)})`;
+      case 'round': return { s: `(int) floor(${A(0)} + 0.5)`, p: P.un };
+      case 'floor': case 'ceil': return { s: `(int) ${low}(${A(0)})`, p: P.un };
       case 'random': used.add('rand'); return { s: `rand() % ${At(0)}`, p: P.mul };
       case 'len': return `(int) ${At(0)}.length()`;
       case 'size': return `(int) ${At(0)}${'[0]'.repeat(sizeInfo(n, sc).d)}.size()`;
@@ -1609,6 +1628,7 @@ LANGS.cpp = cFamily({
     if (u.has('fmt') || u.has('fixed')) { o.line('#include <sstream>'); o.line('#include <iomanip>'); }
     if (u.has('fstream')) o.line('#include <fstream>');
     if (u.has('tuple')) o.line('#include <tuple>');
+    if (u.has('algorithm')) o.line('#include <algorithm>');
     o.line(''); o.line('using namespace std;'); o.line('');
     if (u.has('pi')) o.line('const double PI = 3.14159265358979323846;');
     if (u.has('fstream')) { o.line('ifstream fileIn;'); o.line('ofstream fileOut;'); }
@@ -1681,6 +1701,7 @@ LANGS.cpp = cFamily({
     if (u.has('fmt') || u.has('fixed')) { o.line('#include <sstream>'); o.line('#include <iomanip>'); }
     if (u.has('fstream')) o.line('#include <fstream>');
     if (u.has('tuple')) o.line('#include <tuple>');
+    if (u.has('algorithm')) o.line('#include <algorithm>');
     o.line(''); o.line('using namespace std;'); o.line('');
     if (u.has('pi')) o.line('const double PI = 3.14159265358979323846;');
     if (u.has('fstream')) { o.line('ifstream fileIn;'); o.line('ofstream fileOut;'); }
@@ -1778,6 +1799,10 @@ LANGS.java = cFamily({
       case 'arctanh': return `0.5 * Math.log((1 + ${At(0)}) / (1 - ${At(0)}))`;
       case 'int': return { s: `(int) ${At(0)}`, p: P.un };
       case 'sgn': return { s: `(int) Math.signum(${A(0)})`, p: P.un };
+      case 'min': case 'max': return nest2('Math.' + low, a.map((x) => x.s));
+      case 'pow': return _CE.inferType(n, sc) === 'Integer' ? { s: `(int) Math.pow(${A(0)}, ${A(1)})`, p: P.un } : `Math.pow(${A(0)}, ${A(1)})`;
+      case 'round': return { s: `(int) Math.floor(${A(0)} + 0.5)`, p: P.un };
+      case 'floor': case 'ceil': return { s: `(int) Math.${low}(${A(0)})`, p: P.un };
       case 'random': return { s: `(int) (Math.random() * ${At(0)})`, p: P.un };
       case 'len': return `${At(0)}.length()`;
       case 'size': return `${At(0)}${'[0]'.repeat(sizeInfo(n, sc).d)}.length`;
@@ -1956,6 +1981,11 @@ LANGS.csharp = cFamily({
     switch (low) {
       case 'int': return { s: `(int) ${At(0)}`, p: P.un };
       case 'random': used.add('rnd'); return `${CS_PFX}rnd.Next(${A(0)})`;
+      case 'min': case 'max': return nest2(low === 'min' ? 'Math.Min' : 'Math.Max', a.map((x) => x.s));
+      case 'pow': return _CE.inferType(n, sc) === 'Integer' ? { s: `(int) Math.Pow(${A(0)}, ${A(1)})`, p: P.un } : `Math.Pow(${A(0)}, ${A(1)})`;
+      case 'round': return { s: `(int) Math.Floor(${A(0)} + 0.5)`, p: P.un };
+      case 'floor': return { s: `(int) Math.Floor(${A(0)})`, p: P.un };
+      case 'ceil': return { s: `(int) Math.Ceiling(${A(0)})`, p: P.un };
       case 'len': return `${At(0)}.Length`;
       case 'size': { const z = sizeInfo(n, sc); return z.nd > 1 ? `${At(0)}.GetLength(${z.d})` : `${At(0)}.Length`; }
       case 'char': return `${At(0)}[${A(1)}].ToString()`;
@@ -2110,6 +2140,10 @@ LANGS.javascript = cFamily({
     if (map[low]) return `Math.${map[low]}(${A(0)})`;
     switch (low) {
       case 'random': return `Math.floor(Math.random() * ${At(0)})`;
+      // Math.round rounds the halves up, like Round: Math.round(-2.5) is -2
+      case 'min': case 'max': return `Math.${low}(${a.map((x) => x.s).join(', ')})`;
+      case 'pow': return `Math.pow(${A(0)}, ${A(1)})`;
+      case 'round': case 'floor': case 'ceil': return `Math.${low}(${A(0)})`;
       case 'len': return `${At(0)}.length`;
       case 'size': return `${At(0)}${'[0]'.repeat(sizeInfo(n, sc).d)}.length`;
       case 'char': return `${At(0)}.charAt(${A(1)})`;

@@ -971,7 +971,8 @@
       // Shift+Enter confirms from any field (also a text area, a menu or with the suggestions open)
       if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); acHide(); submit(); return; }
       const t = e.target;
-      if (t.tagName === 'TEXTAREA' || t.tagName === 'BUTTON' || t.tagName === 'SELECT') return;
+      // (the expression of the Output is a text area: Enter outside the strings confirms)
+      if ((t.tagName === 'TEXTAREA' && !t.classList.contains('exprarea')) || t.tagName === 'BUTTON' || t.tagName === 'SELECT') return;
       e.preventDefault(); e.stopPropagation(); submit();
     });
     back.addEventListener('mousedown', (e) => { if (e.target === back) close(); });
@@ -1098,6 +1099,44 @@
     });
     input.addEventListener('keyup', (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') acUpdate(input, lvalueOnly); });
   }
+  /* the quote of the string still open at the end of the text (null if the text is outside the strings) */
+  function openQuote(t) {
+    let q = null;
+    for (let i = 0; i < t.length; i++) {
+      const c = t[i];
+      if (q) { if (c === '\\') i++; else if (c === q) q = null; } else if (c === '"' || c === "'") q = c;
+    }
+    return q;
+  }
+  /* an expression field shows the escape sequences of its strings in red: a copy of the text, with the same font and
+     padding, drawn over the field (the text of the field becomes transparent only while there is a sequence) */
+  function escMirror(input) {
+    const box = h('div', { class: 'escbox' + (input.tagName === 'TEXTAREA' ? ' area' : '') }), mir = h('div', { class: 'escmirror', 'aria-hidden': 'true' });
+    input.before(box); box.append(input, mir);
+    const escH = (x) => x.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const paint = () => {
+      const v = input.value;
+      let q = null, html = '', any = false;
+      for (let i = 0; i < v.length; i++) {
+        const c = v[i];
+        if (q && c === '\\' && i + 1 < v.length && 'ntr\\"\''.includes(v[i + 1])) { html += `<span class="tesc">${escH(c + v[i + 1])}</span>`; i++; any = true; continue; }
+        if (q) { if (c === '\\') { html += escH(c + (v[i + 1] || '')); i++; continue; } if (c === q) q = null; } else if (c === '"' || c === "'") q = c;
+        html += escH(c);
+      }
+      box.classList.toggle('on', any);
+      if (!any) { mir.textContent = ''; return; }
+      const cs = getComputedStyle(input);
+      for (const k of ['paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom', 'borderLeftWidth', 'borderTopWidth', 'fontFamily', 'fontSize', 'fontWeight', 'letterSpacing', 'lineHeight']) mir.style[k] = cs[k];
+      mir.innerHTML = html + ' ';
+      mir.scrollLeft = input.scrollLeft; mir.scrollTop = input.scrollTop;
+    };
+    let last = null;
+    const sync = () => { if (input.value !== last) { last = input.value; paint(); } else { mir.scrollLeft = input.scrollLeft; mir.scrollTop = input.scrollTop; } };
+    input.addEventListener('input', () => { last = input.value; paint(); });
+    for (const ev of ['scroll', 'keyup', 'keydown', 'select', 'click', 'mouseup', 'focus']) input.addEventListener(ev, () => requestAnimationFrame(sync));
+    input._paint = paint;
+    requestAnimationFrame(paint);
+  }
   function field(spec, val, vars) {
     const id = 'f_' + spec.key;
     const wrap = h('div', { class: 'field' + (spec.inline ? ' inline' : '') });
@@ -1125,6 +1164,12 @@
       wrap._get = () => (seg.querySelector('input:checked') || {}).value;
       wrap._input = seg;
       return wrap;
+    } else if (spec.multiline) {
+      // an expression on several lines: the strings can contain line breaks (Enter inside a string)
+      input = h('textarea', { id, rows: 1, wrap: 'off', autocomplete: 'off', spellcheck: 'false', class: 'mono exprarea', placeholder: spec.placeholder || '' });
+      input.value = val ?? '';
+      const grow = () => { input.rows = Math.min(10, input.value.split('\n').length); };
+      input.addEventListener('input', grow); grow();
     } else if (spec.type === 'textarea') {
       input = h('textarea', { id, rows: 4, spellcheck: 'true' });
       input.value = val;
@@ -1136,6 +1181,14 @@
     const msg = h('div', { class: 'fmsg' }, spec.hint || '');
     wrap.append(msg);
     if (['expr', 'exprlist', 'lvalue', 'lvalues'].includes(spec.type)) attachMemberAC(input, spec.type === 'lvalue' || spec.type === 'lvalues');
+    if (['expr', 'exprlist'].includes(spec.type)) escMirror(input);
+    // Output: Enter inside a string goes to a new line (the string contains the line break); elsewhere Enter confirms the dialog
+    if (spec.multiline) input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || e.defaultPrevented || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+      const a = input.selectionStart ?? input.value.length;
+      if (openQuote(input.value.slice(0, a))) e.stopPropagation(); // the text area writes the line break
+      else e.preventDefault();
+    });
     if (['expr', 'exprlist', 'lvalue', 'lvalues'].includes(spec.type) && vars && vars.length) {
       const chips = h('div', { class: 'chips', 'aria-label': L('ui.availableVariables') });
       const put = (v) => {
@@ -1229,7 +1282,7 @@
     input: { title: 'Input', help: L('ui.asksTheUserForAValue'), fields: [
       { key: 'variable', label: L('ui.variableToRead'), type: 'lvalue', required: true }] },
     output: { title: 'Output', help: L('ui.writesAValueToTheConsole'), fields: [
-      { key: 'expression', label: L('ui.expressionToWrite'), type: 'expr', required: true, placeholder: L('ui.eGTotalTotal') },
+      { key: 'expression', label: L('ui.expressionToWrite'), type: 'expr', required: true, placeholder: L('ui.eGTotalTotal'), multiline: true, hint: L('ui.enterInsideAStringGoesTo') },
       { key: 'newline', label: L('ui.newLineAfterWriting'), type: 'check' }] },
     if: { title: L('chart.if'), help: L('ui.choosesTheTrueOrFalseBranch'), fields: [
       { key: 'expression', label: L('ui.condition'), type: 'expr', required: true, placeholder: 'es. eta >= 18' }] },
@@ -3005,8 +3058,8 @@
     const lines = codeTokens(code, lang);
     // a final newline does not open an empty numbered row
     if (lines.length > 1 && !lines[lines.length - 1].length) lines.pop();
-    // one row per line; the rows that come from blocks can be clicked
-    return lines.map((ln, i) => `<span class="cl${map && map[i] && map[i].size ? ' src' : ''}"><span class="ln"></span>` + ln.map(([c, t]) => c ? `<span class="${c}">${escH(t)}</span>` : escH(t)).join('') + '</span>').join('');
+    // one row per line; the rows that come from blocks can be clicked; the escape sequences of the strings in red
+    return lines.map((ln, i) => `<span class="cl${map && map[i] && map[i].size ? ' src' : ''}"><span class="ln"></span>` + ln.map(([c, t]) => c === 'ts' ? `<span class="ts">${escH(t).replace(/\\./g, (e) => `<span class="tesc">${e}</span>`)}</span>` : c ? `<span class="${c}">${escH(t)}</span>` : escH(t)).join('') + '</span>').join('');
   }
 
   /* ------------------------- Tabs and floating windows --------------------- */
@@ -3667,7 +3720,7 @@
     if (parts.kind === 'functions') {
       // functions: same names not allowed (in the Functions view there is no overloading)
       for (const f of funcs) {
-        if (E.BUILTINS[f.name.toLowerCase()] || f.name.toLowerCase() === 'main') return fail(L('ui.theModuleContainsTheFunctionWhich', { name, name2: f.name }));
+        if ((E.BUILTINS[f.name.toLowerCase()] && !E.BUILTINS[f.name.toLowerCase()].soft) || f.name.toLowerCase() === 'main') return fail(L('ui.theModuleContainsTheFunctionWhich', { name, name2: f.name }));
         // in the Objects view: the other functions of the modules (a method of a class has precedence in its class)
         const clash = st.prog.functions.find((g) => !oldF.includes(g) && g.name.toLowerCase() === f.name.toLowerCase() && (!M.hasClasses(st.prog) || M.isGlobalFunc(st.prog, g)));
         if (clash) return fail(L('ui.theModuleContainsTheFunctionBut', { name, name2: f.name, text: clash.module ? L('ui.fromTheModule', { name: clash.module.name }) : '' }));
@@ -4127,6 +4180,7 @@
     const v = (n) => cs.getPropertyValue(n).trim();
     let css = `text{font:${RenderLib.R_.font};fill:${v('--sh-text')};text-anchor:middle}.cline-t{text-anchor:start}.comment text{font-weight:400;font-style:italic}.badge{font-size:10px}.c-in .badge{fill:${v('--s-in')}}.c-out .badge{fill:${v('--s-out')}}.c-decl .badge{fill:${v('--s-decl')}}.blabel{font-size:11px;font-weight:600;fill:${v('--muted')}}.flow{fill:none;stroke:${v('--flow')};stroke-width:1.6}.ahead{fill:${v('--flow')}}.joint{fill:${v('--flow')}}.shape>path,.shape>rect{stroke-width:1.6}.inner{fill:none!important}.note{stroke-dasharray:4 3}svg{background:${v('--paper')}}`;
     for (const c of ['term', 'decl', 'assign', 'in', 'out', 'cond', 'loop', 'call', 'comment', 'brk', 'file', 'inc', 'exc']) css += `.c-${c}>path,.c-${c}>rect{fill:${v('--f-' + c)};stroke:${v('--s-' + c)}}`;
+    css += `.escseq{fill:${v('--err')}}`;
     css += `.flow.exc{stroke:${v('--s-exc')};stroke-dasharray:5 4}.fframe{fill:${v('--f-exc')};fill-opacity:.35;stroke:${v('--s-exc')};stroke-width:1.4;stroke-dasharray:6 4}`;
     // class diagram
     css += `.exc .ubg{stroke:${v('--s-exc')}}.exc .uheadbg{fill:${v('--f-exc')}}.exc .usep{stroke:${v('--s-exc')}}.builtin .ubg{stroke-dasharray:6 3}.builtin .uheadbg{fill-opacity:.55}`;

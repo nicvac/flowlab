@@ -19,6 +19,21 @@ function textW(t, font) {
   return _measureCtx.measureText(t).width;
 }
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+/* the text of a block with the escape sequences of its strings (\n, \t, \\, \", \') in red; st.q: the quote still open
+   at the start of the line (a text on several lines) */
+function escSeq(t, st) {
+  st = st || { q: null };
+  const s = String(t); let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (st.q) {
+      if (c === '\\' && i + 1 < s.length && 'ntr\\"\''.includes(s[i + 1])) { out += `<tspan class="escseq">${esc(c + s[i + 1])}</tspan>`; i++; continue; }
+      if (c === st.q) st.q = null;
+    } else if (c === '"' || c === "'") st.q = c;
+    out += esc(c);
+  }
+  return out;
+}
 
 function fit(t, max, font) {
   if (textW(t, font) <= max) return t;
@@ -187,8 +202,9 @@ class Renderer {
     const tx = cx - side / 2 - (badge && side ? 9 : 0);
     if (mb && mb.lines) {
       const n = mb.lines.length;
-      mb.lines.forEach((l, i) => { s += `<text x="${tx}" y="${y + h / 2 + (i - (n - 1) / 2) * LINE_H}" dy="0.35em">${esc(l)}</text>`; });
-    } else s += `<text x="${tx}" y="${y + h / 2}" dy="0.35em">${esc(fit(text, tw))}</text>`;
+      const q = { q: null };
+      mb.lines.forEach((l, i) => { s += `<text x="${tx}" y="${y + h / 2 + (i - (n - 1) / 2) * LINE_H}" dy="0.35em">${escSeq(l, q)}</text>`; });
+    } else s += `<text x="${tx}" y="${y + h / 2}" dy="0.35em">${escSeq(fit(text, tw))}</text>`;
     if (badge) s += `<text class="badge" x="${cx + w / 2 - 13}" y="${y + 11}" dy="0.35em">${badge}</text>`;
     if (tog) {
       const open = mb.open;
@@ -208,9 +224,11 @@ class Renderer {
   measure(s, cap, shp, baseH) {
     if (shp === 'diamond' && !cap.incomplete) return this.diamond(s, cap, baseH);
     const badgeW = cap.badge && !cap.incomplete ? 18 : 0;
-    const expandable = !cap.incomplete && textW(cap.text) > R_.MAXW;
+    // a text with line breaks (a string on several lines) is always all on several lines
+    const breaks = !cap.incomplete && shp !== 'diamond' && String(cap.text).includes('\n');
+    const expandable = !cap.incomplete && !breaks && textW(cap.text) > R_.MAXW;
     const open = expandable && !!this.expanded && this.expanded.has(s.id);
-    if (!open) return { w: this.boxW(cap.text, shp) + badgeW + (expandable && shp !== 'diamond' ? TOG : 0), h: baseH, expandable, open };
+    if (!open && !breaks) return { w: this.boxW(cap.text, shp) + badgeW + (expandable && shp !== 'diamond' ? TOG : 0), h: baseH, expandable, open };
     const lines = wrapLines(cap.text, shp === 'diamond' ? 240 : R_.MAXW, R_.font);
     const lw = Math.max(...lines.map((l) => textW(l)));
     const half = (lines.length * LINE_H) / 2 + 4;
@@ -220,7 +238,7 @@ class Renderer {
       return { w: Math.ceil(Math.max(R_.MINW, 2 * (lw + 22))), h: Math.ceil(2 * b), expandable, open, lines };
     }
     const padX = shp === 'hex' ? 44 : shp === 'para' ? 40 : R_.PADX * 2;
-    return { w: Math.ceil(lw + padX + badgeW + TOG), h: Math.max(baseH, Math.ceil(lines.length * LINE_H + 18 + (shp === 'doc' ? 6 : 0))), expandable, open, lines };
+    return { w: Math.ceil(lw + padX + badgeW + (expandable ? TOG : 0)), h: Math.max(baseH, Math.ceil(lines.length * LINE_H + 18 + (shp === 'doc' ? 6 : 0))), expandable, open, lines };
   }
 
   /* diamond: the text is all inside (the text rectangle is inscribed in the diamond).

@@ -480,8 +480,8 @@ function fgExpr(src) {
   try { toks = _MX.tokenize(s); } catch (e) { return s; }
   let out = s;
   for (const t of toks.filter((x) => x.k === 'str').reverse()) {
-    if (s[t.pos] !== "'" || t.v.includes('"')) continue;
-    out = out.slice(0, t.pos) + '"' + t.v + '"' + out.slice(t.pos + t.v.length + 2);
+    if (s[t.pos] !== "'" || t.raw.includes('"')) continue;
+    out = out.slice(0, t.pos) + '"' + t.raw.replace(/\\'/g, "'") + '"' + out.slice(t.end);
   }
   return out;
 }
@@ -637,6 +637,7 @@ function writeBlock(stmts, L, depth) {
 }
 
 /* Features of the extended .fprg format used by the program */
+const NEW_BUILTINS = new Set(['min', 'max', 'pow', 'round', 'floor', 'ceil']);
 function extendedFeatures(prog) {
   const out = new Set();
   if (!isPlainOO(prog)) out.add(L('model.classesAndObjects'));
@@ -654,6 +655,17 @@ function extendedFeatures(prog) {
       if (s.kind === 'declare' && String(s.init || '').trim()) out.add(L('model.declarationsWithAnInitialValue'));
       if (s.kind === 'declare' && s.array && (_MX.splitTop(s.size || '').length > 1 || (() => { try { return _MX.parseArrayLit(s.init || '').dims.length > 1; } catch (e) { return false; } })())) out.add(L('model.multiDimensionalArrays'));
       for (const k of ['variable', 'expression', 'start', 'end', 'step', 'size']) {
+        // the predefined functions and the escape sequences that are not part of the standard format
+        if (typeof s[k] === 'string' && (/[\\\n]/.test(s[k]) || /\b(min|max|pow|round|floor|ceil)\s*\(/i.test(s[k]))) {
+          try {
+            const tk = _MX.tokenize(s[k]);
+            tk.forEach((t, i) => {
+              if (t.k === 'str' && /\\[ntr\\"']/.test(t.raw)) out.add(L('model.escapeSequencesInStrings'));
+              if (t.k === 'str' && /[\r\n]/.test(t.raw)) out.add(L('model.stringsOnSeveralLines'));
+              if (t.k === 'id' && NEW_BUILTINS.has(t.v.toLowerCase()) && tk[i + 1] && tk[i + 1].v === '(' && !prog.functions.some((g) => g.name.toLowerCase() === t.v.toLowerCase())) out.add(L('model.theFunctionsMinMaxPowRoundFloorCeil'));
+            });
+          } catch (e) { /* incomplete expression */ }
+        }
         // xor is not part of the standard format
         if (typeof s[k] === 'string' && /xor|⊕|⊻/i.test(s[k])) { try { if (_MX.tokenize(s[k]).some((t) => t.k === 'op' && t.v === 'xor')) out.add(L('model.theXorOperator')); } catch (e) { /* incomplete expression */ } }
         if (typeof s[k] !== 'string' || !s[k].includes('[')) continue;

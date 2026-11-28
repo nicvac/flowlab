@@ -578,7 +578,7 @@ class Interpreter {
     const fr = this.frame; if (!fr) return false;
     const low = name.toLowerCase();
     // without an object, the name of a built-in function always means the built-in function
-    if (_E.BUILTINS[low]) return false;
+    if (_E.BUILTINS[low] && !_E.BUILTINS[low].soft) return false;
     if (this.globalCands(low).length) return true;
     if (!fr.cls) return false;
     return this.methodCands(fr.self ? fr.self.cls : fr.cls, low).length > 0 || this.methodCands(fr.cls, low).length > 0;

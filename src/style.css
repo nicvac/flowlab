@@ -154,6 +154,8 @@ body.panning, body.panning * { cursor: grabbing !important; user-select: none !i
 /* SVG shapes */
 .chart text { font: 700 12.5px var(--font-ui); fill: var(--sh-text); pointer-events: none; }
 .chart .shape text { text-anchor: middle; }
+/* the escape sequences in the strings (\n, \t, …) */
+.chart .escseq { fill: var(--err); }
 .chart .badge { font: 700 11px var(--font-ui); letter-spacing: 0.02em; }
 .chart .c-in .badge { fill: var(--s-in); }
 .chart .c-decl .badge { fill: var(--s-decl); }
@@ -334,6 +336,7 @@ body.banding, body.banding * { user-select: none; cursor: crosshair; }
 .chart .bpmark text { fill: #fff; font: 700 10px/1 var(--font-ui, sans-serif); text-anchor: middle; pointer-events: none; }
 .tk { color: var(--s-call); font-weight: 600; }
 .ts { color: var(--s-out); }
+.ts .tesc { color: var(--err); font-weight: 700; }
 .tn { color: var(--s-loop); }
 .tc { color: var(--faint); font-style: italic; }
 
@@ -466,7 +469,15 @@ table.vars .avlink:hover, table.vars .avlink:focus-visible { color: var(--ink); 
 .flabel { font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .field input[type=text], .field select, .field textarea, .modal textarea { width: 100%; border: 1px solid var(--line); background: var(--paper); border-radius: 7px; padding: 8px 10px; min-height: 38px; }
 .field textarea, .modal textarea { resize: vertical; }
-.field.bad input { border-color: var(--err); }
+.field.bad input, .field.bad textarea { border-color: var(--err); }
+/* the escape sequences in red in the expression fields: a copy of the text over the field */
+.escbox { position: relative; display: flex; flex-direction: column; }
+.escmirror { display: none; position: absolute; inset: 0; pointer-events: none; white-space: pre; overflow: hidden; border: 0 solid transparent; box-sizing: border-box; color: var(--ink); align-items: center; }
+.escbox.on .escmirror { display: flex; }
+.escbox.area.on .escmirror { display: block; }
+.field textarea.exprarea { resize: none; overflow: hidden; white-space: pre; line-height: 20px; min-height: 38px; }
+.escbox.on input, .escbox.on textarea { color: transparent; caret-color: var(--ink); }
+.escmirror .tesc { color: var(--err); }
 .fmsg { font-size: 12px; color: var(--faint); min-height: 0; }
 .field.bad .fmsg { color: var(--err); }
 .help { margin: 0 0 2px; color: var(--muted); font-size: 13px; }

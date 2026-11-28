@@ -90,6 +90,8 @@ If the program uses one of the extended features of FlowLab, the file is saved i
 - imported modules
 - declarations with an initial value
 - the `xor` operator
+- the functions `Min`, `Max`, `Pow`, `Round`, `Floor`, `Ceil`
+- escape sequences in strings (`\n`, `\t`, …) and strings on several lines
 
 ### Verification
 
@@ -108,6 +110,10 @@ If the program uses one of the extended features of FlowLab, the file is saved i
 | `xor` `⊕` | exclusive or: between Booleans true when exactly one of the two is true, between Integers bit by bit (`(6 xor 3) = 5`); in precedence between `or` and `and` |
 
 Built-in functions: `Abs, Arccos, Arcsin, Arctan, Cos, Sin, Tan, Cosh, Sinh, Tanh, Int, Ln, Log, Log10, Sgn, Sqrt, Random, Len, Char, ToChar, ToCode, ToFixed, ToInteger, ToReal, ToString, Size, EOF`, constant `Pi`.
+
+Extended numeric functions: `Min(a, b, …)` and `Max(a, b, …)` with 2 or more arguments, `Pow(b, e)` (as `b ^ e`), `Round(x)` (halves up: `Round(2.5) = 3`, `Round(-2.5) = -2`), `Floor(x)`, `Ceil(x)`; the result is Integer when the arguments are Integer (Round, Floor and Ceil always give an Integer). A function of the program with the same name (written before these functions existed) still wins.
+
+Escape sequences in strings: `\n` new line, `\t` tab, `\r` carriage return, `\\` backslash, `\"` and `\'` quotes; any other backslash stays as it is. They are shown in red in the fields, in the diagram and in the code. In the *Output* dialog, **Enter inside a string** goes to a new line and the string contains the line break (outside a string Enter confirms the dialog); in the diagram the block shows the text on several lines, in the code the line break becomes `\n`.
 
 ## Adding a language
 

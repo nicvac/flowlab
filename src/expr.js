@@ -71,6 +71,10 @@ const SYM = [
 ];
 const WORD_OPS = { and: 'and', or: 'or', xor: 'xor', not: 'not', mod: '%' };
 
+/* the escape sequences of the strings: the character after the backslash -> the character it means */
+const ESCAPES = { n: '\n', t: '\t', r: '\r', '\\': '\\', '"': '"', "'": "'" };
+/* a text written again as the inside of a string literal between double quotes (the escapes back) */
+const escapeText = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\t/g, '\\t').replace(/\r/g, '\\r');
 function tokenize(src) {
   const toks = [];
   let i = 0;
@@ -101,12 +105,16 @@ function tokenize(src) {
       continue;
     }
     if (c === '"' || c === "'") {
+      // escape sequences: \n new line, \t tab, \r, \\ backslash, \" and \' the quotes (any other \x stays as it is)
       i++;
       let s = '';
-      while (i < n && src[i] !== c) s += src[i++];
+      while (i < n && src[i] !== c) {
+        if (src[i] === '\\' && i + 1 < n && ESCAPES[src[i + 1]] !== undefined) { s += ESCAPES[src[i + 1]]; i += 2; continue; }
+        s += src[i++];
+      }
       if (i >= n) throw new FlowError(L('expr.unterminatedStringTheClosingQuoteIs') + c, { pos: start });
       i++;
-      toks.push({ k: 'str', v: s, pos: start });
+      toks.push({ k: 'str', v: s, pos: start, end: i, raw: src.slice(start + 1, i - 1) });
       continue;
     }
     if (/[\p{L}_]/u.test(c)) {
@@ -302,9 +310,10 @@ function parseLValue(src) {
 
 /* Splits "a, b[i], c" on the first-level commas (not inside parentheses or quotes) */
 function splitTop(src) {
-  const out = []; let depth = 0, cur = '', q = null;
+  const out = []; let depth = 0, cur = '', q = null, esc = false;
   for (const ch of String(src)) {
-    if (q) { cur += ch; if (ch === q) q = null; continue; }
+    // inside a string: a quote after a backslash does not close it
+    if (q) { cur += ch; if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === q) q = null; continue; }
     if (ch === '"' || ch === "'") { q = ch; cur += ch; continue; }
     if (ch === '(' || ch === '[' || ch === '{') depth++;
     if (ch === ')' || ch === ']' || ch === '}') depth--;
@@ -384,7 +393,7 @@ function fmtValue(x) {
   }
 }
 function literalOf(x) {
-  return x.t === 'String' ? '"' + x.v + '"' : fmtValue(x);
+  return x.t === 'String' ? '"' + escapeText(x.v) + '"' : fmtValue(x);
 }
 function checkInt(v, node) {
   if (!Number.isSafeInteger(v)) throw new FlowError(L('expr.overflowTheIntegerResultIsToo'), { node });
@@ -436,6 +445,13 @@ function realRes(v, node) {
   if (isNaN(v)) throw new FlowError(L('expr.invalidValueForTheFunctionUndefined'), { node });
   return V.real(v);
 }
+/* the smallest (or largest) of the numbers: Integer if they are all Integer */
+function pickNum(a, better) {
+  let best = a[0];
+  for (const x of a.slice(1)) if (better(num(best), num(x))) best = x;
+  return a.every((x) => x.t === 'Integer') ? V.int(best.v) : V.real(num(best));
+}
+/* soft: a function added after the first versions; a function of the program with the same name (written before) wins */
 const BUILTINS = {
   abs:      { sig: [N], ret: (a) => a[0], fn: (a) => (a[0].t === 'Integer' ? V.int(Math.abs(a[0].v)) : V.real(Math.abs(a[0].v))), doc: L('expr.absNAbsoluteValue') },
   arccos:   { sig: [N], ret: 'Real', fn: (a, n) => realRes(Math.acos(num(a[0])), n), doc: L('expr.arccosNArcCosineRadians') },
@@ -454,6 +470,15 @@ const BUILTINS = {
   ln:       { sig: [N], ret: 'Real', fn: (a, n) => { if (num(a[0]) <= 0) throw new FlowError(L('expr.lnTheArgumentMustBePositive'), { node: n }); return V.real(Math.log(num(a[0]))); }, doc: L('expr.lnNNaturalLogarithm') },
   log:      { sig: [N], ret: 'Real', fn: (a, n) => { if (num(a[0]) <= 0) throw new FlowError(L('expr.logTheArgumentMustBePositive'), { node: n }); return V.real(Math.log(num(a[0]))); }, doc: L('expr.logNNaturalLogarithm') },
   log10:    { sig: [N], ret: 'Real', fn: (a, n) => { if (num(a[0]) <= 0) throw new FlowError(L('expr.log10TheArgumentMustBePositive'), { node: n }); return V.real(Math.log10(num(a[0]))); }, doc: L('expr.log10NBase10Logarithm') },
+  // Min and Max: two or more numbers; Integer if they are all Integer, otherwise Real
+  min:      { soft: true, sig: [N, N], variadic: true, ret: 'IntIfAll', fn: (a) => pickNum(a, (x, y) => y < x), doc: L('expr.minAB') },
+  max:      { soft: true, sig: [N, N], variadic: true, ret: 'IntIfAll', fn: (a) => pickNum(a, (x, y) => y > x), doc: L('expr.maxAB') },
+  // Pow as the operator ^: Integer with an Integer base and an Integer exponent not negative
+  pow:      { soft: true, sig: [N, N], ret: 'IntIfAll', fn: (a, n) => { const v = Math.pow(num(a[0]), num(a[1])); if (isNaN(v)) throw new FlowError(L('expr.powerNotDefinedNegativeBaseWith'), { node: n }); return a[0].t === 'Integer' && a[1].t === 'Integer' && a[1].v >= 0 ? checkInt(v, n) : V.real(v); }, doc: L('expr.powBE') },
+  // the roundings give an Integer; Round: the half goes up (2.5 → 3, -2.5 → -2)
+  round:    { soft: true, sig: [N], ret: 'Integer', fn: (a, n) => checkInt(Math.floor(num(a[0]) + 0.5), n), doc: L('expr.roundN') },
+  floor:    { soft: true, sig: [N], ret: 'Integer', fn: (a, n) => checkInt(Math.floor(num(a[0])), n), doc: L('expr.floorN') },
+  ceil:     { soft: true, sig: [N], ret: 'Integer', fn: (a, n) => checkInt(Math.ceil(num(a[0])), n), doc: L('expr.ceilN') },
   sgn:      { sig: [N], ret: 'Integer', fn: (a) => V.int(Math.sign(num(a[0])) | 0), doc: L('expr.sgnNSign10Or') },
   sqrt:     { sig: [N], ret: 'Real', fn: (a, n) => { if (num(a[0]) < 0) throw new FlowError(L('expr.sqrtSquareRootOfANegative'), { node: n }); return V.real(Math.sqrt(num(a[0]))); }, doc: L('expr.sqrtNSquareRoot') },
   random:   { sig: ['Integer'], ret: 'Integer', fn: (a, n) => { if (a[0].v <= 0) throw new FlowError(L('expr.randomTheArgumentMustBeGreater'), { node: n }); return V.int(Math.floor(Math.random() * a[0].v)); }, doc: L('expr.randomNRandomIntegerFrom0') },
@@ -468,7 +493,7 @@ const BUILTINS = {
   size:     { sig: ['Array'], ret: 'Integer', fn: null, doc: L('expr.sizeANumberOfElementsOf') },
   eof:      { sig: [], ret: 'Boolean', fn: null, doc: L('expr.eofTrueIfTheFileBeing') },
 };
-const BUILTIN_NAMES = { abs: 'Abs', arccos: 'Arccos', arcsin: 'Arcsin', arctan: 'Arctan', cos: 'Cos', sin: 'Sin', tan: 'Tan', cosh: 'Cosh', sinh: 'Sinh', tanh: 'Tanh', arccosh: 'Arccosh', arcsinh: 'Arcsinh', arctanh: 'Arctanh', int: 'Int', ln: 'Ln', log: 'Log', log10: 'Log10', sgn: 'Sgn', sqrt: 'Sqrt', random: 'Random', len: 'Len', char: 'Char', tochar: 'ToChar', tocode: 'ToCode', tofixed: 'ToFixed', tointeger: 'ToInteger', toreal: 'ToReal', tostring: 'ToString', size: 'Size', eof: 'EOF' };
+const BUILTIN_NAMES = { abs: 'Abs', arccos: 'Arccos', arcsin: 'Arcsin', arctan: 'Arctan', cos: 'Cos', sin: 'Sin', tan: 'Tan', cosh: 'Cosh', sinh: 'Sinh', tanh: 'Tanh', arccosh: 'Arccosh', arcsinh: 'Arcsinh', arctanh: 'Arctanh', int: 'Int', ln: 'Ln', log: 'Log', log10: 'Log10', sgn: 'Sgn', min: 'Min', max: 'Max', pow: 'Pow', round: 'Round', floor: 'Floor', ceil: 'Ceil', sqrt: 'Sqrt', random: 'Random', len: 'Len', char: 'Char', tochar: 'ToChar', tocode: 'ToCode', tofixed: 'ToFixed', tointeger: 'ToInteger', toreal: 'ToReal', tostring: 'ToString', size: 'Size', eof: 'EOF' };
 
 /* --------------------- Valutatore (a generatore) ----------------------- */
 /* ctx: { getVar(name,node) -> cell, callUser*(name, argNodes, node) -> Value,
@@ -636,12 +661,12 @@ function* evalCall(node, ctx) {
     }
     return V.int(dims[d]);
   }
-  if (node.args.length !== b.sig.length) throw new FlowError(L('expr.requiresArgumentsWerePassed', { value: BUILTIN_NAMES[low], sigCount: b.sig.length, argsCount: node.args.length }), { node });
+  if (b.variadic ? node.args.length < b.sig.length : node.args.length !== b.sig.length) throw new FlowError(L(b.variadic ? 'expr.requiresAtLeastArgumentsWerePassed' : 'expr.requiresArgumentsWerePassed', { value: BUILTIN_NAMES[low], sigCount: b.sig.length, argsCount: node.args.length }), { node });
   if (low === 'eof') return V.bool(ctx.env.eof(node));
   const args = [];
   for (let i = 0; i < node.args.length; i++) {
     const v = yield* evalE(node.args[i], ctx);
-    const want = b.sig[i];
+    const want = b.sig[Math.min(i, b.sig.length - 1)];
     if (want === N && !isNum(v)) throw new FlowError(L('expr.argumentMustBeANumberNot', { value: BUILTIN_NAMES[low], value2: i + 1, value3: TYPE_IT[v.t] }), { node });
     if (want === 'Integer' && v.t !== 'Integer') {
       if (v.t === 'Real') { args.push(V.int(Math.trunc(v.v))); continue; }
@@ -667,6 +692,8 @@ function genericMap(f, args, scope) {
   return map;
 }
 /* scope: { vars: Map(name -> {type, array}), funcs: Map(name -> {type}) } */
+/* a negative number written in the program (2 ^ -1): the power is Real */
+const negLit = (n) => { while (n && n.k === 'paren') n = n.e; return !!n && n.k === 'un' && n.op === 'neg' && n.e && n.e.k === 'num' && n.e.v > 0; };
 function inferType(node, scope) {
   switch (node.k) {
     case 'num': return node.t;
@@ -685,7 +712,7 @@ function inferType(node, scope) {
       if (op === '&') return 'String';
       if (op === '/') return 'Real';
       const a = inferType(node.l, scope), b = inferType(node.r, scope);
-      if (a === 'Real' || b === 'Real') return 'Real';
+      if (a === 'Real' || b === 'Real' || (op === '^' && negLit(node.r))) return 'Real';
       if (a === 'Integer' && b === 'Integer') return 'Integer';
       return a === 'Unknown' ? b : a;
     }
@@ -695,11 +722,17 @@ function inferType(node, scope) {
       const b = BUILTINS[node.name.toLowerCase()];
       if (!b) return 'Unknown';
       if (typeof b.ret === 'function') return node.args[0] ? inferType(node.args[0], scope) : 'Real';
+      if (b.ret === 'IntIfAll') {
+        const ts = node.args.map((x) => inferType(x, scope));
+        // (Pow as the operator ^)
+        if (node.name.toLowerCase() === 'pow' && negLit(node.args[1])) return 'Real';
+        return ts.length && ts.every((t) => t === 'Integer') ? 'Integer' : ts.some((t) => t === 'Unknown') ? 'Unknown' : 'Real';
+      }
       return b.ret;
     }
   }
   return 'Unknown';
 }
 
-const ExprLib = { FlowError, TYPES, TYPE_IT, typeName, splitType, splitTypeList, joinType, isGenericType, normTypeText, substType, sameType, isBaseType, tokenize, parseExpr, parseLValue, splitTop, parseArrayLit, parseLValueList, arrOffset, validIdent, RESERVED, V, isNum, fmtValue, fmtReal, literalOf, checkInt, coerce, parseInputText, BUILTINS, BUILTIN_NAMES, evalE, arrIndex, inferType, genericMap };
+const ExprLib = { ESCAPES, escapeText, FlowError, TYPES, TYPE_IT, typeName, splitType, splitTypeList, joinType, isGenericType, normTypeText, substType, sameType, isBaseType, tokenize, parseExpr, parseLValue, splitTop, parseArrayLit, parseLValueList, arrOffset, validIdent, RESERVED, V, isNum, fmtValue, fmtReal, literalOf, checkInt, coerce, parseInputText, BUILTINS, BUILTIN_NAMES, evalE, arrIndex, inferType, genericMap };
 if (typeof module !== 'undefined') module.exports = ExprLib;
