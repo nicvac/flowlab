@@ -9,6 +9,9 @@ const wait = (ms = 150) => page.waitForTimeout(ms);
 const ok = (name, cond) => console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`);
 await wait(250);
 const nf = await page.evaluate(() => FlowLab.state.prog.functions.length);
+// the top of the drawing in the sheet (around the drawing there is a margin of empty paper for the pan): «sheet at the
+// top» is this scroll, not 0
+const home = "(() => { const w = document.querySelector('#canvasWrap'), s = document.querySelector('#chart svg'); return Math.round(s.getBoundingClientRect().top - w.getBoundingClientRect().top - w.clientTop + w.scrollTop - 12); })()";
 
 // 1. nuova vista dal pulsante accanto allo zoom
 // the dot: only when at least one whole block is cut off at the top (not for the part beyond the bottom)
@@ -26,7 +29,7 @@ await page.click('#viewAdd'); await wait(200);
 ok('pallino acceso: la vista si apre «Continua» e mostra l\'inizio; il pallino si spegne', (await page.locator('.auxwin.sync.above').count()) === 1 && !(await dotOn()));
 await page.click('.auxwin .vsync'); await wait(100); // vista libera
 ok('vista libera: il pallino si riaccende', await dotOn());
-await page.evaluate(() => { document.querySelector('#canvasWrap').scrollTop = 0; document.querySelector('.canvas-col').style.height = ''; document.querySelector('.auxwin').style.height = '771px'; }); await wait(150);
+await page.evaluate((home) => { document.querySelector('#canvasWrap').scrollTop = eval(home); document.querySelector('.canvas-col').style.height = ''; document.querySelector('.auxwin').style.height = '771px'; }, home); await wait(150);
 ok('una vista aperta, attiva, con il diagramma', (await page.locator('.auxwin').count()) === 1 && (await page.locator('.auxwin.vactive').count()) === 1 && (await page.locator('.auxwin .vchart svg .shape').count()) > 3);
 // 2. un altro diagramma nella vista; il foglio principale resta sul Main
 const opts = await page.locator('.auxwin .vsel option').allTextContents();
@@ -77,7 +80,7 @@ let L = await lk();
 const mw = await page.locator('#canvasWrap').boundingBox(), aw = await page.locator('.auxwin .vwrap').boundingBox();
 ok('punto in comune: ' + JSON.stringify(L), L.length === 2 && L.some((x) => x.where === 'foglio' && x.edge === 'bottom' && Math.abs(x.y - (mw.y + mw.height)) < 20 && x.t === '⇣ 1') && L.some((x) => x.where === 'vista' && x.edge === 'top' && Math.abs(x.y - aw.y) < 3 && x.t === '⇣ 1'));
 // foglio scorso in giù: la vista mostra la parte tagliata in alto
-await page.evaluate(() => { document.querySelector('#canvasWrap').scrollTop = 450; }); await wait(150);
+await page.evaluate((home) => { document.querySelector('#canvasWrap').scrollTop = eval(home) + 450; }, home); await wait(150);
 g = await geo();
 ok(`foglio scorso in giù: inizio del foglio ${g.main.top}, fine della vista ${g.w[0].end}`, g.above[0] && Math.abs(g.main.top - g.w[0].end) <= 1);
 // la rotella sulla vista fa scorrere il foglio principale
@@ -97,7 +100,7 @@ await page.keyboard.press('Control+Alt+v'); await wait(250);
 g = await geo();
 ok(`due viste: sopra (fine ${g.w[0].end} = inizio del foglio ${g.main.top}), sotto (inizio ${g.w[1].top} = fine del foglio ${g.main.end})`, g.above[0] && !g.above[1] && Math.abs(g.main.top - g.w[0].end) <= 1 && Math.abs(g.main.end - g.w[1].top) <= 1);
 // foglio in cima: tutte e due mostrano il seguito, in fila
-await page.evaluate(() => { document.querySelector('#canvasWrap').scrollTop = 0; }); await wait(200);
+await page.evaluate((home) => { document.querySelector('#canvasWrap').scrollTop = eval(home); }, home); await wait(200);
 g = await geo();
 ok(`foglio in cima: in fila ${g.main.end}/${g.w[0].top}, ${g.w[0].end}/${g.w[1].top}`, !g.above[0] && Math.abs(g.main.end - g.w[0].top) <= 1 && Math.abs(g.w[0].end - g.w[1].top) <= 1);
 ok('tutto visibile: pallino spento', (await page.locator('#viewAdd.notify').count()) === 0);

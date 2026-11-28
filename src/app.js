@@ -44,7 +44,7 @@
      selection, zoom, insertion points…); the others keep it aside in v.state */
   const VKEYS = ['fi', 'uml', 'sel', 'msel', 'mselAnchor', 'usel', 'zoom', 'ins', 'edges', 'compact', 'compactFid'];
   const FOLLOW = ['fi', 'uml', 'compact', 'compactFid', 'zoom']; // a «Continue» view copies these from the main sheet
-  const MAIN = { main: true, id: 0, state: {}, chart: null, wrap: null };
+  const MAIN = { main: true, id: 0, state: {}, chart: null, wrap: null, pans: new Map(), panKey: null };
   const views = [MAIN];
   let V = MAIN;
 
@@ -301,8 +301,8 @@
     st.sel = null; st.usel = null;
     st.uml = v === 'objects';
     if (v === 'objects') ensureView();
+    forgetPans(V);
     render();
-    V.wrap.scrollTo(0, 0);
   }
   function renderViewSwitch() {
     $('#viewFn').setAttribute('aria-checked', String(!isOO()));
@@ -340,7 +340,7 @@
         h('button', { class: 'btn small', type: 'button', onclick: () => { if (!isRunning()) editFunction(st.prog.functions.indexOf(f)); } }, L('ui.editTheMethod'))));
     const holder = V.chart; holder.innerHTML = ''; holder.append(card);
   }
-  function showUml() { if (V.sync) setSync(V, false); st.uml = true; st.sel = null; render(); V.wrap.scrollTo(0, 0); }
+  function showUml() { if (V.sync) setSync(V, false); st.uml = true; st.sel = null; render(); }
   /* modules collapsed in the class diagram (remembered by name) */
   function toggleModule(name) {
     if (st.modCollapsed.has(name)) st.modCollapsed.delete(name); else st.modCollapsed.add(name);
@@ -377,6 +377,7 @@
       applyZoom();
     }
     if (!V.main) renderViewHead(V);
+    placeSheet();
   }
   /* in the auxiliary views the arrow markers have their own ids */
   const vsvg = (s) => (V.main ? s : s.replace(/id="(ah|uml-inh|uml-open)"/g, `id="$1-v${V.id}"`).replace(/url\(#(ah|uml-inh|uml-open)\)/g, `url(#$1-v${V.id})`));
@@ -484,7 +485,7 @@
     st.zoom = Math.max(0.3, Math.min(2.5, Math.round(z * 100) / 100));
     if (V.main) store.set('zoom', st.zoom); else saveViewsSoon();
     applyZoom();
-    if (V.main) for (const v of views) if (v.sync) withView(v, applyZoom);
+    if (V.main) for (const v of views) if (v.sync) withView(v, () => { applyZoom(); centerX(v); });
     scheduleSync();
   }
   function fitZoom() {
@@ -493,6 +494,7 @@
     if (!svg) return;
     const z = Math.min((wrap.clientWidth - 24) / svg.dataset.w, (wrap.clientHeight - 24) / svg.dataset.h, 1.4);
     setZoom(Math.max(0.3, z));
+    home(V);
   }
   /* items of a diagram selector: functions, or class diagram and methods. First those of the program,
      then those of each imported module, in a group of the module (data-mod) that the menu shows collapsed */
@@ -632,7 +634,7 @@
     edit.disabled = false;
     del.disabled = st.fi === 0;
   }
-  function showFunc(i) { if (i === st.fi && !st.uml) return; if (V.sync) setSync(V, false); st.fi = i; st.uml = false; st.sel = null; render(); V.wrap.scrollTo(0, 0); }
+  function showFunc(i) { if (i === st.fi && !st.uml) return; if (V.sync) setSync(V, false); st.fi = i; st.uml = false; st.sel = null; render(); }
 
   function autosave() {
     try { store.set('autosave', { xml: M.serializeFprg(st.prog), fi: withView(MAIN, () => st.fi), fileName: st.fileName, views: viewsData(), sourceUrl: st.sourceUrl || null, stageBase: st.stageBase || null }); } catch (e) { /* ignore */ }
@@ -1871,8 +1873,118 @@
   /* ------------------------ Interaction with the drawing ---------------------- */
   let drag = null, suppressClick = false, udrag = null, mdrag = null;
   /* events of the sheet of a view (main or auxiliary) */
+  /* ------------------------------ Pan ------------------------------
+     Around the drawing the sheet has a margin of empty paper (about a screen on each side, --pan-x/--pan-y): the sheet
+     is moved by scrolling it (Space + drag, the middle button, the hand tool, the arrows, the wheel), so the scrollbars,
+     the «Continue» views and the block in execution keep working as they are. Each view remembers where it was on
+     each diagram (function or class diagram) until another program is opened. */
+  let panSpace = false, handTool = false, pan = null, overWrap = null;
+  const diagramKey = () => (isUml() ? 'uml' : 'f:' + (func() ? func().id : ''));
+  /* the drawing in the coordinates of the sheet (scrollable content) of its view */
+  function drawingBox(v) {
+    const d = v.chart.firstElementChild; if (!d) return null;
+    const r = d.getBoundingClientRect(), w = v.wrap.getBoundingClientRect();
+    return { left: r.left - w.left - v.wrap.clientLeft + v.wrap.scrollLeft, top: r.top - w.top - v.wrap.clientTop + v.wrap.scrollTop, width: r.width, height: r.height };
+  }
+  /* the starting position: the drawing at the top, in the middle (the class diagram on the left) */
+  function home(v) {
+    v = v || V;
+    const b = drawingBox(v); if (!b) return;
+    const w = v.wrap, uml = v.chart.classList.contains('umlsheet');
+    w.scrollLeft = !uml && b.width < w.clientWidth - 24 ? b.left + b.width / 2 - w.clientWidth / 2 : b.left - 12;
+    w.scrollTop = b.top - 12;
+  }
+  /* after drawing: a diagram just shown goes back where it was in this view, or to the starting position */
+  function placeSheet() {
+    const v = V;
+    v.chart.classList.toggle('umlsheet', isUml());
+    // a «Continue» view is placed vertically by the main sheet; horizontally the drawing is centred when it starts to
+    // follow the sheet or the diagram changes, then the view is moved freely
+    if (v.sync) { const k = diagramKey(); if (v.syncKey !== k) { v.syncKey = k; centerX(v); } return; }
+    const key = diagramKey();
+    if (v.panKey === key) return;
+    v.panKey = key;
+    const p = v.pans.get(key);
+    if (p) { v.wrap.scrollLeft = p[0]; v.wrap.scrollTop = p[1]; } else home(v);
+  }
+  function forgetPans(v) { v.pans.clear(); v.panKey = null; }
+  /* the drawing in the middle of the view, horizontally */
+  function centerX(v) { const b = drawingBox(v); if (b) v.wrap.scrollLeft = b.left + b.width / 2 - v.wrap.clientWidth / 2; }
+  /* zoom keeping still the point (x, y) of the screen (the cursor), or the middle of the view */
+  function zoomAt(v, z, x, y) {
+    const w = v.wrap, r = w.getBoundingClientRect(), b = drawingBox(v), old = vget(v, 'zoom');
+    if (x == null) { x = r.left + w.clientLeft + w.clientWidth / 2; y = r.top + w.clientTop + w.clientHeight / 2; }
+    const px = x - r.left - w.clientLeft + w.scrollLeft, py = y - r.top - w.clientTop + w.scrollTop;
+    const dx = b ? (px - b.left) / old : 0, dy = b ? (py - b.top) / old : 0;
+    withView(v, () => setZoom(z));
+    if (!b || v.sync) return;
+    const nb = drawingBox(v), nz = vget(v, 'zoom');
+    w.scrollLeft += nb.left + dx * nz - px; w.scrollTop += nb.top + dy * nz - py;
+  }
+  const ICON_HAND = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V12M17 10.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1.5a6 6 0 0 1-4.6-2.2L4.6 14.9a1.5 1.5 0 0 1 2.3-1.9L8 14.3"/></svg>';
+  /* the button of the hand (in the zoom bar of each view): with it on, dragging on the sheet moves it */
+  function panButton() {
+    const b = h('button', { type: 'button', class: 'panbtn' + (handTool ? ' on' : ''), title: L('ui.handMoveTheSheet'), 'aria-label': L('ui.handMoveTheSheet'), 'aria-pressed': String(handTool), html: ICON_HAND });
+    b.addEventListener('click', () => setHand(!handTool));
+    return b;
+  }
+  function setHand(on) {
+    handTool = !!on;
+    document.body.classList.toggle('handtool', handTool);
+    $$('.panbtn').forEach((b) => { b.setAttribute('aria-pressed', String(handTool)); b.classList.toggle('on', handTool); });
+  }
+  const typingIn = (el) => !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
+  function bindPan() {
+    // Space held with the cursor on a sheet: the hand (Space in a field or on a button keeps doing its own work)
+    document.addEventListener('pointermove', (e) => { overWrap = e.target && e.target.closest ? e.target.closest('#canvasWrap, .vwrap') : null; }, true);
+    document.addEventListener('keydown', (e) => {
+      if (e.code !== 'Space' || e.ctrlKey || e.metaKey || e.altKey || typingIn(document.activeElement) || modalStack.length || !overWrap) return;
+      e.preventDefault(); e.stopPropagation();
+      if (!panSpace) { panSpace = true; document.body.classList.add('panready'); }
+    }, true);
+    document.addEventListener('keyup', (e) => { if (e.code === 'Space' && panSpace) { panSpace = false; document.body.classList.remove('panready'); } }, true);
+    window.addEventListener('blur', () => { panSpace = false; document.body.classList.remove('panready'); });
+  }
+  /* the pan on the sheet of a view: before any other gesture (selection, dragging of blocks and classes) */
+  function bindPanOn(v) {
+    const w = v.wrap;
+    let lastMid = 0;
+    w.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); }); // no automatic scrolling of the browser
+    w.addEventListener('pointerdown', (e) => {
+      const mid = e.button === 1;
+      if (!(mid || (e.button === 0 && (panSpace || handTool)))) return;
+      if (e.target.closest('.vtools, .zoombar, .vdone')) return;
+      e.preventDefault(); e.stopPropagation();
+      focusView(v);
+      // double click of the middle button: back to the starting position
+      if (mid && e.timeStamp - lastMid < 350) { lastMid = 0; if (v.sync) centerX(v); else home(v); return; }
+      if (mid) lastMid = e.timeStamp;
+      pan = { v, x: e.clientX, y: e.clientY, sl: w.scrollLeft, st: w.scrollTop, mst: MAIN.wrap.scrollTop, moved: false, id: e.pointerId };
+      try { w.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      document.body.classList.add('panning');
+    }, true);
+    w.addEventListener('pointermove', (e) => {
+      if (!pan || pan.v !== v || e.pointerId !== pan.id) return;
+      const dx = e.clientX - pan.x, dy = e.clientY - pan.y;
+      if (Math.hypot(dx, dy) > 3) { pan.moved = true; lastMid = 0; }
+      // a «Continue» view: horizontally it moves by itself, vertically it is the main sheet that scrolls (and the view follows it)
+      w.scrollLeft = pan.sl - dx;
+      if (v.sync) MAIN.wrap.scrollTop = pan.mst - dy; else w.scrollTop = pan.st - dy;
+    });
+    const end = (e) => {
+      if (!pan || pan.v !== v || (e && e.pointerId !== pan.id)) return;
+      if (pan.moved) suppressClick = true;
+      pan = null;
+      document.body.classList.remove('panning');
+    };
+    w.addEventListener('pointerup', end); w.addEventListener('pointercancel', end);
+    // the place reached on this diagram, remembered by the view
+    w.addEventListener('scroll', () => { if (!v.sync && v.panKey) v.pans.set(v.panKey, [w.scrollLeft, w.scrollTop]); }, { passive: true });
+  }
+
   function bindChart(v) {
     const chart = v.chart;
+    bindPanOn(v);
     chart.addEventListener('click', (e) => {
       if (suppressClick) { suppressClick = false; return; }
       focusView(v);
@@ -1961,7 +2073,7 @@
           cs = !m ? [] : m.classes.length ? m.classes : st.fmodPos.has(m.name) ? [Object.assign(st.fmodPos.get(m.name), { builtin: true })] : [];
         }
         if (!cs || !cs.length) return;
-        udrag = { items: cs.map((c) => ({ c, ox: c.x || 0, oy: c.y || 0 })), mod: mod ? mod.dataset.module : null, x: e.clientX, y: e.clientY, on: false, raf: 0 };
+        udrag = { items: cs.map((c) => ({ c, ox: c.x || 0, oy: c.y || 0 })), mod: mod ? mod.dataset.module : null, x: e.clientX, y: e.clientY, on: false, raf: 0, wrap: v.wrap, sl: v.wrap.scrollLeft, st: v.wrap.scrollTop };
         return;
       }
       if (e.button !== 0 || e.target.closest('.ctoggle')) return;
@@ -1975,9 +2087,9 @@
       drag = { id: g.dataset.id, x: e.clientX, y: e.clientY, on: false, ghost: null };
     });
     v.wrap.addEventListener('wheel', (e) => {
-      if (e.ctrlKey) { e.preventDefault(); focusView(v); setZoom(st.zoom * (e.deltaY < 0 ? 1.1 : 0.9)); return; }
+      if (e.ctrlKey) { e.preventDefault(); focusView(v); zoomAt(v, st.zoom * (e.deltaY < 0 ? 1.1 : 0.9), e.clientX, e.clientY); return; }
       // a «Continue» view does not scroll by itself: the wheel scrolls the main sheet
-      if (v.sync) { e.preventDefault(); MAIN.wrap.scrollBy(e.deltaX, e.deltaY); }
+      if (v.sync) { e.preventDefault(); MAIN.wrap.scrollBy(0, e.shiftKey && !e.deltaX ? 0 : e.deltaY); v.wrap.scrollBy(e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX, 0); }
     }, { passive: false });
     v.wrap.addEventListener('scroll', closePop);
   }
@@ -2111,7 +2223,13 @@
       if (band) { bandMove(e); return; }
       if (mdrag) { memberDragMove(e); return; }
       if (udrag) {
-        const dx = (e.clientX - udrag.x) / st.zoom, dy = (e.clientY - udrag.y) / st.zoom;
+        // near the edges of the view the sheet scrolls, and the class goes with the pointer
+        if (udrag.on) {
+          const w = udrag.wrap.getBoundingClientRect(), E = 28, sp = 14;
+          if (e.clientY > w.bottom - E) udrag.wrap.scrollTop += sp; else if (e.clientY < w.top + E) udrag.wrap.scrollTop -= sp;
+          if (e.clientX > w.right - E) udrag.wrap.scrollLeft += sp; else if (e.clientX < w.left + E) udrag.wrap.scrollLeft -= sp;
+        }
+        const dx = (e.clientX - udrag.x + udrag.wrap.scrollLeft - udrag.sl) / st.zoom, dy = (e.clientY - udrag.y + udrag.wrap.scrollTop - udrag.st) / st.zoom;
         if (!udrag.on && Math.hypot(dx, dy) > 4) {
           udrag.on = true;
           if (!udrag.items[0].c.builtin) { st.undo.push(snapshot()); if (st.undo.length > 150) st.undo.shift(); st.redo = []; }
@@ -3158,7 +3276,7 @@
     o = o || {};
     const n = views.length - 1;
     const fi = o.fi != null ? Math.max(0, Math.min(o.fi, st.prog.functions.length - 1)) : st.fi;
-    const v = { id: ++viewSeq, main: false, sync: false, min: false, h: 0,
+    const v = { id: ++viewSeq, main: false, sync: false, min: false, h: 0, pans: new Map(), panKey: null,
       state: { fi, uml: o.fi != null ? !!o.uml : st.uml, sel: null, usel: null, zoom: o.zoom || st.zoom, ins: [], edges: [], compact: o.fi != null ? !!o.compact : !!st.compact, compactFid: fidAt(fi), fid: fidAt(fi) } };
     v.sel = h('select', { class: 'vsel', 'aria-label': L('ui.diagramOfTheView') });
     enhanceSel(v.sel);
@@ -3175,7 +3293,7 @@
     // on the sheet of the view, as in the main one: Compact at the top left, the zoom at the bottom left
     const tools = h('div', { class: 'vtools' }, v.compactBtn);
     const zoom = h('div', { class: 'zoombar vzoombar', role: 'group', 'aria-label': L('ui.viewZoom') },
-      zb('−', L('ui.zoomOut'), () => setZoom(st.zoom / 1.15)), v.zoomVal, zb('+', L('ui.zoomIn'), () => setZoom(st.zoom * 1.15)), zb('⤢', L('ui.fitToWindow'), fitZoom));
+      zb('−', L('ui.zoomOut'), () => zoomAt(v, st.zoom / 1.15)), v.zoomVal, zb('+', L('ui.zoomIn'), () => zoomAt(v, st.zoom * 1.15)), zb('⤢', L('ui.fitToWindow'), fitZoom), panButton());
     v.win = h('div', { class: 'fwin auxwin', role: 'region', 'aria-label': L('ui.auxiliaryView') }, head, h('div', { class: 'fwin-body' }, v.wrap, tools, zoom, v.done));
     // position: on the right, a little staggered from the other views; it can also cover the side panel
     const col = $('.canvas-col').getBoundingClientRect();
@@ -3230,7 +3348,7 @@
   }
   /* «Continue»: the view follows the main sheet (diagram, zoom, compact view) */
   function setSync(v, on) {
-    v.sync = !!on;
+    v.sync = !!on; v.syncKey = null;
     v.syncBtn.setAttribute('aria-pressed', String(v.sync));
     v.win.classList.toggle('sync', v.sync);
     if (v.sync) {
@@ -3257,7 +3375,7 @@
     scheduleSync(); saveViewsSoon();
   }
   /* another program: the views close */
-  function resetViews() { focusView(MAIN); for (const v of views.slice(1)) closeView(v); bpMarks.clear(); }
+  function resetViews() { focusView(MAIN); for (const v of views.slice(1)) closeView(v); bpMarks.clear(); forgetPans(MAIN); }
   let syncRaf = 0;
   function scheduleSync() {
     if (syncRaf) return;
@@ -3290,9 +3408,7 @@
       if (!ms || !ps || !vs) { v.done.hidden = true; continue; }
       const pw = prev.wrap.getBoundingClientRect(), pr = ps.getBoundingClientRect();
       const ww = v.wrap.getBoundingClientRect(), vr = vs.getBoundingClientRect();
-      // horizontally the same column of the drawing stays in the middle
-      const cx = pw.left + prev.wrap.clientLeft + prev.wrap.clientWidth / 2 - pr.left;
-      v.wrap.scrollLeft += vr.left - ww.left - v.wrap.clientLeft + cx - v.wrap.clientWidth / 2;
+      // only vertically: horizontally the view is free (centred on the drawing when it starts to follow the sheet)
       if (above) {
         // at the bottom of the view, the point of the drawing where the main sheet starts
         v.wrap.scrollTop += vr.top - ww.top - v.wrap.clientTop + mStart - v.wrap.clientHeight;
@@ -3486,7 +3602,7 @@
     const svg = $('svg', V.chart); const wrap = V.wrap;
     if (!svg) return;
     if (svg.dataset.w * st.zoom > wrap.clientWidth - 24) setZoom(Math.max(0.55, (wrap.clientWidth - 24) / svg.dataset.w));
-    wrap.scrollLeft = (wrap.scrollWidth - wrap.clientWidth) / 2;
+    home(V);
   }
   function openFile() { $('#fileInput').click(); }
 
@@ -4316,7 +4432,7 @@
     ]],
     [L('ui.view3'), [
       ['Ctrl+Alt+F  ·  Ctrl+Alt+O', L('ui.functionsViewObjectsView')], ['Alt+1  2  3  4', L('ui.consoleVariablesCodeFilesTabs')], ['Ctrl+B', L('ui.showOrHideThePanel')],
-      ['Ctrl++  Ctrl+-  Ctrl+0', L('ui.zoomInOut100')], ['Shift+1', L('ui.fitToWindow')], ['Shift+K', L('ui.compactViewOfTheFlowchartBlocks')], ['Ctrl+Alt+V', L('ui.newViewAnotherWindowOnThe2')], [L('ui.ctrlWheel'), 'Zoom'],
+      ['Ctrl++  Ctrl+-  Ctrl+0', L('ui.zoomInOut100')], ['Shift+1', L('ui.fitToWindow')], [L('ui.spaceDrag'), L('ui.moveTheSheet')], ['H', L('ui.handMoveTheSheet')], ['Shift+K', L('ui.compactViewOfTheFlowchartBlocks')], ['Ctrl+Alt+V', L('ui.newViewAnotherWindowOnThe2')], [L('ui.ctrlWheel'), 'Zoom'],
       ['F1', L('ui.quickGuide')], ['Esc', L('ui.closeWindowsAndMenus')], ['Shift+Enter', L('ui.confirmTheDialog')],
     ]],
   ];
@@ -4339,6 +4455,7 @@
         if (!$('#pop').hidden) { closePop(); e.preventDefault(); return; }
         if (modalStack.length) { modalStack[modalStack.length - 1](); e.preventDefault(); return; }
         if (drag && drag.on) { drag.ghost.remove(); drag = null; document.body.classList.remove('dragging'); return; }
+        if (handTool) { setHand(false); return; }
         // Esc leaves only the main block selected
         if (st.msel && st.msel.size > 1) { setSel(st.sel ? [st.sel] : []); decorate(); }
         return;
@@ -4401,6 +4518,7 @@
       if (shift && (e.key === 'Delete' || e.key === 'Backspace') && !isUml()) return go(() => $('#funcDel').click());
       const lab = keyLabel(e);
       if (lab === 'N') return go(() => $('#funcAdd').click());
+      if (lab === 'H') return go(() => setHand(!handTool));
       if (lab === 'Shift+E' && isUml()) return go(() => { if (isRunning()) toast(L('ui.stopTheProgramToEditThe'), 'warn'); else classDialog(null, null, true); });
       if (lab === 'U' && isOO() && !isUml()) return go(showUml);
       if (lab === 'Shift+K' && !isUml()) return go(toggleCompact);
@@ -4415,6 +4533,12 @@
           if (lab === 'A') attrDialog(c, null); else editFunction(null, { cls: c, ctor: lab === 'C' });
         }
         return;
+      }
+      // nothing selected: the arrows move the sheet (with Shift, more)
+      if (/^Arrow/.test(e.key) && !ctrl && !alt && !typing && !st.sel && !st.usel) {
+        // in a «Continue» view up and down scroll the main sheet (the view follows it)
+        const d = shift ? 240 : 60, vert = e.key === 'ArrowUp' || e.key === 'ArrowDown', w = vert && V.sync ? MAIN.wrap : V.wrap;
+        return go(() => w.scrollBy({ left: e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0, top: e.key === 'ArrowUp' ? -d : e.key === 'ArrowDown' ? d : 0 }));
       }
       // flowchart
       if ((e.key === 'Delete' || e.key === 'Backspace') && st.sel) return go(deleteSel);
@@ -4469,8 +4593,9 @@
     const sp = $('#speed');
     sp.value = st.speed; $('#speedVal').textContent = SPEEDS[st.speed].label;
     sp.addEventListener('input', () => { st.speed = +sp.value; store.set('speed', st.speed); $('#speedVal').textContent = SPEEDS[st.speed].label; });
-    $('#zoomIn').addEventListener('click', () => { focusView(MAIN); setZoom(st.zoom * 1.15); });
-    $('#zoomOut').addEventListener('click', () => { focusView(MAIN); setZoom(st.zoom / 1.15); });
+    $('#zoomIn').addEventListener('click', () => { focusView(MAIN); zoomAt(MAIN, st.zoom * 1.15); });
+    $('#zoomOut').addEventListener('click', () => { focusView(MAIN); zoomAt(MAIN, st.zoom / 1.15); });
+    $('#panBtn').addEventListener('click', () => setHand(!handTool));
     $('#zoomFit').addEventListener('click', () => { focusView(MAIN); fitZoom(); });
     $('#compactBtn').addEventListener('click', () => { focusView(MAIN); toggleCompact(); });
     $('#zoomVal').addEventListener('click', () => { focusView(MAIN); setZoom(1); });
@@ -4582,7 +4707,10 @@
     ArrayView.configure({ host: () => $('#floatLayer'), nextZ: () => ++zTop });
     I18n.translateDom(document.body); // fixed texts of the page in the chosen language
     MAIN.chart = $('#chart'); MAIN.wrap = $('#canvasWrap');
-    bindUi(); bindChart(MAIN); bindDrag(); bindKeys(); setupPwa(); bindViews();
+    // the margin of empty paper around the drawing: about a screen on each side (the same for the whole session)
+    document.documentElement.style.setProperty('--pan-x', Math.round(Math.max(900, screen.width * 0.8)) + 'px');
+    document.documentElement.style.setProperty('--pan-y', Math.round(Math.max(700, screen.height * 0.8)) + 'px');
+    bindUi(); bindPan(); bindChart(MAIN); bindDrag(); bindKeys(); setupPwa(); bindViews();
     const saved = store.get('autosave', null);
     let ok = false;
     if (saved && saved.xml) {

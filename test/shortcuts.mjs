@@ -15,7 +15,7 @@ const ok = (name, cond) => console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`);
 // programma nuovo: i tasti aggiungono i blocchi in fondo
 await page.evaluate(() => FlowLab.loadExample('times_table')); await wait(200);
 await page.evaluate(() => { FlowLab.state.prog.functions[0].body = []; FlowLab.state.sel = null; FlowLab.render(); });
-await page.locator('#chart').click({ position: { x: 5, y: 5 } }); await wait(60);
+await page.locator('#canvasWrap').click({ position: { x: 5, y: 5 } }); await wait(60);
 await key('d'); ok('D apre Dichiara', (await title()) === 'Nuovo blocco: Dichiarazione');
 await page.fill('#f_name', 'x'); await page.keyboard.press('Enter'); await wait();
 await key('a'); await page.fill('#f_variable', 'x'); await page.fill('#f_expression', '5'); await page.keyboard.press('Enter'); await wait();

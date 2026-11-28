@@ -120,7 +120,17 @@ body.side-hidden #sideToggle { left: auto; right: 3px; transform: translateY(-50
     linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
   background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
 }
-#chart, .vchart { display: flex; justify-content: center; min-width: max-content; padding: 12px 12px 80px; }
+/* around the drawing a margin of empty paper (--pan-x, --pan-y: about a screen), so the sheet can be moved anywhere */
+:root { --pan-x: 12px; --pan-y: 12px; }
+#chart, .vchart { display: flex; justify-content: center; min-width: max-content; padding: var(--pan-y) var(--pan-x) calc(var(--pan-y) + 68px); }
+#canvasWrap, .vwrap { scrollbar-width: thin; }
+/* the pan: Space held, the hand on, while dragging */
+body.panready #canvasWrap, body.panready #canvasWrap *, body.panready .vwrap, body.panready .vwrap *,
+body.handtool #canvasWrap, body.handtool #canvasWrap *, body.handtool .vwrap, body.handtool .vwrap * { cursor: grab !important; }
+body.panning, body.panning * { cursor: grabbing !important; user-select: none !important; }
+.zoombar .panbtn { display: inline-grid; place-items: center; }
+.zoombar .panbtn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.zoombar .panbtn.on { background: var(--accent); color: var(--accent-ink); border-radius: 6px; }
 .vchart svg { display: block; overflow: visible; }
 .zoombar { position: absolute; left: 12px; bottom: 44px; display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 3px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
 .zoombar button { border: 0; background: transparent; height: 28px; min-width: 28px; border-radius: 6px; cursor: pointer; font-variant-numeric: tabular-nums; }
